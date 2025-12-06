@@ -7,11 +7,13 @@ import asyncio
 import json
 import logging
 from contextlib import AsyncExitStack, asynccontextmanager
-from typing import Any, Dict, Iterable, Mapping
+from datetime import datetime, timezone
+from typing import Any, Dict, Iterable, Mapping, Optional
 
 from fastapi import HTTPException
 
 from qmtl.foundation.common.hashutils import hash_bytes
+from qmtl.foundation.common.compute_context import canonicalize_world_mode
 
 from .activation import ActivationEventPublisher
 from .apply_flow import ApplyCoordinator
@@ -29,9 +31,11 @@ from .schemas import (
     ApplyAck,
     ApplyRequest,
     ApplyResponse,
+    DecisionEnvelope,
     EvaluateRequest,
     MultiWorldRebalanceRequest,
     PositionSliceModel,
+    SeamlessArtifactPayload,
     StrategySeries,
 )
 from .storage import Storage
@@ -54,6 +58,14 @@ class AllocationExecutionPlan:
     request_snapshot: Dict[str, Any]
     executed: bool = False
     execution_response: Any | None = None
+
+
+@dataclass
+class _DecisionState:
+    """Cached decision inputs to support simple hysteresis."""
+
+    effective_mode: str
+    dataset_fingerprint: str | None = None
 
 
 class WorldService:
@@ -82,6 +94,7 @@ class WorldService:
         self.store = store
         self._allocation_locks: Dict[str, asyncio.Lock] = {}
         self._multi_rebalancer = MultiWorldProportionalRebalancer()
+        self._decisions: Dict[str, _DecisionState] = {}
 
     @property
     def store(self) -> Storage:
@@ -300,6 +313,54 @@ class WorldService:
         active = await self._evaluator.determine_active(world_id, payload)
         return ApplyResponse(active=active)
 
+    async def decide(self, world_id: str) -> DecisionEnvelope:
+        now = datetime.now(timezone.utc)
+        world = await self.store.get_world(world_id)
+        if world is None:
+            raise HTTPException(status_code=404, detail="world not found")
+
+        version = await self.store.default_policy_version(world_id)
+        bindings = await self.store.list_bindings(world_id)
+        decisions = await self.store.get_decisions(world_id)
+        metadata = await self.store.latest_history_metadata(world_id)
+
+        normalized_metadata = self._normalize_metadata(metadata)
+        allow_live = bool(world.get("allow_live", False))
+
+        evaluation = self._evaluate_policy(
+            allow_live=allow_live,
+            has_bindings=bool(bindings),
+            has_decisions=bool(decisions),
+            metadata=normalized_metadata,
+            world_id=world_id,
+        )
+
+        etag = self._build_decision_etag(
+            world_id,
+            version,
+            normalized_metadata.get("dataset_fingerprint"),
+            normalized_metadata.get("as_of"),
+            normalized_metadata.get("history_updated_at"),
+            now,
+        )
+
+        return DecisionEnvelope(
+            world_id=world_id,
+            policy_version=version,
+            effective_mode=evaluation["effective_mode"],
+            reason=evaluation["reason"],
+            as_of=normalized_metadata.get("as_of", evaluation["as_of_fallback"]),
+            ttl=evaluation["ttl"],
+            etag=etag,
+            dataset_fingerprint=normalized_metadata.get("dataset_fingerprint"),
+            coverage_bounds=normalized_metadata.get("coverage_bounds"),
+            conformance_flags=normalized_metadata.get("conformance_flags"),
+            conformance_warnings=normalized_metadata.get("conformance_warnings"),
+            history_updated_at=normalized_metadata.get("history_updated_at"),
+            rows=normalized_metadata.get("rows"),
+            artifact=normalized_metadata.get("artifact"),
+        )
+
     async def apply(
         self,
         world_id: str,
@@ -327,6 +388,139 @@ class WorldService:
         series: Dict[str, StrategySeries] | None,
     ) -> Dict[str, Dict[str, float]]:
         return augment_metrics_with_linearity(metrics, series)
+
+    def _normalize_metadata(
+        self, metadata: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        if not metadata:
+            return {}
+
+        normalized: Dict[str, Any] = {}
+        dataset_fp = metadata.get("dataset_fingerprint")
+        if dataset_fp:
+            normalized["dataset_fingerprint"] = str(dataset_fp)
+
+        as_of_value = metadata.get("as_of")
+        if as_of_value:
+            normalized["as_of"] = str(as_of_value)
+
+        updated_at = metadata.get("updated_at")
+        if updated_at:
+            normalized["history_updated_at"] = updated_at
+
+        rows = metadata.get("rows")
+        if rows is not None:
+            try:
+                normalized["rows"] = int(rows)
+            except Exception:
+                normalized["rows"] = rows
+
+        raw_cov = metadata.get("coverage_bounds")
+        if isinstance(raw_cov, (list, tuple)):
+            normalized["coverage_bounds"] = [int(v) for v in raw_cov]
+
+        raw_flags = metadata.get("conformance_flags")
+        if isinstance(raw_flags, dict):
+            normalized["conformance_flags"] = dict(raw_flags)
+
+        raw_warnings = metadata.get("conformance_warnings")
+        if raw_warnings is not None:
+            normalized["conformance_warnings"] = [str(v) for v in raw_warnings]
+
+        artifact_payload = metadata.get("artifact")
+        if isinstance(artifact_payload, dict):
+            normalized["artifact"] = SeamlessArtifactPayload.model_validate(
+                artifact_payload
+            )
+            if normalized["artifact"].as_of and not normalized.get("as_of"):
+                normalized["as_of"] = str(normalized["artifact"].as_of)
+            if normalized.get("rows") is None and normalized["artifact"].rows is not None:
+                normalized["rows"] = int(normalized["artifact"].rows)  # type: ignore[arg-type]
+
+        return normalized
+
+    def _evaluate_policy(
+        self,
+        *,
+        allow_live: bool,
+        has_bindings: bool,
+        has_decisions: bool,
+        metadata: Dict[str, Any],
+        world_id: str,
+    ) -> Dict[str, Any]:
+        reasons: list[str] = []
+        ttl = "60s"
+        as_of_fallback = (
+            datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        )
+        dataset_fp = metadata.get("dataset_fingerprint")
+        metrics_ok = bool(
+            metadata.get("coverage_bounds")
+            or metadata.get("conformance_flags")
+            or metadata.get("rows")
+        )
+
+        if not has_bindings:
+            reasons.append("no_bindings")
+            effective_mode = "validate"
+        elif not has_decisions:
+            reasons.append("no_active_strategies")
+            effective_mode = "validate"
+        else:
+            reasons.append("bindings_present")
+            reasons.append("decisions_present")
+            hysteresis = False
+            previous = self._decisions.get(world_id)
+            if previous and previous.effective_mode == "live":
+                hysteresis = previous.dataset_fingerprint == dataset_fp
+
+            if allow_live and dataset_fp and metrics_ok:
+                reasons.extend(["allow_live", "dataset_fingerprint_ok", "metrics_ok"])
+                effective_mode = "live"
+                ttl = "300s"
+            elif allow_live and hysteresis:
+                reasons.extend(["allow_live", "hysteresis_hold"])
+                effective_mode = "live"
+                ttl = "120s"
+            else:
+                if not allow_live:
+                    reasons.append("allow_live_disabled")
+                if not dataset_fp:
+                    reasons.append("dataset_fingerprint_missing")
+                if not metrics_ok:
+                    reasons.append("required_metrics_missing")
+                effective_mode = "compute-only"
+
+        canonical_mode = canonicalize_world_mode(effective_mode)
+        reason_str = " & ".join(reasons) if reasons else "unspecified"
+        self._decisions[world_id] = _DecisionState(
+            effective_mode=canonical_mode, dataset_fingerprint=dataset_fp
+        )
+        return {
+            "effective_mode": canonical_mode,
+            "reason": reason_str,
+            "ttl": ttl,
+            "as_of_fallback": as_of_fallback,
+        }
+
+    @staticmethod
+    def _build_decision_etag(
+        world_id: str,
+        version: int,
+        dataset_fp: str | None,
+        as_of_value: str | None,
+        updated_at: Any,
+        now: datetime,
+    ) -> str:
+        etag_parts = [f"w:{world_id}", f"v{version}"]
+        if dataset_fp:
+            etag_parts.append(str(dataset_fp))
+        if as_of_value:
+            etag_parts.append(str(as_of_value))
+        if updated_at:
+            etag_parts.append(str(updated_at))
+        etag_parts.append(str(int(now.timestamp())))
+        return ":".join(etag_parts)
 
     @staticmethod
     def _hash_allocation_payload(payload: AllocationUpsertRequest) -> str:

@@ -781,7 +781,7 @@ async def test_decide_effective_mode_canonicalised():
     app = create_app(storage=Storage())
     async with httpx.ASGITransport(app=app) as asgi:
         async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
-            await client.post("/worlds", json={"id": "mode-test"})
+            await client.post("/worlds", json={"id": "mode-test", "allow_live": True})
 
             resp = await client.get("/worlds/mode-test/decide")
             assert resp.status_code == 200
@@ -789,7 +789,20 @@ async def test_decide_effective_mode_canonicalised():
             assert body["effective_mode"] == "validate"
 
             await client.post(
+                "/worlds/mode-test/bindings", json={"strategies": ["s-live"]}
+            )
+            await client.post(
                 "/worlds/mode-test/decisions", json={"strategies": ["s-live"]}
+            )
+            await client.post(
+                "/worlds/mode-test/history",
+                json={
+                    "strategy_id": "s-live",
+                    "node_id": "n-1",
+                    "interval": 60,
+                    "coverage_bounds": [1, 2],
+                    "dataset_fingerprint": "fp-mode",
+                },
             )
 
             live_resp = await client.get("/worlds/mode-test/decide")
@@ -797,6 +810,113 @@ async def test_decide_effective_mode_canonicalised():
             live_body = live_resp.json()
             assert live_body["effective_mode"] == "live"
 
+
+@pytest.mark.asyncio
+async def test_decide_blocks_live_without_allow_flag():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "no-live"})
+            await client.post(
+                "/worlds/no-live/bindings", json={"strategies": ["s-1"]}
+            )
+            await client.post(
+                "/worlds/no-live/decisions", json={"strategies": ["s-1"]}
+            )
+            await client.post(
+                "/worlds/no-live/history",
+                json={
+                    "strategy_id": "s-1",
+                    "node_id": "n-1",
+                    "interval": 60,
+                    "coverage_bounds": [1, 2],
+                    "dataset_fingerprint": "fp-no-live",
+                },
+            )
+
+            resp = await client.get("/worlds/no-live/decide")
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["effective_mode"] == "compute-only"
+            assert "allow_live_disabled" in body["reason"]
+            assert body["ttl"] == "60s"
+
+
+@pytest.mark.asyncio
+async def test_decide_allows_live_when_policy_inputs_present():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "live-ok", "allow_live": True})
+            await client.post(
+                "/worlds/live-ok/bindings", json={"strategies": ["s-1"]}
+            )
+            await client.post(
+                "/worlds/live-ok/decisions", json={"strategies": ["s-1"]}
+            )
+            await client.post(
+                "/worlds/live-ok/history",
+                json={
+                    "strategy_id": "s-1",
+                    "node_id": "n-1",
+                    "interval": 60,
+                    "coverage_bounds": [1, 2],
+                    "dataset_fingerprint": "fp-live",
+                    "rows": 10,
+                },
+            )
+
+            resp = await client.get("/worlds/live-ok/decide")
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["effective_mode"] == "live"
+            assert "allow_live" in body["reason"]
+            assert "metrics_ok" in body["reason"]
+            assert body["ttl"] == "300s"
+
+
+@pytest.mark.asyncio
+async def test_decide_uses_hysteresis_when_metrics_missing():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "hys", "allow_live": True})
+            await client.post("/worlds/hys/bindings", json={"strategies": ["s-1"]})
+            await client.post(
+                "/worlds/hys/decisions", json={"strategies": ["s-1"]}
+            )
+            await client.post(
+                "/worlds/hys/history",
+                json={
+                    "strategy_id": "s-1",
+                    "node_id": "n-1",
+                    "interval": 60,
+                    "coverage_bounds": [5, 10],
+                    "dataset_fingerprint": "fp-hys",
+                },
+            )
+
+            first = await client.get("/worlds/hys/decide")
+            assert first.status_code == 200
+            assert first.json()["effective_mode"] == "live"
+
+            await client.post(
+                "/worlds/hys/history",
+                json={
+                    "strategy_id": "s-1",
+                    "node_id": "n-1",
+                    "interval": 60,
+                    "dataset_fingerprint": "fp-hys",
+                    "as_of": "2025-03-16T00:00:00Z",
+                },
+            )
+
+            resp = await client.get("/worlds/hys/decide")
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["effective_mode"] == "live"
+            assert "hysteresis_hold" in body["reason"]
+            assert body["ttl"] == "120s"
 
 @pytest.mark.asyncio
 async def test_post_decisions_normalizes_payload_and_validates():

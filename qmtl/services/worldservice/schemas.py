@@ -36,6 +36,7 @@ class WorldNodeStatusEnum(StrEnum):
 class World(BaseModel):
     id: str
     name: str | None = None
+    allow_live: bool = False
 
 
 class PolicyRequest(BaseModel):
