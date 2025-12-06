@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-import pytest
+import copy
+from pathlib import Path
 
-from qmtl.foundation.config import UnifiedConfig
-from qmtl.foundation.config import DeploymentProfile
+import pytest
+import yaml
+
+from qmtl.foundation.config import DeploymentProfile, UnifiedConfig, load_config
 from qmtl.foundation.config_validation import (
     _type_description,
     _type_matches,
@@ -156,3 +159,47 @@ async def test_validate_gateway_config_reports_kafka_ownership_missing_bootstrap
 
     assert issues["ownership"].severity == "warning"
     assert "bootstrap" in issues["ownership"].hint
+
+
+@pytest.mark.asyncio
+async def test_maximal_template_validates_in_prod_profile() -> None:
+    template = Path("qmtl/examples/templates/config/qmtl.maximal.yml")
+
+    unified = load_config(str(template))
+
+    assert unified.profile is DeploymentProfile.PROD
+    assert unified.gateway.commitlog_bootstrap
+
+    issues = await validate_gateway_config(
+        unified.gateway, offline=True, profile=unified.profile
+    )
+
+    assert issues["commitlog"].severity == "ok"
+
+
+@pytest.mark.asyncio
+async def test_backend_stack_template_enforces_prod_commitlog(tmp_path) -> None:
+    template = Path("qmtl/examples/templates/backend_stack.example.yml")
+    data = yaml.safe_load(template.read_text())
+    assert data["profile"] == "prod"
+
+    baseline_path = tmp_path / "baseline.yml"
+    baseline_path.write_text(yaml.safe_dump(data))
+    unified = load_config(str(baseline_path))
+
+    issues = await validate_gateway_config(
+        unified.gateway, offline=True, profile=DeploymentProfile.PROD
+    )
+    assert issues["commitlog"].severity == "ok"
+
+    missing = copy.deepcopy(data)
+    missing["gateway"]["commitlog_bootstrap"] = None
+    missing_path = tmp_path / "missing.yml"
+    missing_path.write_text(yaml.safe_dump(missing))
+
+    missing_cfg = load_config(str(missing_path))
+    missing_issues = await validate_gateway_config(
+        missing_cfg.gateway, offline=True, profile=DeploymentProfile.PROD
+    )
+
+    assert missing_issues["commitlog"].severity == "error"

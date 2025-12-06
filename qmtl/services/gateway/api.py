@@ -4,7 +4,7 @@ import logging
 import secrets
 import asyncio
 from contextlib import asynccontextmanager, suppress
-from typing import Optional, Callable, Awaitable, Any
+from typing import Optional, Callable, Awaitable, Any, TYPE_CHECKING
 
 import redis.asyncio as redis
 from fastapi import FastAPI, Request, Response
@@ -24,12 +24,17 @@ from .fsm import StrategyFSM
 from .gateway_health import GatewayHealthCapabilities
 from .routes import create_api_router
 from .strategy_manager import StrategyManager
+from .config import GatewayOwnershipConfig
+from .ownership import KafkaOwnership, OwnershipManager, resolve_ownership_manager
 from .world_client import Budget, WorldServiceClient
 from .ws import WebSocketHub
 from .commit_log_consumer import CommitLogConsumer
 from .commit_log import CommitLogWriter
 from .submission import ComputeContextService, SubmissionPipeline
 from .shared_account_policy import SharedAccountPolicyConfig
+
+if TYPE_CHECKING:  # pragma: no cover - type checking only
+    from qmtl.foundation.config import DeploymentProfile
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -64,7 +69,14 @@ def create_app(
     enable_background: bool = True,
     shared_account_policy_config: SharedAccountPolicyConfig | None = None,
     health_capabilities: GatewayHealthCapabilities | None = None,
+    ownership_config: GatewayOwnershipConfig | None = None,
+    ownership_manager: OwnershipManager | None = None,
+    kafka_owner: KafkaOwnership | None = None,
+    profile: "DeploymentProfile" | None = None,
 ) -> FastAPI:
+    from qmtl.foundation.config import DeploymentProfile
+
+    profile = profile or DeploymentProfile.DEV
     capabilities = health_capabilities or GatewayHealthCapabilities(
         rebalance_schema_version=rebalance_schema_version,
         alpha_metrics_capable=alpha_metrics_capable,
@@ -94,6 +106,14 @@ def create_app(
         context_service=shared_context_service,
         world_client=world_client_local,
     )
+    ownership_cfg = ownership_config or GatewayOwnershipConfig()
+    if ownership_manager is None:
+        ownership_manager, kafka_owner = resolve_ownership_manager(
+            database_obj,
+            ownership_cfg,
+            profile=profile,
+            kafka_owner=kafka_owner,
+        )
     event_cfg = _resolve_event_config(event_config)
 
     @asynccontextmanager
@@ -140,6 +160,9 @@ def create_app(
     app.state.commit_log_writer = commit_log_writer
     app.state.shared_account_policy = shared_policy
     app.state.health_capabilities = capabilities
+    app.state.ownership_manager = ownership_manager
+    app.state.kafka_owner = kafka_owner
+    app.state.ownership_config = ownership_cfg
 
     @app.middleware("http")
     async def _degrade_middleware(request: Request, call_next):

@@ -12,6 +12,8 @@ metadata:
     Template for running the core QMTL backend services with durable storage,
     messaging, and observability backends.
 
+profile: prod
+
 backends:
   redis:
     # Dedicated logical databases per service prevent key collisions.
@@ -63,19 +65,6 @@ worldservice:
     tokens: []
   compat_rebalance_v2: false
   alpha_metrics_required: false
-  controlbus:
-    brokers: *kafka_brokers
-    topic: ${backends.kafka.controlbus_topics.policy}
-    consumer_group: worldservice
-  notes:
-    - >-
-      Place this YAML on disk (e.g. /etc/qmtl/backend.yml) and run WorldService
-      from that directory so uvicorn discovers it automatically.
-    - >-
-      Start the service with:
-      uv run uvicorn qmtl.services.worldservice.api:create_app --factory \
-        --host ${worldservice.bind.host} --port ${worldservice.bind.port}
-    - "Ensure aiokafka is installed if ControlBus publishing is required."
 
 # Gateway section matches qmtl.services.gateway.config.GatewayConfig.
 gateway:
@@ -122,11 +111,6 @@ dagmanager:
   controlbus_dsn: redpanda-0:9092
   controlbus_queue_topic: ${backends.kafka.controlbus_topics.queue}
   enable_topic_namespace: true
-  notes:
-    - >-
-      After provisioning Neo4j, initialise schema with:
-      qmtl service dagmanager neo4j-init --uri ${backends.neo4j.dsn} \
-        --user ${backends.neo4j.user} --password <secret>
 
 # Additional operational hints for the full stack.
 notes:

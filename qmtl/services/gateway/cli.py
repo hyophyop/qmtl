@@ -111,6 +111,8 @@ async def _main(argv: list[str] | None = None) -> None:
         enable_otel=telemetry_enabled,
         shared_account_policy_config=config.shared_account_policy,
         health_capabilities=config.build_health_capabilities(),
+        ownership_config=config.ownership,
+        profile=profile,
     )
 
     db = app.state.database

@@ -4,12 +4,16 @@ import asyncio
 import importlib
 import importlib.util
 import logging
-from typing import Any, Optional, Protocol, Dict, Set, cast, Iterable, Callable
+from typing import Any, Optional, Protocol, Dict, Set, cast, Iterable, Callable, TYPE_CHECKING
 
 from .database import PostgresDatabase, pg_try_advisory_lock, pg_advisory_unlock
 from . import metrics as gw_metrics
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:  # pragma: no cover - used for type checking only
+    from qmtl.foundation.config import DeploymentProfile
+    from .config import GatewayOwnershipConfig
 
 
 class KafkaOwnership(Protocol):
@@ -130,6 +134,55 @@ def create_kafka_ownership(
     )
 
 
+def resolve_ownership_manager(
+    database: Any,
+    ownership_config: "GatewayOwnershipConfig",
+    *,
+    profile: "DeploymentProfile",
+    kafka_owner: Optional[KafkaOwnership] = None,
+    _logger: logging.Logger | None = None,
+) -> tuple[OwnershipManager | None, KafkaOwnership | None]:
+    """Construct an :class:`OwnershipManager` for the configured mode.
+
+    Returns ``(None, None)`` when ownership coordination is not available for the
+    provided database (for example, SQLite in local development).
+    """
+
+    from qmtl.foundation.config import DeploymentProfile
+
+    log = _logger or logger
+    if ownership_config.mode == "postgres":
+        if isinstance(database, PostgresDatabase):
+            return OwnershipManager(database, None), None
+        return None, None
+
+    if ownership_config.mode != "kafka":
+        raise ValueError(f"Unknown gateway.ownership.mode {ownership_config.mode}")
+
+    if not isinstance(database, PostgresDatabase):
+        message = "Kafka ownership requires gateway.database_backend=postgres"
+        if profile is DeploymentProfile.PROD:
+            raise RuntimeError(message)
+        log.warning(message)
+        return None, None
+
+    if not ownership_config.bootstrap:
+        raise RuntimeError("Kafka ownership requires gateway.ownership.bootstrap")
+    if not ownership_config.topic:
+        raise RuntimeError("Kafka ownership requires gateway.ownership.topic")
+
+    kafka_owner = kafka_owner or create_kafka_ownership(
+        ownership_config.bootstrap,
+        ownership_config.topic,
+        ownership_config.group_id,
+        start_timeout=ownership_config.start_timeout,
+        rebalance_backoff=ownership_config.rebalance_backoff,
+        rebalance_attempts=ownership_config.rebalance_attempts,
+    )
+    manager = OwnershipManager(database, kafka_owner)
+    return manager, kafka_owner
+
+
 class OwnershipManager:
     """Coordinate ownership using Kafka with DB advisory lock fallback."""
 
@@ -165,7 +218,7 @@ class OwnershipManager:
     async def release(self, key: int) -> None:
         """Release ownership for ``key``."""
 
-        db_owned = key in self._db_owned
+        db_owned = key in self._db_owned or self._kafka is None
         if self._kafka is not None:
             try:
                 await self._kafka.release(key)
@@ -228,4 +281,5 @@ __all__ = [
     "KafkaOwnership",
     "KafkaPartitionOwnership",
     "create_kafka_ownership",
+    "resolve_ownership_manager",
 ]
