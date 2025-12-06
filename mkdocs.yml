@@ -97,6 +97,7 @@ nav:
       - WorldService Evaluation Runs & Metrics API: design/worldservice_evaluation_runs_and_metrics_api.md
       - YAML-Only Configuration Overhaul: design/yaml_config_overhaul.md
       - Seamless Data Provider: design/seamless_data_provider.md
+      - Seamless Materialize/Verify Surface: design/seamless_materialize_jobs.md
       - SR × Runner.submit Auto Returns: design/sr_auto_returns_integration_sketch.md
       - SDK Auto Returns Proposals Comparison: design/auto_returns_proposals_comparison.md
   - Reference:

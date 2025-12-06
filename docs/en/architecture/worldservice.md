@@ -39,17 +39,12 @@ Non-goals:
 - Strategy ingest, DAG diff, queue/tag discovery (owned by Gateway/DAG Manager). Order I/O is not handled here.
 - Supporting a full strategy lifecycle and final evaluation/gating in a **“pure local, SDK-only” mode** (without WorldService/Gateway) as an official operating mode. SDK-level ValidationPipeline/PnL helpers exist for tests and experiments, but WorldService remains the SSOT for policies, evaluation, and gating.
 
-### 0-A. As-Is / To-Be Summary
+### 0-A. Core Loop Alignment
 
 #### Evaluation & Activation Flow
 
-- As‑Is
-  - WS `/worlds/{id}/evaluate` accepts `EvaluateRequest(metrics, series, policy)` and uses the policy engine (`Policy`) to compute **active strategy sets**.
-  - SDK/Runner runs `ValidationPipeline` locally first, then optionally calls WS evaluation as a **secondary signal**. Both layers carry notions of weight/contribution, so it is not always obvious which value is the final authority.
-  - Activation state lives in Redis/DB and is broadcast via ControlBus, but the connection to Runner.submit / CLI is only partially standardised (how activation/weights are surfaced to users).
-- To‑Be
-  - WS evaluation results (active/weight/contribution/violations) are treated as the **single world-level source of truth**, with SDK/Runner exposing them directly; `ValidationPipeline` becomes a hint/local pre-check only.
-  - `DecisionEnvelope`/`ActivationEnvelope` schemas and Runner/CLI `SubmitResult` are aligned so that “submit strategy → inspect world decision” reads as a single flow.
+- WS evaluation results (active/weight/contribution/violations) are the **single world-level source of truth**, surfaced directly by SDK/Runner; `ValidationPipeline` stays as a hint/local pre-check only.
+- `DecisionEnvelope`/`ActivationEnvelope` schemas and Runner/CLI `SubmitResult` are aligned so “submit strategy → inspect world decision” reads as a single flow.
 - Contract (aligned)
   - `/worlds/{id}/evaluate` produces `DecisionEnvelope`/`ActivationEnvelope` that map directly to `SubmitResult.ws.decision/activation`; CLI `--output json` emits the same WS/Precheck-separated structure.
   - Local `ValidationPipeline` output lives only in `SubmitResult.precheck`; `status/weight/rank/contribution` SSOT is always WS.
@@ -57,22 +52,13 @@ Non-goals:
 
 #### ExecutionDomain / effective_mode
 
-- As‑Is
-  - WS computes `effective_mode` (`validate | compute-only | paper | live`), Gateway/SDK map it to `execution_domain(backtest/dryrun/live/shadow)`.
-  - Some paths also consider `meta.execution_domain` hints from submissions; precedence between hints and WS decisions is described across several docs and implementations.
-- To‑Be
-  - Authority over ExecutionDomain is explicitly anchored in WS `effective_mode`; Gateway/SDK always derive domains from it, treating submission hints as advisory at most.
-  - `world/world.md`, `architecture.md`, `gateway.md`, and this document share a single normative mapping table and precedence rules.
+- WS computes `effective_mode` (`validate | compute-only | paper | live`), Gateway/SDK map it to `execution_domain(backtest/dryrun/live/shadow)`.
+- Submission `meta.execution_domain` is advisory at most; authority sits with WS `effective_mode`, and the mapping/precedence rules are shared across `world/world.md`, `architecture.md`, `gateway.md`, and this document.
 
 #### World-Level Allocation / Rebalancing
 
-- As‑Is
-  - `/allocations` and `/rebalancing/*` can compute and record world and cross-world allocation plans, but they are used as **operator-driven loops** separate from the strategy submission flow.
-  - Runner.submit/CLI now best-effort fetch the latest `/allocations` snapshot for the submitted world so users can see the **applied world/strategy totals**. This is informational only and does not imply auto-apply; capital moves remain an operator flow.
-  - v2 rebalancing schemas embed alpha metrics (`alpha_metrics`), yet few docs present “strategy evaluation → world allocation” as one cohesive narrative.
-- To‑Be
-  - The strategy submission/evaluation loop and the world allocation loop are documented as a **standard two-step flow**, with WS clearly owning both evaluation/activation and allocation decisions.
-  - Core Loop surfaces (Runner.submit/CLI, docs) link to `/allocations` snapshots so users can easily discover the applied allocation state while keeping the proposal (evaluation/activation) vs. applied (allocation) boundary explicit. Apply/rebalancing remains an auditable, operator-led step.
+- `/allocations` and `/rebalancing/*` compute and record world and cross-world allocation plans; Runner.submit/CLI surface the latest snapshot (world/strategy totals, etag/updated_at, staleness) for the submitted world as read-only context and hint users to refresh with `qmtl world allocations -w <id>` when missing or stale.
+- The submission/evaluation loop and the world allocation loop are a **standard two-step flow** with WS as SSOT for evaluation/activation/allocation and apply/rebalancing remaining an auditable, operator-led step (`qmtl world apply <id> --run-id <id> [--plan-file ...]`) anchored by run_id/etag tracking.
 
 ---
 

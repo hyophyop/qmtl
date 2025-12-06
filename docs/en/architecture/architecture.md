@@ -72,86 +72,38 @@ SDK/Runner, etc.) share the following intent:
     ValidationPipeline, PnL helpers, and similar utilities may be used directly from the SDK for tests and experiments,  
     but WorldService remains the single source of truth for policy, evaluation, and gating, and the Core Loop narrative is defined in terms of that WS/Gateway-backed path.
 
-### 0.1 Core Loop: Strategy Lifecycle (As‑Is / To‑Be)
+### 0.1 Core Loop: Strategy Lifecycle
 
 From the user’s perspective, QMTL’s **Core Loop** is:
 
 > Implement strategy → Submit → (system backtests/evaluates/deploys inside a world) → Observe world performance → Refine strategy
 
-- **To‑Be (target experience)**  
-  - Strategy code only expresses “signal logic + required data”.  
-  - Data supply/backfill/market replay are handled by the Seamless/DataPlane.  
-  - A single `Runner.submit(..., world=..., mode=...)` call:
-    - Warms up history and runs a replay‑style backtest,
-    - Computes performance metrics and evaluates policies (WorldService),
-    - Drives activation decisions and world‑level capital allocation.  
-  - Users focus on the “submit → observe → improve” loop for their worlds.
-
-- **As‑Is (v2.0 implementation snapshot)**
-  - `Runner.submit` already orchestrates history warm‑up, backtest execution, and metric computation via `ValidationPipeline`.
-  - WorldService exposes `/worlds/{id}/evaluate`, `/apply`, `/activation`, and `/allocations` APIs
-    for policy evaluation, activation management, and rebalancing plans.
-  - `auto_returns` now provides an opt‑in path to derive returns from price/equity data before validation,
-    but the separation between evaluation/activation/allocation layers means "submit once and immediately
-    become tradable with capital allocation" is not fully automatic yet.
-  - The gap and follow‑up plans are captured in each section as As‑Is/To‑Be.
+- Strategy code only expresses “signal logic + required data”, while data supply/backfill/market replay are handled by the Seamless/DataPlane.
+- A single `Runner.submit(..., world=..., mode=...)` call warms up history, runs a replay‑style backtest, computes metrics, evaluates policies (WorldService), and surfaces activation/allocations at the world level.
+- Users stay focused on the “submit → observe → improve” loop for their worlds.
 
 #### 0.1.1 Backtest & Market Replay
 
-- As‑Is
-  - `HistoryWarmupService` and `Pipeline` handle `StreamInput` history loading and replay.
-  - Seamless/QuestDB/CCXT and other sources are already integrated into the v2 data plane, but
-    **which StreamInputs/datasets a strategy uses** is still chosen explicitly by the author for most strategies.
-    For Core Loop demo/standard worlds that define `world.data.presets[]`, Runner/CLI can already infer a
-    suitable Seamless provider from the world + preset and attach it automatically; other worlds still rely
-    on manual wiring.
-  - World configuration (`world/world.md`) and dataset wiring (`dataset_id`, `snapshot_version`, etc.)
-    are still set up manually for worlds that do not participate in the world data preset on‑ramp.
-- To‑Be
-  - For the default on‑ramp, **world + preset + a simple data spec** are enough for
-    Runner/CLI to auto‑wire a suitable Seamless provider and StreamInputs.
-  - The minimum configuration to get “market‑like replay backtests” shrinks to
-    `world`, `mode`, and (optionally) a data preset.
+- `HistoryWarmupService` and `Pipeline` handle `StreamInput` history loading and replay.
+- Seamless/QuestDB/CCXT and other sources are integrated into the v2 data plane; worlds that declare `world.data.presets[]` let Runner/CLI auto‑wire a Seamless provider and StreamInputs from the world + preset. The default on‑ramp needs only `world`, `mode`, and (optionally) a data preset for market‑style replay; worlds without presets still follow the manual wiring described in the design docs.
 
 #### 0.1.2 Data Supply Automation
 
-- As‑Is
-  - `SeamlessDataProvider v2` abstracts cache→storage→backfill→live and enforces
-    SLAs/conformance/schema checks.
-  - At the Runner/SDK level, most strategies still configure `history_provider` explicitly; the only default
-    on‑ramp today is for worlds that declare `world.data.presets[]`, where Runner/CLI build a Seamless provider
-    from presets and inject it into `StreamInputs` when a world is specified.
-- To‑Be
-  - When a world is specified, Runner/CLI defaults to a Seamless provider consistent
-    with that world’s config/preset and auto‑injects it into StreamInputs.
-  - Users think in terms of **data presets/fingerprints**, not low‑level data plumbing.
+- `SeamlessDataProvider v2` abstracts cache→storage→backfill→live and enforces SLAs/conformance/schema checks.
+- When a world is specified, Runner/CLI defaults to a Seamless provider consistent with that world’s config/preset and auto‑injects it into StreamInputs so users think in terms of **data presets/fingerprints**, not low‑level data plumbing.
 
 #### 0.1.3 Auto Evaluation → Tradable Transition
 
-- As‑Is
-  - `ValidationPipeline` computes Sharpe/MDD/linearity metrics and performs policy‑based PASS/FAIL checks.
-  - WorldService `/evaluate` determines active sets. SDK/Runner can now derive `backtest_returns` via
-    `auto_returns`, but explicit returns are still required when no usable price/equity series is present.
-  - Activation (order gating) is wired through WorldService/ActivationManager, yet
-    “submit once → automatically active with weights” depends on how worlds/policies/ops flows are configured.
-- To‑Be
-  - `auto_returns` is implemented as a Runner.submit pre‑processing step so
-    SR/expression strategies that don’t emit returns still get a basic evaluation.
-  - WorldService evaluation outputs (active/weight/contribution) map consistently into Runner/CLI
-    results, and the “validation → activation → capital allocation” flow is standardised and documented.
+- `ValidationPipeline` computes Sharpe/MDD/linearity metrics and performs policy‑based PASS/FAIL checks, and `auto_returns` pre‑processing lets Runner.submit derive returns when explicit series are missing.
+- WorldService evaluation outputs (active/weight/contribution) map directly into Runner/CLI results, while local `ValidationPipeline` output is shown only in `precheck` so WS remains the SSOT for `status/weight/rank/contribution`.
 
 #### 0.1.4 World‑Level Capital Allocation
 
-- As‑Is
-  - WorldService can compute world and cross‑world allocation plans through `/allocations`
-    and its internal rebalancing engine.
-  - Runner.submit/CLI now fetch the latest `/allocations` snapshot for the submitted world to show applied world/strategy shares, but this is informational only; capital movements still rely on separate operational/scheduling loops.
-- To‑Be
-  - The strategy submission/evaluation loop and the world allocation loop are described as
-    a **two‑step standard flow** across this document, `worldservice.md`, and the world/ops guides:
-    1) `Runner.submit(..., world=...)` → WS evaluation/activation, and  
-    2) world allocation/rebalancing via `/allocations` and `/rebalancing/*` (exposed through the `qmtl world allocations|rebalance-*` CLI).
-  - Core Loop surfaces (docs/CLI) link to `/allocations` snapshots so operators can inspect the applied state while keeping proposal vs. applied boundaries explicit; apply/rebalancing remains an auditable operational step.
+- WorldService computes world and cross‑world allocation plans through `/allocations` and its internal rebalancing engine, and Runner.submit/CLI surface the latest snapshot for the submitted world (world/strategy shares, etag/updated_at, staleness hints) as read‑only context.
+- The Core Loop treats evaluation/activation vs. allocation as a **two‑step standard flow**:  
+  1) `Runner.submit(..., world=...)` → WS evaluation/activation, and  
+  2) allocation/rebalancing via `/allocations` and `/rebalancing/*` (`qmtl world allocations|rebalance-*`).  
+  Apply/rebalancing stays as an auditable operational step with `run_id`/`etag` tracking (`qmtl world apply <id> --run-id <id> [--plan-file ...]`).
 
 ### Core Principle: Simplicity > Backward Compatibility
 
