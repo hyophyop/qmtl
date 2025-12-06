@@ -17,6 +17,7 @@ from qmtl.foundation.config import (
     find_config_file,
     load_config,
 )
+from qmtl.foundation.config_validation import validate_dagmanager_config
 from qmtl.utils.i18n import _, set_language
 
 from .config import DagManagerConfig
@@ -319,7 +320,12 @@ class _KafkaAdminClient:
             future.result()
 
 
-async def _run(cfg: DagManagerConfig, *, enable_otel: bool = False) -> None:
+async def _run(
+    cfg: DagManagerConfig,
+    *,
+    enable_otel: bool = False,
+    profile: DeploymentProfile = DeploymentProfile.DEV,
+) -> None:
     set_topic_namespace_enabled(cfg.enable_topic_namespace)
     driver = None
     repo = None
@@ -371,7 +377,10 @@ async def _run(cfg: DagManagerConfig, *, enable_otel: bool = False) -> None:
     try:
         if cfg.controlbus_dsn:
             bus = ControlBusProducer(
-                brokers=[cfg.controlbus_dsn], topic=cfg.controlbus_queue_topic
+                brokers=[cfg.controlbus_dsn],
+                topic=cfg.controlbus_queue_topic,
+                required=profile is DeploymentProfile.PROD,
+                logger=logging.getLogger(__name__),
             )
             await bus.start()
 
@@ -414,30 +423,20 @@ async def _run(cfg: DagManagerConfig, *, enable_otel: bool = False) -> None:
             await bus.stop()
 
 
-def _enforce_backends(cfg: DagManagerConfig, profile: DeploymentProfile) -> None:
-    missing: list[str] = []
-    if not cfg.neo4j_dsn:
-        missing.append("dagmanager.neo4j_dsn")
-    if not cfg.kafka_dsn:
-        missing.append("dagmanager.kafka_dsn")
-
-    if profile is DeploymentProfile.PROD and missing:
-        logging.error(
-            _(
-                "Prod profile requires persistent graph/queue backends; missing: %s",
-            ),
-            ", ".join(missing),
-        )
+async def _run_with_validation(
+    cfg: DagManagerConfig,
+    *,
+    enable_otel: bool,
+    profile: DeploymentProfile,
+) -> None:
+    issues = await validate_dagmanager_config(cfg, offline=True, profile=profile)
+    fatal_hints = [issue.hint for issue in issues.values() if issue.severity == "error"]
+    if fatal_hints:
+        for hint in fatal_hints:
+            logging.error(hint)
         raise SystemExit(2)
 
-    if missing:
-        for field in missing:
-            logging.warning(
-                _(
-                    "%s not configured; falling back to in-memory backend (dev profile only)",
-                ),
-                field,
-            )
+    await _run(cfg, enable_otel=enable_otel, profile=profile)
 
 
 def _extract_lang(argv: Sequence[str]) -> tuple[list[str], str | None]:
@@ -508,9 +507,13 @@ def main(argv: list[str] | None = None) -> None:
         config_path=cfg_path,
     )
 
-    _enforce_backends(cfg, profile)
-
-    asyncio.run(_run(cfg, enable_otel=bool(telemetry_enabled)))
+    asyncio.run(
+        _run_with_validation(
+            cfg,
+            enable_otel=bool(telemetry_enabled),
+            profile=profile,
+        )
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry

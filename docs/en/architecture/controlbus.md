@@ -25,6 +25,10 @@ Non‑Goals
 !!! note "Design intent"
 - ControlBus is opaque to SDKs by default. Clients consume control events only via the Gateway’s tokenized WebSocket bridge (`/events/subscribe`). This keeps the bus private, centralizes authN/Z, and allows initial snapshot/state_hash reconciliation without exposing internal topics.
 
+!!! warning "Deployment profiles"
+- **prod**: ControlBus is mandatory. Gateway, WorldService, and DAG Manager fail fast if brokers/topics are missing or if the Kafka client is unavailable.
+- **dev**: ControlBus may be disabled for local runs. Publishers/consumers emit warnings and skip I/O, meaning no control events will be produced or consumed.
+
 ---
 
 ## 1. Topology & Semantics

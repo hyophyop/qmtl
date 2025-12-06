@@ -9,9 +9,10 @@ from qmtl.services.dagmanager import server
 def dagmanager_testbed(monkeypatch):
     captured: dict[str, object] = {}
 
-    async def fake_run(cfg, *, enable_otel: bool = False):
+    async def fake_run(cfg, *, enable_otel: bool = False, profile=None):
         captured["config"] = cfg
         captured["enable_otel"] = enable_otel
+        captured["profile"] = profile
 
     monkeypatch.setattr(server, "_run", fake_run)
     return captured

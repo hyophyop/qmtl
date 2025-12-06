@@ -48,7 +48,8 @@ async def test_validate_dagmanager_config_skips_missing_services() -> None:
     assert results["kafka"].severity == "warning"
     assert "in-memory queue manager" in results["kafka"].hint
     assert "dev-only" in results["kafka"].hint
-    assert results["controlbus"].severity == "ok"
+    assert results["controlbus"].severity == "warning"
+    assert "ControlBus disabled" in results["controlbus"].hint
 
 
 def test_validate_config_structure_reports_list_schemas() -> None:
@@ -133,6 +134,7 @@ async def test_validate_dagmanager_config_requires_backends_in_prod() -> None:
 
     assert issues["neo4j"].severity == "error"
     assert issues["kafka"].severity == "error"
+    assert issues["controlbus"].severity == "error"
 
 
 def test_validate_worldservice_config_enforces_redis_in_prod() -> None:
