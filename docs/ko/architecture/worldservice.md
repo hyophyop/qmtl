@@ -25,6 +25,9 @@ WorldService는 월드의 단일 진실 소스(SSOT)입니다. 다음을 소유�
 - `allow_live=false`(기본)일 때는 운영자가 요청하더라도 활성/도메인이 live로 전환되지 않습니다. 정책 검증(필수 지표, 히스테리시스, dataset_fingerprint 고정)이 통과될 때에만 승격을 허용하세요.
 - 클라이언트가 `execution_domain`을 생략하면 월드 노드·검증 캐시는 기본적으로 `backtest`로 저장됩니다. 의도한 도메인을 명시적으로 넣어야 live 범위로 잘못 저장되는 일을 막을 수 있습니다.
 
+!!! note "정책 엔진 구현 상태"
+현재 `/worlds/{id}/decide` 엔드포인트는 월드의 `allow_live` 플래그, 바인딩/결정 존재 여부, 히스토리 메타데이터(dataset_fingerprint·coverage 등)만을 기준으로 `effective_mode`와 TTL/사유를 결정합니다. 아직 정책 문서의 정밀 점수화·히스테리시스·필수 지표 집합(StrategySeries 기반)·도메인별 엣지 오버라이드 연동은 미구현 상태이며, 향후 WorldService 정책 엔진이 준비되면 해당 평가 로직과 SSOT를 이 경로에 통합합니다.
+
 !!! note "설계 의도"
 - WS는 `effective_mode`(정책 문자열)를 산출하고, Gateway는 이를 `execution_domain`으로 매핑해 공유 컴퓨트 컨텍스트로 전파합니다. SDK/Runner는 모드를 선택하지 않으며 입력으로만 취급합니다. 오래되었거나 알 수 없는 결정은 기본적으로 compute‑only(주문 게이트 OFF)로 처리합니다.
 - 제출 메타의 `execution_domain` 값은 참조용 힌트일 뿐이며, 권한 있는 도메인 값은 WS가 산출한 `effective_mode`에서만 파생됩니다.

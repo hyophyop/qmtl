@@ -112,6 +112,8 @@ def test_cli_emits_json_with_ws_and_precheck_sections(capsys):
     payload = json.loads(output)
 
     assert payload["ws"]["decision"]["world_id"] == "w-json"
+    assert payload["ws"]["decision"]["ttl"] == "60s"
+    assert payload["ws"]["decision"]["reason"] == "stub"
     assert payload["ws"]["activation"]["strategy_id"] == "s-json"
     assert payload["ws"]["threshold_violations"][0]["metric"] == "sharpe"
     assert payload["precheck"]["status"] == "passed"
