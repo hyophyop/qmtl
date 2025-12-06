@@ -83,6 +83,9 @@ def test_gateway_config_defaults() -> None:
     assert cfg.rebalance_schema_version == 1
     assert cfg.alpha_metrics_capable is False
     assert cfg.compute_context_contract is None
+    assert cfg.ownership.mode == "postgres"
+    assert cfg.ownership.topic == "gateway.ownership"
+    assert cfg.ownership.group_id == "gateway-ownership"
     caps = cfg.build_health_capabilities()
     assert caps.rebalance_schema_version == 1
     assert caps.alpha_metrics_capable is False
@@ -99,3 +102,23 @@ def test_gateway_config_builds_capabilities_from_values() -> None:
     assert caps.rebalance_schema_version == 2
     assert caps.alpha_metrics_capable is True
     assert caps.compute_context_contract == "compute:v2"
+
+
+def test_gateway_config_parses_ownership_block(tmp_path: Path) -> None:
+    ownership = {
+        "mode": "kafka",
+        "bootstrap": "kafka:9092",
+        "topic": "gateway.ownership",
+        "group_id": "locks",
+        "start_timeout": 1.5,
+    }
+    config_file = tmp_path / "ownership.yml"
+    config_file.write_text(yaml.safe_dump({"gateway": {"ownership": ownership}}))
+
+    config = load_config(str(config_file))
+
+    assert config.gateway.ownership.mode == "kafka"
+    assert config.gateway.ownership.bootstrap == "kafka:9092"
+    assert config.gateway.ownership.topic == "gateway.ownership"
+    assert config.gateway.ownership.group_id == "locks"
+    assert config.gateway.ownership.start_timeout == 1.5

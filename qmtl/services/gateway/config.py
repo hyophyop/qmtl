@@ -10,6 +10,23 @@ from .shared_account_policy import SharedAccountPolicyConfig
 
 
 @dataclass
+class GatewayOwnershipConfig:
+    """Ownership coordination settings.
+
+    ``mode`` toggles between Postgres advisory locks only (``postgres``) and
+    Kafka partition-based ownership with Postgres fallback (``kafka``).
+    """
+
+    mode: str = "postgres"
+    bootstrap: str | None = None
+    topic: str = "gateway.ownership"
+    group_id: str = "gateway-ownership"
+    start_timeout: float = 5.0
+    rebalance_backoff: float = 0.05
+    rebalance_attempts: int = 3
+
+
+@dataclass
 class GatewayConfig:
     """Configuration for Gateway service."""
 
@@ -42,6 +59,7 @@ class GatewayConfig:
     shared_account_policy: SharedAccountPolicyConfig = field(
         default_factory=SharedAccountPolicyConfig
     )
+    ownership: GatewayOwnershipConfig = field(default_factory=GatewayOwnershipConfig)
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "GatewayConfig":
@@ -51,6 +69,7 @@ class GatewayConfig:
         events_data = base.pop("events", {}) or {}
         websocket_data = base.pop("websocket", {}) or {}
         shared_policy_data = base.pop("shared_account_policy", {}) or {}
+        ownership_data = base.pop("ownership", {}) or {}
         cfg = cls(**base)
         if isinstance(events_data, GatewayEventsConfig):
             cfg.events = events_data
@@ -70,6 +89,12 @@ class GatewayConfig:
             cfg.shared_account_policy = SharedAccountPolicyConfig(**shared_policy_data)
         else:
             raise TypeError("gateway.shared_account_policy must be a mapping")
+        if isinstance(ownership_data, GatewayOwnershipConfig):
+            cfg.ownership = ownership_data
+        elif isinstance(ownership_data, dict):
+            cfg.ownership = GatewayOwnershipConfig(**ownership_data)
+        else:
+            raise TypeError("gateway.ownership must be a mapping")
         return cfg
 
     def build_health_capabilities(self) -> GatewayHealthCapabilities:

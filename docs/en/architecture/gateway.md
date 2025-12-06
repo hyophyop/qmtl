@@ -210,7 +210,7 @@ Authorization: Bearer <jwt>
 
 This section summarizes the once-and-only-once layer required by issue #544.
 
-- Ownership: For each execution key `(node_id, interval, bucket_ts)`, a single worker acquires ownership before executing. Gateway uses a DB advisory lock (Postgres `pg_try_advisory_lock`) with optional Kafka-based coordination.
+- Ownership: For each execution key `(node_id, interval, bucket_ts)`, a single worker acquires ownership before executing. Gateway uses a DB advisory lock (Postgres `pg_try_advisory_lock`) with optional Kafka-based coordination driven by `gateway.ownership.*` config (bootstrap/topic/group). The Kafka path claims ownership when the worker's consumer group owns the partition for the key and falls back to Postgres when unavailable.
 - Commit log: Results are published via a transactional, idempotent Kafka producer to a compacted topic. The message value is `(node_id, bucket_ts, input_window_hash, payload)`.
 - Message key: The Kafka message key is built as `"{partition_key(node_id, interval, bucket_ts)}:{input_window_hash}"` ensuring compaction on a stable prefix while preserving uniqueness per input window.
 - Deduplication: Downstream consumers deduplicate on the triple `(node_id, bucket_ts, input_window_hash)` and increment `commit_duplicate_total` when duplicates are observed.
@@ -374,6 +374,6 @@ See also: World API Reference (reference/api_world.md) and Schemas (reference/sc
 - Status (2025-09):
   - Partition key is defined in `qmtl/services/dagmanager/kafka_admin.py:partition_key(node_id, interval, bucket)` and used by the commit-log writer.
   - Transactional commit-log writer/consumer are implemented (`qmtl/services/gateway/commit_log.py`, `qmtl/services/gateway/commit_log_consumer.py`) with deduplication and metrics.
-  - OwnershipManager coordinates Kafka ownership with Postgres advisory locks fallback (`qmtl/services/gateway/ownership.py`), and `owner_reassign_total` is recorded on handoff.
+  - OwnershipManager coordinates Kafka ownership with Postgres advisory locks fallback (`qmtl/services/gateway/ownership.py`). Kafka partition ownership is implemented by `KafkaPartitionOwnership` (wired via `gateway.ownership` config), and `owner_reassign_total` is recorded on handoff.
   - SDK/Gateway integration skips local execution when queues are globally owned (see `qmtl/services/gateway/worker.py`).
   - Chaos/soak style dedup tests exist under `tests/qmtl/services/gateway/test_commit_log_soak.py`.

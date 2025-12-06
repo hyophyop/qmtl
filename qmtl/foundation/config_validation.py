@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import importlib
 from dataclasses import dataclass, fields
 from typing import Any, Dict, Mapping, Sequence, TYPE_CHECKING, get_type_hints
 
@@ -281,6 +282,71 @@ def _validate_gateway_commitlog(
     return ValidationIssue("ok", f"Commit-log configured for {config.commitlog_topic}")
 
 
+async def _validate_gateway_ownership(
+    config: "GatewayConfig", *, offline: bool, profile: DeploymentProfile
+) -> ValidationIssue:
+    ownership = config.ownership
+    if ownership.mode == "postgres":
+        return ValidationIssue("ok", "Ownership uses Postgres advisory locks")
+
+    if ownership.mode != "kafka":
+        return ValidationIssue(
+            "error", f"Unknown gateway.ownership.mode {ownership.mode}"
+        )
+
+    if not ownership.bootstrap:
+        severity = "error" if profile is DeploymentProfile.PROD else "warning"
+        return ValidationIssue(
+            severity, "Kafka ownership requires gateway.ownership.bootstrap"
+        )
+
+    if not ownership.topic:
+        severity = "error" if profile is DeploymentProfile.PROD else "warning"
+        return ValidationIssue(
+            severity, "Kafka ownership requires gateway.ownership.topic"
+        )
+
+    spec = importlib.util.find_spec("aiokafka")
+    if spec is None:
+        severity = "error" if profile is DeploymentProfile.PROD else "warning"
+        return ValidationIssue(
+            severity, "Install aiokafka to use gateway.ownership.mode=kafka"
+        )
+
+    if offline:
+        return ValidationIssue("warning", "Offline mode: skipping Kafka ownership probe")
+
+    aiokafka = importlib.import_module("aiokafka")
+    consumer = aiokafka.AIOKafkaConsumer(
+        ownership.topic,
+        bootstrap_servers=ownership.bootstrap,
+        group_id=ownership.group_id,
+        enable_auto_commit=False,
+    )
+
+    try:
+        await consumer.start()
+        partitions = consumer.partitions_for_topic(ownership.topic) or set()
+    except Exception as exc:  # pragma: no cover - defensive path
+        severity = "error" if profile is DeploymentProfile.PROD else "warning"
+        return ValidationIssue(
+            severity, f"Kafka ownership connection failed: {exc!s}"
+        )
+    finally:
+        with contextlib.suppress(Exception):
+            await consumer.stop()
+
+    if not partitions:
+        severity = "error" if profile is DeploymentProfile.PROD else "warning"
+        return ValidationIssue(
+            severity, "Kafka ownership topic has no partitions configured"
+        )
+
+    return ValidationIssue(
+        "ok", f"Kafka ownership enabled for {ownership.topic} ({len(partitions)} partitions)"
+    )
+
+
 async def _validate_gateway_controlbus(
     config: "GatewayConfig", *, offline: bool, profile: DeploymentProfile
 ) -> ValidationIssue:
@@ -313,6 +379,9 @@ async def validate_gateway_config(
         config, offline=offline, profile=profile
     )
     issues["commitlog"] = _validate_gateway_commitlog(config, profile)
+    issues["ownership"] = await _validate_gateway_ownership(
+        config, offline=offline, profile=profile
+    )
     issues["controlbus"] = await _validate_gateway_controlbus(
         config, offline=offline, profile=profile
     )
