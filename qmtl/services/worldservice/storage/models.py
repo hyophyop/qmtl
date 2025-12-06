@@ -140,8 +140,10 @@ class WorldRecord:
                 }
             }
         )
-        if "created_at" in updates and updates["created_at"] != self.created_at:
-            raise ValueError("created_at is immutable")
+        if "created_at" in updates:
+            provided_created_at = updates["created_at"]
+            if provided_created_at is not None and provided_created_at != self.created_at:
+                raise ValueError("created_at is immutable")
         self.updated_at = str(_iso_timestamp())
 
     def to_dict(self) -> Dict[str, Any]:
