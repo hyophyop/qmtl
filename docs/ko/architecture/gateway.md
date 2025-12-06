@@ -32,6 +32,7 @@ spec_version: v1.2
 
 !!! note "배포 프로필"
     `profile: dev`에서는 Redis/ControlBus/Commit‑Log 설정이 비어 있으면 인메모리 대체 구현을 사용합니다. `profile: prod`에서는 `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_brokers`/`controlbus_topics`, `gateway.commitlog_bootstrap`/`commitlog_topic`이 모두 채워져 있지 않으면 Gateway가 기동 전에 실패합니다.
+    `profile: dev`에서 커밋 로그 필드를 비우면 게이트웨이는 단순히 커밋 로그 라이터를 비활성화하고 정보 로그를 남깁니다.
 
 > 이 확장판은 기존 문서 대비 약 75% 분량이 늘었으며, 연구 중심의 엄밀한 기술 명세 형식을 채택했습니다. 모든 위협 모델, 공식 API 계약, 지연 분포, CI/CD 의미론을 완전하게 기술합니다.
 > 표기: **Sx** = 섹션, **Rx** = 요구사항, **Ax** = 가정.

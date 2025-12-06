@@ -3,6 +3,8 @@ import subprocess
 import sys
 
 import pytest
+from qmtl.foundation.config import DeploymentProfile
+from qmtl.services.gateway.config import GatewayConfig
 from qmtl.utils.i18n import set_language
 
 
@@ -308,6 +310,74 @@ def test_gateway_cli_redis_backend(monkeypatch, tmp_path):
     assert captured["dsn"] == "redis://x:6379"
     assert captured["decode"] is True
     assert captured["insert_sentinel"] is True
+
+
+@pytest.mark.asyncio
+async def test_build_commitlog_clients_dev_allows_disabled(caplog):
+    from qmtl.services.gateway import cli
+
+    caplog.set_level("INFO")
+    writer, consumer = await cli._build_commitlog_clients(
+        GatewayConfig(), profile=DeploymentProfile.DEV
+    )
+
+    assert writer is None
+    assert consumer is None
+    assert "Commit-log writer disabled" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_build_commitlog_clients_fail_fast_in_prod():
+    from qmtl.services.gateway import cli
+
+    with pytest.raises(SystemExit):
+        await cli._build_commitlog_clients(
+            GatewayConfig(), profile=DeploymentProfile.PROD
+        )
+
+
+@pytest.mark.asyncio
+async def test_build_commitlog_clients_success_when_configured(monkeypatch):
+    from qmtl.services.gateway import cli
+
+    config = GatewayConfig(
+        commitlog_bootstrap="kafka:9092",
+        commitlog_topic="commit-log",
+        commitlog_group="gateway-commits",
+        commitlog_transactional_id="txn-id",
+    )
+
+    created: dict[str, object] = {}
+
+    async def fake_create_writer(bootstrap, topic, transactional_id):
+        created["writer_args"] = (bootstrap, topic, transactional_id)
+        return "writer"
+
+    class DummyKafkaConsumer:
+        def __init__(self, *args, **kwargs):
+            created["consumer_args"] = (args, kwargs)
+
+    class DummyCommitConsumer:
+        def __init__(self, kafka_consumer, *, topic, group_id):
+            created["commit_args"] = (kafka_consumer, topic, group_id)
+
+    monkeypatch.setattr(cli, "create_commit_log_writer", fake_create_writer)
+    monkeypatch.setattr(cli, "AIOKafkaConsumer", DummyKafkaConsumer)
+    monkeypatch.setattr(cli, "CommitLogConsumer", DummyCommitConsumer)
+
+    writer, consumer = await cli._build_commitlog_clients(
+        config, profile=DeploymentProfile.PROD
+    )
+
+    assert writer == "writer"
+    assert isinstance(consumer, DummyCommitConsumer)
+    assert created["writer_args"] == (
+        "kafka:9092",
+        "commit-log",
+        "txn-id",
+    )
+    assert created["commit_args"][1] == "commit-log"
+    assert created["commit_args"][2] == "gateway-commits"
 
 
 def test_gateway_cli_no_sentinel_flag(monkeypatch, tmp_path):
