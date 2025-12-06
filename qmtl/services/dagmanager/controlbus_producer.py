@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Iterable
 
@@ -18,17 +19,25 @@ class ControlBusProducer:
         topic: str = "queue",
         sentinel_topic: str = "sentinel_weight",
         producer: KafkaProducerLike | None = None,
+        required: bool = False,
+        logger: logging.Logger | None = None,
     ) -> None:
         self.brokers = list(brokers or [])
         self.topic = topic
         self.sentinel_topic = sentinel_topic
         self._producer: KafkaProducerLike | None = producer
+        self._required = required
+        self._logger = logger or logging.getLogger(__name__)
 
     async def start(self) -> None:
-        if self._producer is not None or not self.brokers:
+        if self._producer is not None:
+            return
+        if not self.brokers or not self.topic or not self.sentinel_topic:
+            self._handle_disabled("brokers/topics not configured")
             return
         producer = create_kafka_producer(self.brokers)
         if producer is None:
+            self._handle_disabled("Kafka client not available for ControlBus")
             return
         self._producer = producer
         await producer.start()
@@ -102,6 +111,11 @@ class ControlBusProducer:
         data = json.dumps(payload).encode()
         key = sentinel_id.encode()
         await producer.send_and_wait(self.sentinel_topic, data, key=key)
+
+    def _handle_disabled(self, reason: str) -> None:
+        if self._required:
+            raise RuntimeError(f"ControlBus unavailable: {reason}")
+        self._logger.warning("ControlBus disabled: %s", reason)
 
 
 __all__ = ["ControlBusProducer"]

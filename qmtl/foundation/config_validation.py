@@ -73,11 +73,22 @@ async def _create_kafka_admin(dsn: str) -> KafkaAdminClient:
 
 
 async def _check_controlbus(
-    brokers: Sequence[str], topics: Sequence[str], group: str, *, offline: bool
+    brokers: Sequence[str],
+    topics: Sequence[str],
+    group: str,
+    *,
+    offline: bool,
+    required: bool = False,
 ) -> ValidationIssue:
     broker_list = ", ".join(brokers)
     if not brokers or not topics:
-        return ValidationIssue("ok", "ControlBus disabled; no brokers/topics configured")
+        severity = "error" if required else "warning"
+        hint = (
+            "ControlBus requires brokers/topics; configure controlbus_brokers and topics"
+            if required
+            else "ControlBus disabled; no brokers/topics configured"
+        )
+        return ValidationIssue(severity, hint)
     if offline:
         return ValidationIssue("warning", f"Offline mode: skipped ControlBus check for {broker_list}")
     try:
@@ -350,17 +361,12 @@ async def _validate_gateway_ownership(
 async def _validate_gateway_controlbus(
     config: "GatewayConfig", *, offline: bool, profile: DeploymentProfile
 ) -> ValidationIssue:
-    if profile is DeploymentProfile.PROD:
-        if not config.controlbus_brokers or not config.controlbus_topics:
-            return ValidationIssue(
-                "error",
-                "Prod profile requires controlbus_brokers and controlbus_topics",
-            )
     return await _check_controlbus(
         config.controlbus_brokers,
         config.controlbus_topics,
         config.controlbus_group,
         offline=offline,
+        required=profile is DeploymentProfile.PROD,
     )
 
 
@@ -411,7 +417,9 @@ async def validate_dagmanager_config(
     else:
         issues["kafka"] = await _validate_dagmanager_kafka(config, offline=offline)
 
-    issues["controlbus"] = await _validate_dagmanager_controlbus(config, offline=offline)
+    issues["controlbus"] = await _validate_dagmanager_controlbus(
+        config, offline=offline, profile=profile
+    )
     return issues
 
 
@@ -500,12 +508,16 @@ async def _validate_dagmanager_kafka(
 
 
 async def _validate_dagmanager_controlbus(
-    config: "DagManagerConfig", *, offline: bool
+    config: "DagManagerConfig", *, offline: bool, profile: DeploymentProfile
 ) -> ValidationIssue:
     brokers = [config.controlbus_dsn] if config.controlbus_dsn else []
     topics = [config.controlbus_queue_topic] if config.controlbus_queue_topic else []
     return await _check_controlbus(
-        brokers, topics, f"{config.controlbus_queue_topic}-validator", offline=offline
+        brokers,
+        topics,
+        f"{config.controlbus_queue_topic}-validator",
+        offline=offline,
+        required=profile is DeploymentProfile.PROD,
     )
 
 

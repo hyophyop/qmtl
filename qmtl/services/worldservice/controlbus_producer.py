@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 from typing import Any, Dict, Iterable
 
 from qmtl.foundation.common.cloudevents import format_event
@@ -17,16 +18,24 @@ class ControlBusProducer:
         brokers: Iterable[str] | None = None,
         topic: str = "policy",
         producer: KafkaProducerLike | None = None,
+        required: bool = False,
+        logger: logging.Logger | None = None,
     ) -> None:
         self.brokers = list(brokers or [])
         self.topic = topic
         self._producer: KafkaProducerLike | None = producer
+        self._required = required
+        self._logger = logger or logging.getLogger(__name__)
 
     async def start(self) -> None:
-        if self._producer is not None or not self.brokers:
+        if self._producer is not None:
+            return
+        if not self.brokers or not self.topic:
+            self._handle_disabled("brokers/topics not configured")
             return
         producer = create_kafka_producer(self.brokers)
         if producer is None:
+            self._handle_disabled("Kafka client not available for ControlBus")
             return
         self._producer = producer
         await producer.start()
@@ -47,6 +56,11 @@ class ControlBusProducer:
         data = json.dumps(event).encode()
         key = world_id.encode()
         await producer.send_and_wait(self.topic, data, key=key)
+
+    def _handle_disabled(self, reason: str) -> None:
+        if self._required:
+            raise RuntimeError(f"ControlBus unavailable: {reason}")
+        self._logger.warning("ControlBus disabled: %s", reason)
 
     async def publish_policy_update(
         self,

@@ -15,10 +15,11 @@ def test_server_help(capsys):
 def test_server_defaults(monkeypatch, tmp_path):
     captured = {}
 
-    async def fake_run(config, *, enable_otel: bool = False):
+    async def fake_run(config, *, enable_otel: bool = False, profile=None):
         captured["neo4j"] = config.neo4j_dsn
         captured["kafka"] = config.kafka_dsn
         captured["enable_otel"] = enable_otel
+        captured["profile"] = profile
 
     monkeypatch.setattr("qmtl.services.dagmanager.server._run", fake_run)
     monkeypatch.chdir(tmp_path)
@@ -36,9 +37,10 @@ def test_server_config_file(monkeypatch, tmp_path):
 
     captured = {}
 
-    async def fake_run(config, *, enable_otel: bool = False):
+    async def fake_run(config, *, enable_otel: bool = False, profile=None):
         captured["uri"] = config.neo4j_dsn
         captured["enable_otel"] = enable_otel
+        captured["profile"] = profile
 
     monkeypatch.setattr("qmtl.services.dagmanager.server._run", fake_run)
     monkeypatch.chdir(tmp_path)
@@ -58,4 +60,6 @@ def test_server_requires_backends_in_prod(monkeypatch, tmp_path, caplog):
             main([])
 
     assert excinfo.value.code == 2
-    assert "missing" in caplog.text
+    assert "requires dagmanager.neo4j_dsn" in caplog.text
+    assert "requires dagmanager.kafka_dsn" in caplog.text
+    assert "ControlBus requires brokers/topics" in caplog.text

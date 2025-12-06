@@ -25,6 +25,10 @@ ControlBus는 핵심 서비스에서 Gateway로 제어 플레인 업데이트(�
 !!! note "설계 의도"
 - 기본적으로 SDK에는 불투명(opaque)합니다. 클라이언트는 Gateway의 토큰화된 WebSocket 브리지(`/events/subscribe`)를 통해서만 제어 이벤트를 구독합니다. 이를 통해 버스를 사설로 유지하고 인증/인가를 중앙화하며, 내부 토픽을 노출하지 않고도 초기 스냅샷/`state_hash` 동기화를 수행할 수 있습니다.
 
+!!! warning "배포 프로파일"
+- **prod**: ControlBus는 필수입니다. 브로커/토픽이 없거나 Kafka 클라이언트를 사용할 수 없는 경우 Gateway, WorldService, DAG Manager가 즉시 종료합니다.
+- **dev**: 로컬 실행 시 ControlBus를 끌 수 있습니다. 퍼블리셔/컨슈머가 경고를 남기고 I/O를 건너뛰므로 제어 이벤트가 생성되거나 소비되지 않습니다.
+
 ---
 
 ## 1. 토폴로지와 의미론
