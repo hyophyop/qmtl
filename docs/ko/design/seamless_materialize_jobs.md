@@ -25,7 +25,7 @@
   - 동작: `fetch`/`backfill_async`로 범위를 물질화, artifacts/fingerprint를 기록하고 요약 리포트 반환.  
   - 출력: `{dataset_fingerprint, as_of, coverage_bounds, conformance_flags, sla_deadline_ms, retention_class}` 요약(예외 시 fail-closed).  
   - WS/activation/배분 호출 없음, compute-only 보장.  
-  - **명시적 모드 플래그**: 생성 시 `mode="strategy"` / `mode="materialize"`로 고정(불변). materialize 모드에서 live가 없으면 기본 실패, `allow_dry_live=True`로만 완화(경고/리포트에 명시).
+  - **명시적 모드 플래그**: 생성 시 `mode="strategy"` / `mode="materialize"`로 고정(불변). materialize 모드는 preset에 live가 정의되어 있으면 live 설정 누락 시 실패시키며, live 없는 preset은 storage/backfill만으로 수행한다.
   - **DX 단순화**: 대표 진입점 2–3개(`materialize_and_pin(preset, start, end, retention=...)`, `require_materialized_snapshot(fingerprint=...)`)만 노출해 초기 사용자가 모드 혼동 없이 접근하도록 가이드.
 
 > 선택 사항: 위 Job을 감싼 전용 CLI(`qmtl data materialize …`, `qmtl data verify …`)는 Core Loop CLI와 다른 네임스페이스로 두어 경계를 유지한다.
@@ -35,7 +35,7 @@
 | 항목 | StrategySeamlessProvider | MaterializeSeamlessJob |
 | --- | --- | --- |
 | 모드 | live/backtest (WorldService와 정렬) | materialize (compute-only) |
-| live 구성 | 필수, preset 불일치 시 실패 | 기본: live 없으면 실패. 옵션: `allow_dry_live=True`에서만 dry-live 허용(경고/리포트에 명시) |
+| live 구성 | 필수, preset 불일치 시 실패 | preset에 live가 정의되어 있으면 필수(누락 시 실패), live 없는 preset은 storage/backfill만으로 수행 |
 | 범위 | Runner.submit가 결정(월드·리플레이 창) | `start/end` 또는 `as_of now` |
 | 출력 | WS/activation/allocations + Seamless 메타 | fingerprint/as_of/coverage + conformance/SLA 요약 |
 | 검증 | preset kind/interval·레지스트리·컨포먼스·SLA | 동일한 검증을 그대로 적용 (fail-closed) |
@@ -61,7 +61,7 @@
 - 공통 계약: preset 불일치·스키마/컨포먼스/SLA 위반 시 양쪽 표면 모두 fail-closed 되는지 검증.  
 - 모드별 계약:  
   - 전략 표면: live 누락 시 실패, WS/activation 경로와 정렬된 출력.  
-  - 물질화 표면: `start/end` 범위 물질화 후 fingerprint/as_of/coverage 리포트 반환, live 미설정 허용 규칙 확인(`allow_dry_live` 기본 OFF).  
+  - 물질화 표면: `start/end` 범위 물질화 후 fingerprint/as_of/coverage 리포트 반환, preset에 live가 있으면 live 누락 시 실패, live 없는 preset은 storage/backfill만으로 성공.  
 - 실패/복구 시나리오: 네트워크 중단·partial 물질화 후 resume, schema evolution(새 `contract_version`) 시 실패/경고 처리, rate-limit 초과 시 백오프 정책을 계약 테스트로 고정.  
 - E2E 예시: core-loop demo preset으로 materialize → fingerprint/coverage 확인 → 동일 preset/contract_version으로 Runner.submit 실행 시 동일 스냅샷 소비 확인.
 
@@ -119,10 +119,9 @@
    - 물질화 시점과 전략 실행 시점의 `as_of` 불일치로 인한 silent data drift 위험
    - **제안**: preset-level fingerprint validation을 전략 실행 전 필수 체크포인트로 만들거나, `MaterializeSeamlessJob` 결과를 전략에 주입하는 명시적 API 제공
 
-3. **Dry-live 모드의 모호성**
-   - 물질화 표면에서 "live 미사용 가능(dry-live)"이라고 했으나, "dummy 허용 규칙 분리"가 구체적이지 않음
-   - live preset을 dry-live로 테스트했다가 프로덕션에서 실패하는 환경 불일치 가능
-   - **제안**: dry-live 모드의 명확한 동작 명세와 warning/linter 추가
+3. **Dry-live 모드의 모호성 (해결됨)**
+   - 과거에는 물질화 표면에서 "live 미사용 가능(dry-live)"을 논의했으나, 현재 설계에서는 옵션을 제거하고 live가 정의된 preset에서는 live 누락 시 실패하도록 정리됨.
+   - live 없이도 되는 preset은 storage/backfill만으로 수행하도록 명시해 환경 불일치를 방지.
 
 4. **CLI 네임스페이스 분리의 일관성 미검증**
    - `qmtl data materialize`, `qmtl data verify` 등 CLI 추가를 "선택 사항"으로 두었으나, 실제 구현 시 기존 CLI와의 충돌/일관성 검토 필요
