@@ -20,10 +20,7 @@ related_issue: "hyophyop/qmtl#1723"
   - ValidationPipeline 계약은 “이미 계산된 returns만 입력받는다”로 유지하고, auto_returns는 Runner 전처리에만 머무르게 하며, SR 템플릿은 `auto_returns` 설정을 통해 Core Loop(제출→평가→활성화)에 자연스럽게 편입됩니다.
 
 > **관련 이슈**: [hyophyop/qmtl#1723](https://github.com/hyophyop/qmtl/issues/1723)  
-> **통합 대상 문서**:
-> - [`auto_derive_returns_proposal.md`](./auto_derive_returns_proposal.md) — SDK 전반 설계
-> - [`sr_auto_returns_integration_sketch.md`](./sr_auto_returns_integration_sketch.md) — SR 경로 스케치
-> - [`auto_returns_proposals_comparison.md`](./auto_returns_proposals_comparison.md) — 두 설계 비교
+> **통합 상태**: 기존 auto_returns 초안(예: auto_derive_returns, SR 통합 스케치, 비교 메모)을 모두 흡수해 이 문서를 단일 출처로 유지합니다.
 
 이 문서는 기존 두 설계안의 장점을 조합하고 단점을 보완한 **통합 설계안**입니다.
 
@@ -652,13 +649,11 @@ worlds:
 
 ## 8. 기존 설계안 대비 개선점
 
-| 측면 | `auto_derive_returns_proposal` | `sr_integration_sketch` | **통합안** |
-|------|-------------------------------|------------------------|-----------|
-| API 확장성 | `bool \| str` — 제한적 | `AutoReturnsConfig` 스케치 | **`AutoReturnsConfig` 구체화** |
-| 계층 분리 | ValidationPipeline까지 침투 | Runner 한정 권장 | **Runner 한정 확정** |
-| SR 통합 | 미언급 | 초점 | **표준 Config 상수** |
-| 관측성 | `returns_source` 제안 | 미상세 | **DeriveResult + returns_source** |
-| 선순환 | 일반 on-ramp | SR 비교 가능성 | **단계별 정책 설계** |
+- **API 확장성**: 단순 `bool \| str` 옵션 대신 `AutoReturnsConfig`를 표준으로 삼아 확장 가능성을 확보했습니다.
+- **계층 분리**: auto_returns 책임을 Runner 전처리로 한정하고, ValidationPipeline 계약을 변경하지 않습니다.
+- **SR 통합**: SR 템플릿에서 재사용할 Config 상수/파라미터를 정의해 공통 규약을 마련했습니다.
+- **관측성**: `DeriveResult`/`returns_source`로 파생 여부를 일관되게 노출합니다.
+- **선순환**: 기본 on-ramp → SR 후보 비교 가능성 → 실전 정책 제한 순으로 단계적 업그레이드 경로를 설계했습니다.
 
 ---
 

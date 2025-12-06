@@ -94,12 +94,11 @@ nav:
       - Release: operations/release.md
       - CI: operations/ci.md
   - Design:
+      - QMTL UI: design/qmtl_ui.md
       - WorldService Evaluation Runs & Metrics API: design/worldservice_evaluation_runs_and_metrics_api.md
       - YAML-Only Configuration Overhaul: design/yaml_config_overhaul.md
       - Seamless Data Provider: design/seamless_data_provider.md
       - Seamless Materialize/Verify Surface: design/seamless_materialize_jobs.md
-      - SR × Runner.submit Auto Returns: design/sr_auto_returns_integration_sketch.md
-      - SDK Auto Returns Proposals Comparison: design/auto_returns_proposals_comparison.md
   - Reference:
       - Overview: reference/README.md
       - FAQ: reference/faq.md
@@ -195,6 +194,7 @@ plugins:
             "Core Loop Golden Signals": "Core Loop 골든 시그널"
             "Rebalancing Schema Coordination": "리밸런싱 스키마 조율"
             Design: 설계
+            QMTL UI: QMTL UI
             Reference: 레퍼런스
             World: 월드
             "Backward Compatibility Cleanup Notes": "하위호환 제거 메모"
