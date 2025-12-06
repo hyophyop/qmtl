@@ -4,6 +4,12 @@ Gateway can optionally publish and consume commit-log records via Kafka. The
 settings below live under the `gateway` section of the YAML configuration
 file.
 
+- When running with ``profile: prod`` the Gateway process **exits during
+  startup** if ``commitlog_bootstrap`` or ``commitlog_topic`` are missing to
+  avoid silent loss of ingestion durability.
+- For local development (``profile: dev``), leaving these fields blank simply
+  disables commit-log publishing and emits an informational log.
+
 ```yaml
 gateway:
   commitlog_bootstrap: "localhost:9092"

@@ -83,7 +83,9 @@ async def _main(argv: list[str] | None = None) -> None:
     redis_client = _resolve_redis(config)
     insert_sentinel, enforce_live_guard = _resolve_flags(config, args)
     controlbus_consumer = _build_controlbus_consumer(config)
-    commit_writer, commit_consumer = await _build_commitlog_clients(config)
+    commit_writer, commit_consumer = await _build_commitlog_clients(
+        config, profile=profile
+    )
 
     ws_hub = WebSocketHub(rate_limit_per_sec=config.websocket.rate_limit_per_sec)
     event_descriptor = config.events.build_descriptor(logger=logging.getLogger(__name__))
@@ -222,9 +224,18 @@ def _build_controlbus_consumer(config: GatewayConfig) -> ControlBusConsumer | No
 
 
 async def _build_commitlog_clients(
-    config: GatewayConfig,
+    config: GatewayConfig, *, profile: DeploymentProfile
 ) -> tuple[CommitLogWriter | None, CommitLogConsumer | None]:
-    if not config.commitlog_bootstrap or not config.commitlog_topic:
+    missing_bootstrap = not config.commitlog_bootstrap
+    missing_topic = not config.commitlog_topic
+    if profile is DeploymentProfile.PROD and (missing_bootstrap or missing_topic):
+        message = _(
+            "Prod profile requires commitlog_bootstrap and commitlog_topic for ingest durability"
+        )
+        logging.error(message)
+        raise SystemExit(message)
+
+    if missing_bootstrap or missing_topic:
         logging.info(
             _(
                 "Commit-log writer disabled (expected for local dev). "
@@ -232,6 +243,9 @@ async def _build_commitlog_clients(
             )
         )
         return None, None
+
+    assert config.commitlog_bootstrap is not None
+    assert config.commitlog_topic is not None
 
     writer = await create_commit_log_writer(
         config.commitlog_bootstrap,
