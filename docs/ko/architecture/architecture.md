@@ -22,6 +22,7 @@ last_modified: 2025-12-06
 - [WorldService](worldservice.md)
 - [ControlBus](controlbus.md)
 - [Exchange Node Sets](exchange_node_sets.md)
+- Core Loop 계약 테스트: `tests/e2e/core_loop/README.md`
 
 ---
 
@@ -36,6 +37,14 @@ last_modified: 2025-12-06
 - **prod**: 모든 컴포넌트가 영속 백엔드를 사용해야 한다. `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_brokers`/`controlbus_topics`, `gateway.commitlog_bootstrap`/`commitlog_topic`, `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, `worldservice.server.redis`, `worldservice.server.controlbus_brokers`/`controlbus_topic`가 누락되면 부팅 전에 오류를 반환한다.
 
 `qmtl config validate --target all`는 `profile: prod`에서 필수 항목이 빠지면 경고 대신 오류를 보고하며, Gateway CLI 역시 동일한 조건을 강제해 혼합 모드(일부만 인메모리)를 차단한다.
+
+<a id="core-loop-summary"></a>
+## Core Loop 합의 요약 (편입)
+
+- 단일 진입점: 모든 제출은 `Runner.submit(..., world=..., mode=...)`로 통일되었고, Mode는 `backtest|paper|live` 3단계다. (`qmtl/runtime/sdk/submit.py`, `mode.py`)
+- WS SSOT: SubmitResult는 WorldService 결정/활성(envelope)을 SSOT로 노출하고, precheck는 보조 정보로 분리된다. (`qmtl/services/worldservice/shared_schemas.py`, Core Loop 계약 테스트)
+- Default-safe: WorldService 결정이 없거나 stale이면 강등·safe_mode 플래그로 백테스트/compute-only로 수렴한다. (`qmtl/runtime/sdk/execution_context.py`, `tests/e2e/core_loop/test_compute_context_contract.py`)
+- 데이터 온램프: world preset 기반 Seamless auto-wiring이 기본 경로이며 Core Loop 계약 테스트로 검증한다. (`qmtl/runtime/sdk/world_data.py`, `tests/e2e/core_loop/`)
 
 ## 0. 개요: 이론적 동기와 시스템화의 목적
 

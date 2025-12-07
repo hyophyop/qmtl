@@ -41,6 +41,6 @@ When rendering the Jsonnet bundle (`operations/monitoring/seamless_v2.jsonnet`),
 
 ## Related docs
 
-- Architecture: [architecture.md §7 Determinism & Operational Checklist](../architecture/architecture.md), [seamless_data_provider_v2.md](../architecture/seamless_data_provider_v2.md)
-- Roadmap: [Core Loop roadmap T5 P1‑M2](../design/core_loop_roadmap.md)
+- Architecture: [architecture.md §Core Loop decisions](../architecture/architecture.md#core-loop-summary), [seamless_data_provider_v2.md](../architecture/seamless_data_provider_v2.md)
+- Roadmap: Core Loop decisions are now incorporated in the architecture docs; the separate roadmap doc has been archived.
 - Operations: [monitoring.md](monitoring.md), [seamless_sla_dashboards.md](seamless_sla_dashboards.md), [ws_load_testing.md](ws_load_testing.md), [determinism.md](determinism.md)

@@ -22,7 +22,7 @@ status: archived
 - 대상 문서:
   - 아키텍처 개요: `docs/ko/architecture/architecture.md`
   - 월드/정책: `docs/ko/world/world.md`
-  - 단순화 제안: `./simplification_proposal.md`
+  - 단순화 제안: `docs/ko/architecture/architecture.md#core-loop-합의-요약-편입` 편입
   - Auto Returns: `./auto_returns_unified_design.md` (통합안)
   - SR 통합: `./sr_integration_proposal.md`
 
@@ -203,7 +203,7 @@ As‑Is 분석을 바탕으로, 핵심 복잡도 요인은 다음 세 가지로 
     - 입력: metrics + returns
     - 처리: Policy 평가 → active set 결정
     - 출력: active 목록 + (선택) weight/contribution
-  - `./simplification_proposal.md`에는
+  - `docs/ko/architecture/architecture.md#core-loop-합의-요약-편입`에는
     - “ValidationPipeline은 WorldService 평가의 축소 버전”이라는 관계를 명시.
 
 ### 3.3 P1 — 월드 정책 → 활성화 → 리밸런싱 플로우의 표준 루프화
@@ -259,7 +259,7 @@ As‑Is 분석을 바탕으로, 핵심 복잡도 요인은 다음 세 가지로 
   - `/evaluate`, `/apply`, `/activation`, `/allocations` API 관계를
     - “전략 제출 루프(개발자)” vs “월드 운영 루프(운영자)” 관점으로 재정렬.
 
-### 4.3 `./simplification_proposal.md`
+### 4.3 `docs/ko/architecture/architecture.md#core-loop-합의-요약-편입`
 
 - **As‑Is**
   - Runner.submit 통합, Mode 단순화, CLI v2 도입 등 v2.0 단순화 작업이 “구현 완료”로 정리되어 있다.
@@ -301,7 +301,7 @@ As‑Is 분석을 바탕으로, 핵심 복잡도 요인은 다음 세 가지로 
 
 이 가이드를 바탕으로,
 
-1. `architecture.md` / `world.md` / `simplification_proposal.md`에 Core Loop 중심 섹션을 추가하고,
+1. `architecture.md` / `world.md`에 Core Loop 중심 섹션을 추가하고,
 2. auto_returns / SR 설계 문서들에 As‑Is/To‑Be 템플릿을 도입하며,
 3. Runner.submit / WorldService / Allocation 경로를 하나의 “World‑First Core Loop”로 설명하는  
    상위 설계 문서를 정비하면,

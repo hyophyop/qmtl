@@ -1,5 +1,8 @@
 # Seamless 데이터 물질화/검증 표면 분리 설계
 
+!!! warning "Status: draft"
+    이 문서는 초안 상태입니다. 구현 과정에서 세부 동작과 API가 변경될 수 있습니다.
+
 ## 0. 배경과 문제
 
 - Seamless Data Provider(SDP)는 Core Loop에서 **world 제출 → 평가/활성** 흐름에 붙는 기본 히스토리/라이브 데이터 경로다.
@@ -76,7 +79,7 @@
 
 - [Seamless Data Provider v2 아키텍처](../architecture/seamless_data_provider_v2.md)  
 - [Seamless Data Provider 설계](seamless_data_provider.md)  
-- [Core Loop 로드맵 (데이터 플레인 트랙)](core_loop_roadmap.md#t3-seamless-track)
+- 관련: [architecture/seamless_data_provider_v2.md](../architecture/seamless_data_provider_v2.md), [architecture/architecture.md Core Loop 요약](../architecture/architecture.md#core-loop-summary)
 
 ---
 

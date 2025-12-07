@@ -43,7 +43,7 @@ This release implements the QMTL Simplification Proposal, fundamentally restruct
 
 ### 📖 Documentation
 
-- Updated simplification_proposal.md with implementation status
+- Moved simplification content into `docs/ko/en/architecture/architecture.md` Core Loop summary and removed legacy design file
 - All phases (1-3) marked as completed
 - Migration guide available at https://qmtl.readthedocs.io/migrate/v2
 

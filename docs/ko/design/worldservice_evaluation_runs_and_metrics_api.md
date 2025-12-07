@@ -28,7 +28,7 @@ related_issue: "hyophyop/qmtl#1750"
 
 - [아키텍처 개요](../architecture/architecture.md), [WorldService](../architecture/worldservice.md)
 - [auto_returns 통합 설계](auto_returns_unified_design.md)
-- [Core Loop 로드맵](core_loop_roadmap.md)
+- Core Loop 합의 요약: [architecture.md](../architecture/architecture.md#core-loop-summary)
 
 여기서 제안하는 API/스키마는 **초안(draft)** 이며, 실제 적용 전에 worldservice/gateway/SDK 팀과 함께 구체화·축소·분할해야 한다.
 

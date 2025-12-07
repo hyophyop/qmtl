@@ -37,6 +37,14 @@ Bootstrap workflows and operational validation steps live in
 
 `qmtl config validate --target all` reports errors (not warnings) when `profile: prod` omits required DSNs, and the Gateway CLI enforces the same rule to prevent mixed modes (partial in-memory fallbacks).
 
+<a id="core-loop-summary"></a>
+## Core Loop decisions (incorporated)
+
+- Single entrypoint: all submissions use `Runner.submit(..., world=..., mode=...)` with 3 modes only: `backtest|paper|live`. (`qmtl/runtime/sdk/submit.py`, `mode.py`)
+- WS as SSOT: SubmitResult exposes WorldService decision/activation envelopes as the source of truth, with local precheck kept separate. (`qmtl/services/worldservice/shared_schemas.py`, Core Loop contract tests)
+- Default-safe: when WS decisions are missing or stale, executions downgrade to backtest/compute-only and mark safe_mode. (`qmtl/runtime/sdk/execution_context.py`, `tests/e2e/core_loop/test_compute_context_contract.py`)
+- Data on-ramp: world presets drive Seamless auto-wiring by default, verified by the Core Loop contract suite. (`qmtl/runtime/sdk/world_data.py`, `tests/e2e/core_loop/`)
+
 ### Default-Safe Principle
 
 - When configuration is thin or ambiguous, **downgrade to compute-only (backtest)**. Missing `execution_domain`/`as_of` must never yield live/dryrun promotion.

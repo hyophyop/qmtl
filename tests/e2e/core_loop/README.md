@@ -29,4 +29,4 @@ Contract tests:
   when WorldService decisions are unavailable or marked stale.
 - Exercise NodeID/TagQuery determinism counters to keep gateway metrics contract-stable.
 
-References: docs/ko/design/core_loop_roadmap.md, docs/en/design/core_loop_roadmap_issue_drafts.md.
+References: Core Loop architecture summary (`docs/ko/architecture/architecture.md#core-loop-summary`, `docs/en/architecture/architecture.md#core-loop-summary`).

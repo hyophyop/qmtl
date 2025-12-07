@@ -1,5 +1,8 @@
 # QMTL UI 설계
 
+!!! warning "Status: draft"
+    이 문서는 초안 상태입니다. 구현 세부사항과 최신 결정이 반영되기 전에 변경될 수 있습니다.
+
 ## 0. 목적과 범위
 
 - QMTL의 Gateway·DAG Manager·WorldService 경로를 시각화하고 운영할 UI를 정의한다. 새 백엔드를 추가하지 않고 기존 컴포넌트에 얇은 UI/CLI 층을 덧씌운다.

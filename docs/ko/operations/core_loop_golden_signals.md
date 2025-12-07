@@ -41,6 +41,6 @@ Jsonnet 번들(`operations/monitoring/seamless_v2.jsonnet`)을 렌더링할 때 
 
 ## 관련 문서
 
-- 아키텍처: [architecture.md §6 Deterministic Checklist](../architecture/architecture.md), [seamless_data_provider_v2.md](../architecture/seamless_data_provider_v2.md)
-- 로드맵: [Core Loop 로드맵 T5 P1‑M2](../design/core_loop_roadmap.md)
+- 아키텍처: [architecture.md §Core Loop 합의 요약](../architecture/architecture.md#core-loop-summary), [seamless_data_provider_v2.md](../architecture/seamless_data_provider_v2.md)
+- 로드맵: Core Loop 합의 사항은 아키텍처 문서에 편입되었으며 별도 로드맵 문서는 아카이브됨.
 - 운영: [monitoring.md](monitoring.md), [seamless_sla_dashboards.md](seamless_sla_dashboards.md), [ws_load_testing.md](ws_load_testing.md), [determinism.md](determinism.md)
