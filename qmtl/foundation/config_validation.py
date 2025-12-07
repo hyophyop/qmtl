@@ -389,12 +389,22 @@ async def _validate_gateway_ownership(
 async def _validate_gateway_controlbus(
     config: "GatewayConfig", *, offline: bool, profile: DeploymentProfile
 ) -> ValidationIssue:
+    topics = list(config.controlbus_topics or [])
+    required = profile is DeploymentProfile.PROD
+    if required and not topics:
+        return ValidationIssue(
+            "error",
+            "ControlBus requires brokers/topics; configure controlbus_brokers and topics",
+        )
+
+    if config.controlbus_ack_topic:
+        topics.append(config.controlbus_ack_topic)
     return await _check_controlbus(
         config.controlbus_brokers,
-        config.controlbus_topics,
+        topics,
         config.controlbus_group,
         offline=offline,
-        required=profile is DeploymentProfile.PROD,
+        required=required,
     )
 
 

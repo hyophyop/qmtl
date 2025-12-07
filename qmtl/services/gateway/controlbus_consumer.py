@@ -16,6 +16,7 @@ from .ws import WebSocketHub
 from . import metrics as gw_metrics
 from .controlbus_codec import decode as decode_cb, PROTO_CONTENT_TYPE
 from .event_models import RebalancingPlannedData, SentinelWeightData
+from .controlbus_ack import ActivationAckProducer
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +52,14 @@ class ControlBusConsumer:
         *,
         ws_hub: WebSocketHub | None = None,
         rebalancing_policy: RebalancingExecutionPolicy | None = None,
+        ack_producer: ActivationAckProducer | None = None,
     ) -> None:
         self.brokers = brokers or []
         self.topics = topics
         self.group = group
         self.ws_hub = ws_hub
         self._rebalancing_policy = rebalancing_policy
+        self._ack_producer = ack_producer
         self._queue: asyncio.Queue[ControlBusMessage | None] = asyncio.Queue()
         self._task: asyncio.Task | None = None
         self._broker_task: asyncio.Task | None = None
@@ -67,6 +70,8 @@ class ControlBusConsumer:
 
     async def start(self) -> None:
         """Start the background consumer task."""
+        if self._ack_producer is not None:
+            await self._ack_producer.start()
         if self._task is None:
             self._task = asyncio.create_task(self._worker())
         if self.brokers and self.topics and self._broker_task is None:
@@ -83,6 +88,9 @@ class ControlBusConsumer:
             with contextlib.suppress(Exception):
                 await self._consumer.stop()
             self._consumer = None
+        if self._ack_producer is not None:
+            with contextlib.suppress(Exception):
+                await self._ack_producer.stop()
         await self._queue.put(None)
         if self._task is not None:
             await self._task
@@ -387,6 +395,45 @@ class ControlBusConsumer:
             sent_timestamp=msg.data.get("ts"),
             broker_timestamp_ms=msg.timestamp_ms,
         )
+        asyncio.create_task(
+            self._publish_activation_ack(
+                world_id=world_id,
+                run_id=run_id,
+                sequence=msg.data.get("sequence"),
+                phase=phase,
+                etag=msg.etag,
+            )
+        )
+
+    async def _publish_activation_ack(
+        self,
+        *,
+        world_id: str,
+        run_id: str,
+        sequence: Any,
+        phase: str,
+        etag: str | None,
+    ) -> None:
+        if self._ack_producer is None:
+            return
+        try:
+            await self._ack_producer.publish_ack(
+                world_id=world_id,
+                run_id=run_id,
+                sequence=int(sequence) if sequence is not None else None,
+                phase=phase,
+                etag=etag,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to publish activation ack",
+                extra={
+                    "world_id": world_id,
+                    "run_id": run_id,
+                    "phase": phase,
+                    "sequence": sequence,
+                },
+            )
 
     async def _handle_queue_update(self, msg: ControlBusMessage, ws_hub: WebSocketHub) -> None:
         tags = msg.data.get("tags", [])
