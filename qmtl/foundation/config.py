@@ -86,6 +86,18 @@ class SeamlessConfig:
     coordinator_url: str | None = field(
         default=None, metadata={"env": "QMTL_SEAMLESS_COORDINATOR_URL"}
     )
+    redis_dsn: str | None = field(
+        default=None, metadata={"env": "QMTL_SEAMLESS_REDIS_DSN"}
+    )
+    questdb_dsn: str | None = field(
+        default=None, metadata={"env": "QMTL_SEAMLESS_QUESTDB_DSN"}
+    )
+    artifact_endpoint: str | None = field(
+        default=None, metadata={"env": "QMTL_SEAMLESS_ARTIFACT_ENDPOINT"}
+    )
+    artifact_bucket: str | None = field(
+        default=None, metadata={"env": "QMTL_SEAMLESS_ARTIFACT_BUCKET"}
+    )
     artifacts_enabled: bool = field(
         default=False, metadata={"env": "QMTL_SEAMLESS_ARTIFACTS"}
     )

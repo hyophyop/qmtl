@@ -1,14 +1,17 @@
 # Seamless Stack Templates
 
 This runbook describes how to bootstrap a Seamless deployment using the
-templates under `operations/seamless/`.
+templates under `operations/`.
 
 ## Directory Overview
 
 The repository ships the following artifacts:
 
-- `operations/seamless/docker-compose.seamless.yml` – Compose bundle that starts
-  the Seamless backfill coordinator, QuestDB, Redis, and MinIO.
+- `operations/docker-compose.full.yml` – Full-stack Compose bundle including Gateway, DAG Manager, WorldService, Seamless coordinator, Redis, QuestDB, Postgres, Neo4j, Redpanda, and MinIO.
+- `operations/docker-compose.dev.override.yml` – Dev override to run the full bundle with local/in-memory defaults.
+- `operations/seamless/docker-compose.seamless.yml` – Standalone Seamless coordinator bundle (kept for partial stacks/samples).
+- `operations/config/dev.full.yml`, `operations/config/prod.full.yml` – Ready-to-mount full-stack sample configs.
+- Helm (planned): mirror the full-stack Compose structure when Kubernetes deployment is needed.
 - `qmtl/examples/seamless/presets.yaml` – SLA and conformance presets aligned
   with the QMTL SDK defaults. A convenience copy remains under
   `operations/seamless/presets.yaml` for operators working from the repository
@@ -23,7 +26,29 @@ required before launching the stack.
 
 ## Launching the Stack
 
-Run the following command from the repository root:
+### Full stack (prod default)
+
+```bash
+docker compose -f operations/docker-compose.full.yml up -d
+```
+
+Mount `operations/config/prod.full.yml` (after filling secrets/endpoints) for production-like deployments.
+
+### Local/dev override
+
+```bash
+docker compose -f operations/docker-compose.full.yml -f operations/docker-compose.dev.override.yml up -d
+```
+
+This path uses local/in-memory defaults and `operations/config/dev.full.yml`. Coordinator may be optional in dev, but prod requires `seamless.coordinator_url` plus Redis/QuestDB/MinIO.
+
+### Upgrade notes
+
+- Legacy users of `operations/seamless/docker-compose.seamless.yml` should migrate to the full bundle for prod/stage to avoid stub fallback of the coordinator.
+- Keep the standalone bundle only for partial/local demos; prod should mount `operations/config/prod.full.yml` into `docker-compose.full.yml`.
+- Helm adoption is on the roadmap; use the full Compose bundle until the chart is published.
+
+### Standalone coordinator sample (partial stack)
 
 ```bash
 docker compose -f operations/seamless/docker-compose.seamless.yml up -d

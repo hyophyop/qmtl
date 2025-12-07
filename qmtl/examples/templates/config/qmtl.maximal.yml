@@ -89,6 +89,10 @@ dagmanager:
 
 seamless:
   coordinator_url: https://seamless.example.com/api
+  redis_dsn: ${backends.redis.gateway_state}
+  questdb_dsn: postgresql://seamless:CHANGE_ME@questdb.example.com:8812/qmtl
+  artifact_endpoint: https://minio.example.com
+  artifact_bucket: qmtl-seamless
   artifacts_enabled: true
   artifact_dir: /var/lib/qmtl/seamless/artifacts
   fingerprint_mode: canonical

@@ -18,10 +18,12 @@ def reset_validators(monkeypatch):
     original_gateway = config_cli.validate_gateway_config
     original_dagmanager = config_cli.validate_dagmanager_config
     original_worldservice = config_cli.validate_worldservice_config
+    original_seamless = config_cli.validate_seamless_config
     yield
     monkeypatch.setattr(config_cli, "validate_gateway_config", original_gateway)
     monkeypatch.setattr(config_cli, "validate_dagmanager_config", original_dagmanager)
     monkeypatch.setattr(config_cli, "validate_worldservice_config", original_worldservice)
+    monkeypatch.setattr(config_cli, "validate_seamless_config", original_seamless)
 
 
 def _write_config(path: Path, data: Dict[str, Dict[str, object]]) -> None:
@@ -31,7 +33,8 @@ def _write_config(path: Path, data: Dict[str, Dict[str, object]]) -> None:
 def test_validate_requires_requested_sections(tmp_path: Path, monkeypatch, capsys):
     config_path = tmp_path / "config.json"
     _write_config(
-        config_path, {"gateway": {"host": "0.0.0.0"}, "worldservice": {}}
+        config_path,
+        {"gateway": {"host": "0.0.0.0"}, "worldservice": {}, "seamless": {}},
     )
 
     async def _fail_gateway(*_args, **_kwargs):  # pragma: no cover - sanity guard
@@ -81,6 +84,7 @@ def test_validate_runs_all_when_sections_present(tmp_path: Path, monkeypatch, ca
             "gateway": {"host": "0.0.0.0"},
             "dagmanager": {"grpc_port": 5100},
             "worldservice": {},
+            "seamless": {},
         },
     )
 
@@ -169,6 +173,7 @@ def test_validate_prod_profile_errors_without_backends(
             "gateway": {},
             "dagmanager": {},
             "worldservice": {"dsn": "sqlite:///ws.db"},
+            "seamless": {},
         },
     )
 
@@ -178,3 +183,29 @@ def test_validate_prod_profile_errors_without_backends(
     assert exc.value.code == 1
     captured = capsys.readouterr()
     assert "Prod profile requires" in captured.out
+
+
+def test_validate_seamless_warns_in_dev(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    config_path = tmp_path / "dev.json"
+    _write_config(config_path, {"seamless": {}})
+
+    config_cli.run(["validate", "--config", str(config_path), "--target", "seamless"])
+
+    captured = capsys.readouterr()
+    assert "seamless:" in captured.out
+    assert "WARN" in captured.out
+    assert "coordinator_url" in captured.out
+
+
+def test_validate_seamless_errors_without_url_in_prod(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config_path = tmp_path / "prod.json"
+    _write_config(config_path, {"profile": "prod", "seamless": {}})
+
+    with pytest.raises(SystemExit) as exc:
+        config_cli.run(["validate", "--config", str(config_path), "--target", "seamless"])
+
+    assert exc.value.code == 1
+    captured = capsys.readouterr()
+    assert "Prod profile requires seamless.coordinator_url" in captured.out

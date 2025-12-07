@@ -24,6 +24,8 @@ Seamless Data Provider v2 롤아웃은 필수 SLA 집행, 분산 백필 조정, 
 1. 기본 코디네이터를 사용하도록 전략을 구성합니다. `seamless.coordinator_url` 이 설정되면 SDK는 자동으로 `DistributedBackfillCoordinator` 를 초기화합니다.
 2. 스테이징에서 `backfill_completion_ratio` 를 검증해 리스가 수렴하고 샤드가 중복되지 않는지 확인하세요.
 3. 온콜을 위해 `scripts/lease_recover.py` 를 사용한 복구 절차를 문서화하고, 프로덕션 트래픽을 넘기기 전에 스테이징에서 리허설하세요.
+4. 스택을 빠르게 올려보려면 풀스택 번들을 사용하세요:  
+   `docker compose -f operations/docker-compose.full.yml -f operations/docker-compose.dev.override.yml up -d` (staging은 dev 오버라이드 없이 `prod.full.yml` 마운트).
 
 ### 3. SLAPolicy 예산 집행
 

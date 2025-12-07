@@ -19,6 +19,12 @@ This page explains how Docker is used in QMTL, what Compose files exist, and how
 
 ## Compose Files
 
+### Seamless full stack
+
+- `operations/docker-compose.full.yml` – Full bundle with Gateway/DAG Manager/WorldService/Seamless coordinator plus Redis/QuestDB/Postgres/Neo4j/Redpanda/MinIO.
+- `operations/docker-compose.dev.override.yml` – Development override for the full bundle (local/in-memory defaults). Use with `operations/config/dev.full.yml`.
+- Notes: For prod/stage, mount `operations/config/prod.full.yml` into the full bundle. Keep `operations/seamless/docker-compose.seamless.yml` only for partial/demo scenarios.
+
 ### Root stack: `docker-compose.yml`
 
 - Purpose: Developer-focused, fuller local stack with infra + QMTL services.
@@ -114,6 +120,7 @@ docker build -t qmtl:dev .
 ## Related
 
 - [E2E Testing](e2e_testing.md)
+- [Seamless Stack Templates](seamless_stack.md)
 - [DAG Manager](../architecture/dag-manager.md)
 
 {{ nav_links() }}

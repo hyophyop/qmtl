@@ -58,6 +58,10 @@ dagmanager:
 
 seamless:
   coordinator_url: http://localhost:5010
+  redis_dsn: redis://localhost:6379/3
+  questdb_dsn: postgresql://localhost:8812/qmtl
+  artifact_endpoint: http://localhost:9000
+  artifact_bucket: qmtl-seamless
   artifacts_enabled: false
   artifact_dir: ~/.qmtl_seamless_artifacts
   fingerprint_mode: canonical

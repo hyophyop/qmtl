@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 
 from qmtl.foundation.common.metrics_factory import get_mapping_store
-from qmtl.foundation.config import SeamlessConfig, UnifiedConfig
+from qmtl.foundation.config import DeploymentProfile, SeamlessConfig, UnifiedConfig
 from qmtl.runtime.sdk.seamless_data_provider import (
     SeamlessDataProvider,
     DataSource,
@@ -35,7 +35,7 @@ from qmtl.runtime.sdk.artifacts.fingerprint import compute_artifact_fingerprint
 from qmtl.runtime.sdk import seamless_data_provider as seamless_module
 from qmtl.runtime.sdk.sla import SLAPolicy, SLAViolationMode
 from qmtl.runtime.sdk.exceptions import SeamlessSLAExceeded
-from qmtl.runtime.sdk.backfill_coordinator import Lease
+from qmtl.runtime.sdk.backfill_coordinator import InMemoryBackfillCoordinator, Lease
 from qmtl.runtime.sdk.configuration import (
     reset_runtime_config_cache,
     runtime_config_override,
@@ -341,6 +341,100 @@ def test_coordinator_url_loaded_from_yaml(tmp_path: Path, monkeypatch: pytest.Mo
         assert isinstance(provider._coordinator, DummyCoordinator)
     finally:
         reset_runtime_config_cache()
+
+
+def test_prod_profile_requires_coordinator_url() -> None:
+    reset_runtime_config_cache()
+    config = UnifiedConfig(profile=DeploymentProfile.PROD, seamless=SeamlessConfig())
+
+    with runtime_config_override(config):
+        with pytest.raises(RuntimeError, match="seamless.coordinator_url"):
+            _DummyProvider()
+
+    reset_runtime_config_cache()
+
+
+def test_prod_profile_rejects_unhealthy_coordinator(monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_runtime_config_cache()
+    config = UnifiedConfig(
+        profile=DeploymentProfile.PROD,
+        seamless=SeamlessConfig(coordinator_url="http://coord"),
+    )
+
+    class _Result:
+        ok = False
+        code = "TIMEOUT"
+        status = None
+        err = "timeout"
+        latency_ms = 50.0
+
+    def _probe(url: str, *, attempts: int, backoff_seconds: float, timeout_seconds: float):
+        assert attempts == 3
+        assert backoff_seconds > 0
+        assert timeout_seconds > 0
+        return _Result()
+
+    monkeypatch.setattr(
+        "qmtl.runtime.sdk.seamless_data_provider.probe_coordinator_health",
+        _probe,
+    )
+
+    with runtime_config_override(config):
+        with pytest.raises(RuntimeError, match="health check failed"):
+            _DummyProvider()
+
+    reset_runtime_config_cache()
+
+
+def test_dev_profile_falls_back_to_inmemory(monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_runtime_config_cache()
+    config = UnifiedConfig(
+        profile=DeploymentProfile.DEV,
+        seamless=SeamlessConfig(coordinator_url=None),
+    )
+
+    with runtime_config_override(config):
+        provider = _DummyProvider()
+
+    assert isinstance(provider._coordinator, InMemoryBackfillCoordinator)
+    reset_runtime_config_cache()
+
+
+def test_prod_profile_uses_distributed_when_healthy(monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_runtime_config_cache()
+    created: dict[str, str] = {}
+
+    class _Result:
+        ok = True
+        code = "OK"
+        status = 200
+        err = None
+        latency_ms = 1.0
+
+    class DummyCoordinator:
+        def __init__(self, url: str) -> None:
+            created["url"] = url
+
+    monkeypatch.setattr(
+        "qmtl.runtime.sdk.seamless_data_provider.probe_coordinator_health",
+        lambda *_args, **_kwargs: _Result(),
+    )
+    monkeypatch.setattr(
+        "qmtl.runtime.sdk.seamless_data_provider.DistributedBackfillCoordinator",
+        DummyCoordinator,
+    )
+
+    config = UnifiedConfig(
+        profile=DeploymentProfile.PROD,
+        seamless=SeamlessConfig(coordinator_url="http://coord"),
+    )
+
+    with runtime_config_override(config):
+        provider = _DummyProvider()
+
+    assert isinstance(provider._coordinator, DummyCoordinator)
+    assert created["url"] == "http://coord"
+    reset_runtime_config_cache()
 
 
 def test_presets_file_loaded_from_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

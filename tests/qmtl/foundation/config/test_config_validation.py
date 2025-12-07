@@ -6,7 +6,12 @@ from pathlib import Path
 import pytest
 import yaml
 
-from qmtl.foundation.config import DeploymentProfile, UnifiedConfig, load_config
+from qmtl.foundation.config import (
+    DeploymentProfile,
+    SeamlessConfig,
+    UnifiedConfig,
+    load_config,
+)
 from qmtl.foundation.config_validation import (
     _type_description,
     _type_matches,
@@ -14,6 +19,7 @@ from qmtl.foundation.config_validation import (
     validate_gateway_config,
     validate_config_structure,
     validate_dagmanager_config,
+    validate_seamless_config,
     validate_worldservice_config,
 )
 import qmtl.foundation.config_validation as config_validation
@@ -170,6 +176,192 @@ async def test_validate_gateway_config_reports_kafka_ownership_missing_bootstrap
 
     assert issues["ownership"].severity == "warning"
     assert "bootstrap" in issues["ownership"].hint
+
+
+@pytest.mark.asyncio
+async def test_validate_seamless_config_warns_when_url_missing_in_dev() -> None:
+    issues = await validate_seamless_config(
+        SeamlessConfig(),
+        offline=False,
+        profile=DeploymentProfile.DEV,
+    )
+
+    assert issues["coordinator_url"].severity == "warning"
+    assert "in-memory" in issues["coordinator_url"].hint
+
+
+@pytest.mark.asyncio
+async def test_validate_seamless_config_errors_without_url_in_prod() -> None:
+    issues = await validate_seamless_config(
+        SeamlessConfig(),
+        offline=False,
+        profile=DeploymentProfile.PROD,
+    )
+
+    assert issues["coordinator_url"].severity == "error"
+    assert "seamless.coordinator_url" in issues["coordinator_url"].hint
+
+
+@pytest.mark.asyncio
+async def test_validate_seamless_config_reports_health_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    called: dict[str, str] = {}
+
+    class Result:
+        ok = False
+        code = "TIMEOUT"
+        status = None
+        err = "timeout"
+        latency_ms = 123.4
+
+    async def _probe(url: str, *, attempts: int, backoff_seconds: float, timeout_seconds: float):
+        called["url"] = url
+        called["attempts"] = str(attempts)
+        called["backoff"] = str(backoff_seconds)
+        called["timeout"] = str(timeout_seconds)
+        return Result()
+
+    monkeypatch.setattr(config_validation, "probe_coordinator_health_async", _probe)
+
+    issues = await validate_seamless_config(
+        SeamlessConfig(coordinator_url="http://coord"),
+        offline=False,
+        profile=DeploymentProfile.PROD,
+    )
+
+    assert issues["health"].severity == "error"
+    assert "code=TIMEOUT" in issues["health"].hint
+    assert called["url"] == "http://coord"
+
+
+@pytest.mark.asyncio
+async def test_validate_seamless_config_requires_backends_in_prod() -> None:
+    issues = await validate_seamless_config(
+        SeamlessConfig(coordinator_url="http://coord"),
+        offline=True,
+        profile=DeploymentProfile.PROD,
+    )
+
+    assert issues["redis_dsn"].severity == "error"
+    assert issues["questdb_dsn"].severity == "error"
+    assert issues["artifact_endpoint"].severity == "error"
+    assert issues["artifact_bucket"].severity == "error"
+
+
+@pytest.mark.asyncio
+async def test_validate_seamless_config_warns_backends_in_dev() -> None:
+    issues = await validate_seamless_config(
+        SeamlessConfig(coordinator_url="http://coord"),
+        offline=True,
+        profile=DeploymentProfile.DEV,
+    )
+
+    assert issues["redis_dsn"].severity == "warning"
+    assert issues["questdb_dsn"].severity == "warning"
+    assert issues["artifact_endpoint"].severity == "warning"
+    assert issues["artifact_bucket"].severity == "warning"
+
+
+@pytest.mark.asyncio
+async def test_validate_seamless_config_checks_connectivity(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Redis:
+        async def ping(self):
+            return "PONG"
+
+        async def close(self):
+            return None
+
+    class _Conn:
+        async def close(self):
+            return None
+
+    class _ProbeResult:
+        ok = True
+        code = "OK"
+        status = 200
+        err = None
+        latency_ms = 2.0
+
+    async def _probe(*_args, **_kwargs):
+        return _ProbeResult()
+
+    async def _questdb_conn(_dsn):
+        return _Conn()
+
+    async def _probe_coordinator(url, **_kwargs):
+        return _ProbeResult()
+
+    monkeypatch.setattr(config_validation, "create_redis_client", lambda dsn: _Redis())
+    monkeypatch.setattr(config_validation, "open_asyncpg_connection", _questdb_conn)
+    monkeypatch.setattr(config_validation, "probe_coordinator_health_async", _probe_coordinator)
+    monkeypatch.setattr(config_validation, "probe_http_async", _probe)
+
+    issues = await validate_seamless_config(
+        SeamlessConfig(
+            coordinator_url="http://coord",
+            redis_dsn="redis://localhost:6379/3",
+            questdb_dsn="postgresql://localhost:8812/qmtl",
+            artifact_endpoint="http://minio:9000",
+            artifact_bucket="qmtl",
+        ),
+        offline=False,
+        profile=DeploymentProfile.PROD,
+    )
+
+    assert issues["redis_dsn"].severity == "ok"
+    assert issues["questdb_dsn"].severity == "ok"
+    assert issues["artifact_endpoint"].severity == "ok"
+    assert issues["artifact_bucket"].severity == "ok"
+
+
+@pytest.mark.asyncio
+async def test_validate_seamless_config_reports_connectivity_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _ProbeResult:
+        ok = False
+        code = "NETWORK"
+        status = None
+        err = "down"
+        latency_ms = 1.0
+
+    async def _probe(*_args, **_kwargs):
+        return _ProbeResult()
+
+    async def _broken_connection(_dsn):
+        raise RuntimeError("questdb down")
+
+    class _Redis:
+        async def ping(self):
+            raise RuntimeError("redis down")
+
+        async def close(self):
+            return None
+
+    async def _probe_coordinator(url, **_kwargs):
+        return _ProbeResult()
+
+    monkeypatch.setattr(config_validation, "create_redis_client", lambda dsn: _Redis())
+    monkeypatch.setattr(config_validation, "open_asyncpg_connection", _broken_connection)
+    monkeypatch.setattr(config_validation, "probe_coordinator_health_async", _probe_coordinator)
+    monkeypatch.setattr(config_validation, "probe_http_async", _probe)
+
+    issues = await validate_seamless_config(
+        SeamlessConfig(
+            coordinator_url="http://coord",
+            redis_dsn="redis://localhost:6379/3",
+            questdb_dsn="postgresql://localhost:8812/qmtl",
+            artifact_endpoint="http://minio:9000",
+            artifact_bucket="qmtl",
+        ),
+        offline=False,
+        profile=DeploymentProfile.PROD,
+    )
+
+    assert issues["redis_dsn"].severity == "error"
+    assert "redis down" in issues["redis_dsn"].hint
+    assert issues["questdb_dsn"].severity == "error"
+    assert "questdb down" in issues["questdb_dsn"].hint
+    assert issues["artifact_endpoint"].severity == "error"
+    assert "code=NETWORK" in issues["artifact_endpoint"].hint
+    assert issues["artifact_bucket"].severity == "ok"
 
 
 @pytest.mark.asyncio

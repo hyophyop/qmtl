@@ -15,6 +15,7 @@ from qmtl.foundation.config_validation import (
     validate_config_structure,
     validate_dagmanager_config,
     validate_gateway_config,
+    validate_seamless_config,
     validate_worldservice_config,
 )
 from qmtl.interfaces.config_templates import (
@@ -37,7 +38,7 @@ def _build_help_parser() -> argparse.ArgumentParser:
             Configuration utilities.
 
             Subcommands:
-              validate  Check connectivity and readiness for Gateway and DAG Manager.
+              validate  Check connectivity and readiness for Gateway, DAG Manager, WorldService, and Seamless coordinator.
               generate  Scaffold configuration files from packaged templates.
             """
         )
@@ -59,7 +60,7 @@ def _build_validate_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--target",
-        choices=["schema", "gateway", "dagmanager", "worldservice", "all"],
+        choices=["schema", "gateway", "dagmanager", "worldservice", "seamless", "all"],
         default="all",
         help=_("Limit validation to a specific service"),
     )
@@ -167,6 +168,8 @@ def _resolve_targets(target: str) -> List[str]:
         targets.append("dagmanager")
     if target in {"worldservice", "all"}:
         targets.append("worldservice")
+    if target in {"seamless", "all"}:
+        targets.append("seamless")
     return targets
 
 
@@ -198,6 +201,10 @@ async def _validate_targets(unified, targets: List[str], offline: bool) -> Dict[
     if "worldservice" in targets:
         results["worldservice"] = validate_worldservice_config(
             unified.worldservice.server, profile=unified.profile
+        )
+    if "seamless" in targets:
+        results["seamless"] = await validate_seamless_config(
+            unified.seamless, offline=offline, profile=unified.profile
         )
     return results
 

@@ -99,7 +99,6 @@ nav:
       - YAML-Only Configuration Overhaul: design/yaml_config_overhaul.md
       - Seamless Data Provider: design/seamless_data_provider.md
       - Seamless Materialize/Verify Surface: design/seamless_materialize_jobs.md
-      - Seamless Full-Stack Bundle: design/seamless_full_stack_bundle.md
   - Reference:
       - Overview: reference/README.md
       - FAQ: reference/faq.md
