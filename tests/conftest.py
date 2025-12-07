@@ -12,6 +12,14 @@ from qmtl.runtime.sdk import runtime
 from qmtl.runtime.sdk.arrow_cache import reload_arrow_cache
 
 
+@pytest.fixture(autouse=True)
+def _reset_event_loop_policy():
+    """Ensure a fresh default event loop policy each test to avoid stale state."""
+
+    asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+    yield
+
+
 def _close_loops(loops: List[asyncio.AbstractEventLoop]) -> None:
     for loop in loops:
         if loop.is_closed():

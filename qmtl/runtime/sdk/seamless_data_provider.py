@@ -27,6 +27,7 @@ import asyncio
 import logging
 import math
 import os
+import json
 from pathlib import Path
 import time
 import random
@@ -64,6 +65,7 @@ from .sla import SLAPolicy, SLAViolationMode
 from .exceptions import SeamlessSLAExceeded
 from .artifacts import ArtifactRegistrar, ArtifactPublication
 from .artifacts.fingerprint import compute_artifact_fingerprint
+from qmtl.foundation.schema import SchemaRegistryClient, SchemaValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -585,6 +587,7 @@ class SeamlessDataProvider(HistoryProvider):
         publish_fingerprint: bool | None = None,
         early_fingerprint: bool | None = None,
         seamless_config: SeamlessConfig | None = None,
+        schema_registry: SchemaRegistryClient | None = None,
     ) -> None:
         self.strategy = strategy
         self.cache_source = cache_source
@@ -607,6 +610,8 @@ class SeamlessDataProvider(HistoryProvider):
         self._conformance_interval: int | None = conformance_defaults.interval
         self._sla = conformance_defaults.sla
         self._partial_ok = conformance_defaults.partial_ok
+        self._schema_registry = schema_registry or SchemaRegistryClient.from_env()
+        self._registered_subjects: set[str] = set()
 
         backfill_settings = self._init_backfill_policy(
             backfill_config=backfill_config,
@@ -791,7 +796,12 @@ class SeamlessDataProvider(HistoryProvider):
             try:
                 return DistributedBackfillCoordinator(url)
             except Exception as exc:  # pragma: no cover - defensive
-                logger.warning("seamless.coordinator.init_failed", exc_info=exc)
+                logger.error("seamless.coordinator.init_failed", exc_info=exc)
+                raise
+        logger.warning(
+            "seamless.coordinator.unset_falling_back_inmemory",
+            extra={"coordinator_url": url or "<unset>"},
+        )
         return InMemoryBackfillCoordinator()
 
     def _cache_now(self) -> float:
@@ -1863,6 +1873,8 @@ class SeamlessDataProvider(HistoryProvider):
         if self._should_fail_conformance(report):
             raise ConformancePipelineError(report)
 
+        self._register_conformance_schema(node_id)
+
         stabilized = self._stabilize_frame(normalized)
         if stabilized.empty:
             return self._build_empty_result(
@@ -1999,6 +2011,29 @@ class SeamlessDataProvider(HistoryProvider):
             )
         except Exception:  # pragma: no cover - best effort metrics
             pass
+
+    def _register_conformance_schema(self, node_id: str) -> None:
+        if not self._schema_registry or not self._conformance_schema:
+            return
+        if node_id in self._registered_subjects:
+            return
+        try:
+            schema_str = json.dumps(self._conformance_schema, sort_keys=True)
+            self._schema_registry.register(
+                subject=node_id,
+                schema_str=schema_str,
+            )
+            self._registered_subjects.add(node_id)
+        except SchemaValidationError:
+            # Surface validation failures in strict mode to the caller
+            self._registered_subjects.add(node_id)
+            raise
+        except Exception:
+            logger.warning(
+                "seamless.schema_registry.register_failed",
+                exc_info=True,
+                extra={"node_id": node_id},
+            )
 
     def _should_fail_conformance(self, report: ConformanceReport) -> bool:
         if self._partial_ok:

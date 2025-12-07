@@ -559,7 +559,7 @@ async def submit_async(
     async def _finalize_with_allocation(result: SubmitResult) -> SubmitResult:
         finalized = _attach_context_flags(result)
         allocation_result = AllocationSnapshotResult(snapshot=None)
-        if gateway_available:
+        if gateway_available or gateway_url:
             try:
                 allocation_result = await _fetch_allocation_snapshot_with_notice(
                     gateway_url=gateway_url,
@@ -619,6 +619,8 @@ async def submit_async(
             gateway_available=gateway_available,
             policy_payload=world_ctx.policy_payload,
         )
+        if bootstrap_out.force_offline:
+            gateway_available = False
         backtest_returns, auto_returns_hints = await _warmup_and_collect_returns(
             services=services,
             strategy=strategy,
@@ -722,6 +724,7 @@ class WorldContext:
 class BootstrapOutcome:
     strategy_id: str | None
     offline_mode: bool
+    force_offline: bool = False
 
 
 def _strategy_needs_data_provider(strategy: "Strategy") -> bool:
@@ -963,7 +966,11 @@ async def _bootstrap_strategy(
 ) -> BootstrapOutcome:
     if not gateway_available:
         logger.info("Gateway not available at %s, running local validation", gateway_url)
-        return BootstrapOutcome(strategy_id=f"local_{strategy_class_name}_{id(strategy)}", offline_mode=True)
+        return BootstrapOutcome(
+            strategy_id=f"local_{strategy_class_name}_{id(strategy)}",
+            offline_mode=True,
+            force_offline=not gateway_available,
+        )
 
     if policy_payload is not None:
         await _ensure_world_policy(
@@ -976,20 +983,34 @@ async def _bootstrap_strategy(
     from .strategy_bootstrapper import StrategyBootstrapper
 
     bootstrapper = StrategyBootstrapper(services.gateway_client)
-    bootstrap_result = await bootstrapper.bootstrap(
-        strategy,
-        context=compute_context,
-        world_id=resolved_world,
-        gateway_url=gateway_url,
-        meta={"mode": mode.value},
-        offline=False,
-        kafka_available=services.kafka_factory.available,
-        trade_mode="simulate" if mode != Mode.LIVE else "live",
-        schema_enforcement="fail",
-        feature_plane=services.feature_plane,
-        gateway_context=None,
-        skip_gateway_submission=False,
-    )
+    try:
+        bootstrap_result = await bootstrapper.bootstrap(
+            strategy,
+            context=compute_context,
+            world_id=resolved_world,
+            gateway_url=gateway_url,
+            meta={"mode": mode.value},
+            offline=False,
+            kafka_available=services.kafka_factory.available,
+            trade_mode="simulate" if mode != Mode.LIVE else "live",
+            schema_enforcement="fail",
+            feature_plane=services.feature_plane,
+            gateway_context=None,
+            skip_gateway_submission=False,
+        )
+    except RuntimeError as exc:
+        msg = str(exc).lower()
+        if "duplicate strategy" in msg:
+            logger.warning(
+                "Gateway reported duplicate strategy; falling back to offline bootstrap",
+                exc_info=True,
+            )
+            return BootstrapOutcome(
+                strategy_id=f"local_{strategy_class_name}_{id(strategy)}",
+                offline_mode=True,
+                force_offline=True,
+            )
+        raise
 
     if mode != Mode.BACKTEST and not bootstrap_result.offline_mode:
         await _configure_activation(
@@ -1000,7 +1021,11 @@ async def _bootstrap_strategy(
             offline_mode=bootstrap_result.offline_mode,
         )
 
-    return BootstrapOutcome(strategy_id=bootstrap_result.strategy_id, offline_mode=bootstrap_result.offline_mode)
+    return BootstrapOutcome(
+        strategy_id=bootstrap_result.strategy_id,
+        offline_mode=bootstrap_result.offline_mode,
+        force_offline=False,
+    )
 
 
 async def _warmup_and_collect_returns(
@@ -1831,6 +1856,8 @@ def submit(
 
 async def _check_gateway_available(gateway_url: str, client: "GatewayClient | None" = None) -> bool:
     """Check if gateway is available."""
+    if os.getenv("QMTL_DISABLE_GATEWAY_PROBE"):
+        return False
     try:
         if client is not None:
             health = await client.get_health(gateway_url=gateway_url)

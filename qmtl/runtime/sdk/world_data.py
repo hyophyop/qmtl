@@ -408,12 +408,14 @@ def _generate_demo_ohlcv_frame(
     symbols: Sequence[Any] | None,
 ) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
-    start_ts = int(time.time()) - bars * max(1, int(interval_ms / 1000))
+    interval_sec = max(1, int(interval_ms / 1000))
+    now_bucket = int(time.time()) // interval_sec * interval_sec
+    start_ts = now_bucket - (max(bars, 1) - 1) * interval_sec
     rows = []
     price = 100.0
     symbol = str(symbols[0]) if symbols else "demo"
     for i in range(max(bars, 1)):
-        ts = start_ts + i * max(1, int(interval_ms / 1000))
+        ts = start_ts + i * interval_sec
         drift = rng.normal(loc=0.0, scale=0.002)
         open_px = price
         close_px = max(0.1, price * (1 + drift))
