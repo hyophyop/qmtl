@@ -6,6 +6,7 @@ import asyncio
 import httpx
 import pytest
 
+from qmtl.foundation.config import DeploymentProfile
 from qmtl.services.worldservice.api import StorageHandle, create_app
 from qmtl.services.worldservice.controlbus_producer import ControlBusProducer
 from qmtl.services.worldservice.config import WorldServiceServerConfig
@@ -103,6 +104,17 @@ class DummyExecutor:
     async def execute(self, payload: dict) -> dict:
         self.calls.append(dict(payload))
         return {"ok": True}
+
+
+class _StubProducer:
+    async def start(self) -> None:  # pragma: no cover - trivial stub
+        return None
+
+    async def stop(self) -> None:  # pragma: no cover - trivial stub
+        return None
+
+    async def send_and_wait(self, *args, **kwargs) -> None:  # pragma: no cover - stub
+        return None
 
 
 @pytest.mark.asyncio
@@ -1282,3 +1294,41 @@ worldservice:
     assert app.state.worldservice_config is not None
     assert app.state.worldservice_config.dsn == "sqlite+aiosqlite:///worlds.db"
     assert app.state.worldservice_config.redis is None
+
+
+def test_create_app_applies_config_profile_when_storage_injected(tmp_path):
+    config_path = tmp_path / "worldservice.yml"
+    config_path.write_text(
+        """
+profile: prod
+worldservice:
+  server:
+    dsn: sqlite+aiosqlite:///worlds.db
+""".strip()
+    )
+
+    with pytest.raises(RuntimeError, match="ControlBus"):
+        create_app(config_path=config_path, storage=Storage())
+
+
+def test_create_app_requires_controlbus_in_prod_profile():
+    with pytest.raises(RuntimeError, match="ControlBus"):
+        create_app(profile=DeploymentProfile.PROD, storage=Storage())
+
+
+def test_create_app_sets_controlbus_required_flag_in_prod():
+    producer = ControlBusProducer(producer=_StubProducer(), required=False)
+
+    app = create_app(bus=producer, profile=DeploymentProfile.PROD, storage=Storage())
+
+    assert producer._required is True
+    assert app.state.world_service.bus is producer
+
+
+def test_create_app_warns_when_controlbus_missing_in_dev(caplog):
+    config = WorldServiceServerConfig(dsn="sqlite:///worlds.db")
+
+    with caplog.at_level("WARNING"):
+        create_app(config=config, storage=Storage())
+
+    assert any("ControlBus disabled" in message for message in caplog.messages)

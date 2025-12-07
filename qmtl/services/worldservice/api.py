@@ -10,7 +10,7 @@ from typing import Any, Awaitable, Callable, cast
 import redis.asyncio as redis
 from fastapi import FastAPI
 
-from qmtl.foundation.config import find_config_file, load_config
+from qmtl.foundation.config import DeploymentProfile, find_config_file, load_config
 
 from .controlbus_producer import ControlBusProducer
 from .config import WorldServiceServerConfig
@@ -88,13 +88,21 @@ def _config_storage_factory(config: WorldServiceServerConfig) -> Callable[[], Aw
     return _factory
 
 
+def _coerce_profile(value: DeploymentProfile | str | None) -> DeploymentProfile | None:
+    if value is None:
+        return None
+    if isinstance(value, DeploymentProfile):
+        return value
+    return DeploymentProfile(value.lower())
+
+
 def _load_server_config(
     config: WorldServiceServerConfig | None,
     *,
     config_path: str | Path | None = None,
-) -> WorldServiceServerConfig:
+) -> tuple[WorldServiceServerConfig, DeploymentProfile]:
     if config is not None:
-        return config
+        return config, DeploymentProfile.DEV
 
     resolved_path: str | None
     if config_path is not None:
@@ -117,7 +125,7 @@ def _load_server_config(
         raise RuntimeError(
             "WorldService configuration missing 'worldservice' server settings (dsn, redis, bind, auth)."
         )
-    return server_config
+    return server_config, unified.profile
 
 
 def create_app(
@@ -130,33 +138,102 @@ def create_app(
     rebalance_executor: Any | None = None,
     compat_rebalance_v2: bool | None = None,
     alpha_metrics_required: bool | None = None,
+    profile: DeploymentProfile | str | None = None,
 ) -> FastAPI:
     if storage is not None and storage_factory is not None:
         raise ValueError("Provide either storage or storage_factory, not both")
 
-    resolved_config: WorldServiceServerConfig | None = None
+    resolved_config: WorldServiceServerConfig | None = config
+    resolved_profile = _coerce_profile(profile)
     factory: Callable[[], Awaitable[Storage | StorageHandle]] | None = storage_factory
-    if storage is None and factory is None:
-        resolved_config = _load_server_config(config, config_path=config_path)
-        if resolved_config.redis:
+
+    should_load_config = (
+        resolved_config is None
+        and (
+            config_path is not None
+            or (storage is None and factory is None)
+        )
+    )
+    if should_load_config:
+        resolved_config, config_profile = _load_server_config(
+            config, config_path=config_path
+        )
+        if resolved_profile is None:
+            resolved_profile = config_profile
+        if storage is None and factory is None and resolved_config.redis:
             factory = _config_storage_factory(resolved_config)
 
+    if resolved_profile is None:
+        resolved_profile = DeploymentProfile.DEV
+
     store = storage or Storage()
-    service = WorldService(store=store, bus=bus, rebalance_executor=rebalance_executor)
+    bus_instance: ControlBusProducer | None = bus
+    if bus_instance is None and resolved_config is not None:
+        brokers = resolved_config.controlbus_brokers
+        topic = resolved_config.controlbus_topic
+        if brokers and topic:
+            bus_instance = ControlBusProducer(
+                brokers=brokers,
+                topic=topic,
+                required=resolved_profile is DeploymentProfile.PROD,
+                logger=logger,
+            )
+        elif resolved_profile is DeploymentProfile.PROD:
+            raise RuntimeError(
+                "Prod profile requires ControlBus brokers/topics for WorldService."
+            )
+        else:
+            logger.warning(
+                "ControlBus disabled for WorldService (dev profile): brokers/topics not configured"
+            )
+
+    if (
+        bus_instance is None
+        and resolved_profile is DeploymentProfile.PROD
+        and resolved_config is None
+    ):
+        raise RuntimeError("Prod profile requires a ControlBus producer for WorldService.")
+
+    if (
+        resolved_profile is DeploymentProfile.PROD
+        and isinstance(bus_instance, ControlBusProducer)
+    ):
+        bus_instance._required = True
+
+    service = WorldService(
+        store=store, bus=bus_instance, rebalance_executor=rebalance_executor
+    )
     storage_handle: StorageHandle | None = None
     compat_flag = compat_rebalance_v2
     alpha_flag = alpha_metrics_required
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        nonlocal storage_handle, resolved_config
+        nonlocal storage_handle, resolved_config, bus_instance
         try:
+            if bus_instance is not None:
+                try:
+                    await bus_instance.start()
+                except Exception:
+                    if resolved_profile is DeploymentProfile.PROD:
+                        raise
+                    logger.warning(
+                        "ControlBus disabled for WorldService (dev profile): startup failed",
+                        exc_info=True,
+                    )
+                    service.bus = None
+                    bus_instance = None
             if factory is not None:
                 storage_handle = _coerce_storage_handle(await factory())
                 service.store = storage_handle.storage
                 app.state.storage = storage_handle.storage
             yield
         finally:
+            if bus_instance is not None:
+                try:
+                    await bus_instance.stop()
+                except Exception:  # pragma: no cover - defensive cleanup
+                    logger.exception("Failed to stop ControlBus producer")
             target = storage_handle.storage if storage_handle else store
             shutdown = storage_handle.shutdown if storage_handle else None
             if shutdown is not None:

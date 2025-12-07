@@ -269,6 +269,34 @@ def validate_worldservice_config(
         )
         issues["redis"] = ValidationIssue(severity, hint)
 
+    if profile is DeploymentProfile.PROD:
+        if not server.controlbus_brokers:
+            issues["controlbus"] = ValidationIssue(
+                "error",
+                "Prod profile requires worldservice.server.controlbus_brokers",
+            )
+        elif not server.controlbus_topic:
+            issues["controlbus"] = ValidationIssue(
+                "error",
+                "Prod profile requires worldservice.server.controlbus_topic",
+            )
+        else:
+            issues["controlbus"] = ValidationIssue(
+                "ok",
+                f"ControlBus configured for topic {server.controlbus_topic}",
+            )
+    else:
+        if server.controlbus_brokers and server.controlbus_topic:
+            issues["controlbus"] = ValidationIssue(
+                "ok",
+                f"ControlBus configured for topic {server.controlbus_topic}",
+            )
+        else:
+            issues["controlbus"] = ValidationIssue(
+                "warning",
+                "ControlBus disabled; no brokers/topics configured",
+            )
+
     issues["database"] = ValidationIssue("ok", "WorldService DSN provided")
     return issues
 
