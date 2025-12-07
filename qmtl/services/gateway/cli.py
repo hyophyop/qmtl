@@ -17,6 +17,7 @@ from qmtl.foundation.config import DeploymentProfile, find_config_file, load_con
 from qmtl.foundation.config_validation import validate_gateway_config
 from qmtl.services.dagmanager.topic import set_topic_namespace_enabled
 from .controlbus_consumer import ControlBusConsumer
+from .controlbus_ack import ActivationAckProducer
 from .commit_log import CommitLogWriter, create_commit_log_writer
 from .commit_log_consumer import CommitLogConsumer
 from qmtl.utils.i18n import _, language_source, set_language
@@ -251,10 +252,16 @@ def _build_controlbus_consumer(
         )
         return None
 
+    ack_producer = ActivationAckProducer(
+        brokers=config.controlbus_brokers,
+        topic=config.controlbus_ack_topic,
+        required=profile is DeploymentProfile.PROD,
+    )
     return ControlBusConsumer(
         brokers=config.controlbus_brokers,
         topics=config.controlbus_topics,
         group=config.controlbus_group,
+        ack_producer=ack_producer,
     )
 
 

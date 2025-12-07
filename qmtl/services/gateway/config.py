@@ -40,6 +40,7 @@ class GatewayConfig:
     controlbus_dsn: Optional[str] = None
     controlbus_topics: list[str] = field(default_factory=list)
     controlbus_group: str = "gateway"
+    controlbus_ack_topic: str = "control.activation.ack"
     commitlog_bootstrap: Optional[str] = None
     commitlog_topic: Optional[str] = "gateway.ingest"
     commitlog_group: str = "gateway-commit"

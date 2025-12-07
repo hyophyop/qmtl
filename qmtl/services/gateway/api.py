@@ -5,6 +5,7 @@ import secrets
 import asyncio
 from contextlib import asynccontextmanager, suppress
 from typing import Optional, Callable, Awaitable, Any, TYPE_CHECKING
+import os
 
 import redis.asyncio as redis
 from fastapi import FastAPI, Request, Response
@@ -119,6 +120,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         commit_task: asyncio.Task[None] | None = None
+        await _connect_database(database_obj)
         commit_task = await _start_background(
             enable_background=enable_background,
             controlbus_consumer=controlbus_consumer,
@@ -357,6 +359,20 @@ async def _close_dagmanager_and_db(dagmanager: DagManagerClient, database_obj: D
             await close()
         except Exception:
             logger.exception("Failed to close database connection")
+
+
+async def _connect_database(db: Database) -> None:
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return
+    connect = getattr(db, "connect", None)
+    if not callable(connect):
+        return
+    try:
+        await connect()
+    except Exception as exc:  # pragma: no cover - defensive
+        message = "Failed to connect to database"
+        logger.exception(message)
+        raise SystemExit(message) from exc
 
 
 async def _close_redis(redis_conn: redis.Redis) -> None:
