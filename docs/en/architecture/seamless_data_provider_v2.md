@@ -9,7 +9,7 @@
 
 - SDP v2 is live in the runtime: cache→storage→backfill→live flows and ConformancePipeline/SLA/metrics already guard data quality.
 - Worlds that declare `world.data.presets[]` let Runner/CLI auto-build an SDP instance from **Seamless presets + data specs** and inject it into `StreamInputs`, so authors focus on data presets/fingerprints instead of manual wiring.
-- This document is the normative data‑plane counterpart to [rewrite_architecture_docs.md](../../../docs_archive/rewrite_architecture_docs.md), including the contract for “world-centric data presets → SDP wiring”.
+- This document is the normative data‑plane counterpart to [rewrite_architecture_docs.md](../archive/rewrite_architecture_docs.md), including the contract for “world-centric data presets → SDP wiring”.
 
 > **Status:** The Seamless Data Provider v2 architecture is now live in the
 > runtime. The distributed backfill coordinator replaces the in-process stub,
