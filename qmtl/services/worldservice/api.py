@@ -160,7 +160,8 @@ def create_app(
         )
         if resolved_profile is None:
             resolved_profile = config_profile
-        if storage is None and factory is None and resolved_config.redis:
+    if resolved_config is not None and storage is None and factory is None:
+        if resolved_config.redis:
             factory = _config_storage_factory(resolved_config)
 
     if resolved_profile is None:

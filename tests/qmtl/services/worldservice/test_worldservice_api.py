@@ -6,6 +6,7 @@ import asyncio
 import httpx
 import pytest
 
+from qmtl.services.worldservice import api as worldservice_api
 from qmtl.foundation.config import DeploymentProfile
 from qmtl.services.worldservice.api import StorageHandle, create_app
 from qmtl.services.worldservice.controlbus_producer import ControlBusProducer
@@ -1261,6 +1262,34 @@ async def test_persistent_storage_survives_restart(tmp_path, fake_redis):
 def test_create_app_without_storage_requires_config():
     with pytest.raises(RuntimeError, match="configuration file not found"):
         create_app()
+
+
+@pytest.mark.asyncio
+async def test_create_app_with_config_object_uses_redis_storage(
+    monkeypatch, tmp_path, fake_redis
+):
+    config = WorldServiceServerConfig(
+        dsn=f"sqlite+aiosqlite:///{tmp_path/'worlds.db'}",
+        redis="redis://example",
+    )
+
+    calls: list[str] = []
+
+    def _fake_from_url(url: str, decode_responses: bool = True):
+        calls.append(url)
+        assert decode_responses is True
+        return fake_redis
+
+    monkeypatch.setattr(worldservice_api.redis, "from_url", _fake_from_url)
+
+    app = create_app(config=config)
+
+    async with app.router.lifespan_context(app):
+        assert isinstance(app.state.storage, PersistentStorage)
+        assert app.state.world_service.store is app.state.storage
+        assert app.state.storage._redis is fake_redis
+
+    assert calls == [config.redis]
 
 
 @pytest.mark.asyncio
