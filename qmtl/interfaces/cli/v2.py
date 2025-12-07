@@ -169,8 +169,16 @@ COMMANDS: dict[str, CommandHandler] = {
     "init": cmd_init,
     "version": cmd_version,
 }
+LEGACY_COMMANDS = {
+    **LEGACY_COMMANDS,
+    "config": "Use 'qmtl config validate|generate' for configuration utilities",
+}
 _ADMIN_COMMANDS_FULL, _ = _command_tables(admin=True)
-ADMIN_COMMANDS = {k: v for k, v in _ADMIN_COMMANDS_FULL.items() if k not in COMMANDS}
+ADMIN_COMMANDS = {
+    k: v
+    for k, v in _ADMIN_COMMANDS_FULL.items()
+    if k not in COMMANDS and k != "config"
+}
 
 
 def _extract_lang(argv: List[str]) -> tuple[List[str], str | None]:
