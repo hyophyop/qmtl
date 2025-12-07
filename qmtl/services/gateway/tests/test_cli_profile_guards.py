@@ -35,7 +35,7 @@ def test_enforce_database_profile_requires_postgres_backend(
 
 
 def test_enforce_database_profile_requires_dsn(caplog: pytest.LogCaptureFixture) -> None:
-    config = GatewayConfig(database_backend="postgres", database_dsn=None)
+    config = GatewayConfig(database_backend="postgres", database_dsn="")
 
     with pytest.raises(SystemExit):
         cli._enforce_database_profile(config, profile=DeploymentProfile.PROD)
