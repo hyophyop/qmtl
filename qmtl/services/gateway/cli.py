@@ -80,9 +80,10 @@ async def _main(argv: list[str] | None = None) -> None:
             % {"profile": profile.value}
         )
 
-    redis_client = _resolve_redis(config)
+    redis_client = _resolve_redis(config, profile=profile)
     insert_sentinel, enforce_live_guard = _resolve_flags(config, args)
     controlbus_consumer = _build_controlbus_consumer(config)
+    _enforce_database_profile(config, profile=profile)
     commit_writer, commit_consumer = await _build_commitlog_clients(
         config, profile=profile
     )
@@ -199,9 +200,23 @@ def _load_gateway_config(
     )
 
 
-def _resolve_redis(config: GatewayConfig):
+def _resolve_redis(config: GatewayConfig, *, profile: DeploymentProfile):
+    if profile is DeploymentProfile.PROD and not config.redis_dsn:
+        message = _(
+            "Prod profile requires gateway.redis_dsn; in-memory Redis is disabled"
+        )
+        logging.error(message)
+        raise SystemExit(message)
+
     if config.redis_dsn:
         return redis.from_url(config.redis_dsn, decode_responses=True)
+
+    logging.info(
+        _(
+            "Redis DSN not configured; using in-memory Redis (dev-only default). "
+            "Set gateway.redis_dsn for production."
+        )
+    )
     return InMemoryRedis()
 
 
@@ -223,6 +238,29 @@ def _build_controlbus_consumer(config: GatewayConfig) -> ControlBusConsumer | No
         topics=config.controlbus_topics,
         group=config.controlbus_group,
     )
+
+
+def _enforce_database_profile(
+    config: GatewayConfig, *, profile: DeploymentProfile
+) -> None:
+    backend = (config.database_backend or "").lower()
+    if profile is not DeploymentProfile.PROD:
+        return
+
+    if backend != "postgres":
+        message = _(
+            "Prod profile requires gateway.database_backend=postgres; "
+            "SQLite and in-memory backends are disabled"
+        )
+        logging.error(message)
+        raise SystemExit(message)
+
+    if not config.database_dsn:
+        message = _(
+            "Prod profile requires gateway.database_dsn; configure a PostgreSQL DSN"
+        )
+        logging.error(message)
+        raise SystemExit(message)
 
 
 async def _build_commitlog_clients(
