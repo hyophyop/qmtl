@@ -147,6 +147,17 @@ def test_validate_worldservice_config_enforces_redis_in_prod() -> None:
     )
 
     assert issues["redis"].severity == "error"
+    assert issues["controlbus"].severity == "error"
+
+
+def test_validate_worldservice_config_allows_missing_controlbus_in_dev() -> None:
+    issues = validate_worldservice_config(
+        WorldServiceServerConfig(dsn="sqlite:///ws.db"),
+        profile=DeploymentProfile.DEV,
+    )
+
+    assert issues["controlbus"].severity == "warning"
+    assert "ControlBus disabled" in issues["controlbus"].hint
 
 
 @pytest.mark.asyncio

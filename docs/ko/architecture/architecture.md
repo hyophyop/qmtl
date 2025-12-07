@@ -33,7 +33,7 @@ last_modified: 2025-12-06
 ## 배포 프로필
 
 - **dev**: 로컬 개발용 기본값이다. Redis/Kafka/Neo4j/ControlBus가 비어 있으면 인메모리 대체 구현을 사용하며, 빠르게 실험하거나 튜닝할 때 적합하다.
-- **prod**: 모든 컴포넌트가 영속 백엔드를 사용해야 한다. `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_brokers`/`controlbus_topics`, `gateway.commitlog_bootstrap`/`commitlog_topic`, `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, `worldservice.server.redis`가 누락되면 부팅 전에 오류를 반환한다.
+- **prod**: 모든 컴포넌트가 영속 백엔드를 사용해야 한다. `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_brokers`/`controlbus_topics`, `gateway.commitlog_bootstrap`/`commitlog_topic`, `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, `worldservice.server.redis`, `worldservice.server.controlbus_brokers`/`controlbus_topic`가 누락되면 부팅 전에 오류를 반환한다.
 
 `qmtl config validate --target all`는 `profile: prod`에서 필수 항목이 빠지면 경고 대신 오류를 보고하며, Gateway CLI 역시 동일한 조건을 강제해 혼합 모드(일부만 인메모리)를 차단한다.
 

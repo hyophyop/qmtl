@@ -326,6 +326,18 @@ async def _run(
     enable_otel: bool = False,
     profile: DeploymentProfile = DeploymentProfile.DEV,
 ) -> None:
+    if profile is DeploymentProfile.PROD:
+        missing: list[str] = []
+        if not cfg.neo4j_dsn:
+            missing.append("neo4j_dsn")
+        if not cfg.kafka_dsn:
+            missing.append("kafka_dsn")
+        if not cfg.controlbus_dsn or not cfg.controlbus_queue_topic:
+            missing.append("controlbus (dsn/topic)")
+        if missing:
+            joined = ", ".join(missing)
+            raise SystemExit(f"Prod profile requires persistent backends: {joined}")
+
     set_topic_namespace_enabled(cfg.enable_topic_namespace)
     driver = None
     repo = None

@@ -52,6 +52,7 @@ gateway:
   database_backend: postgres
   database_dsn: ${backends.sql.gateway_dsn}
   insert_sentinel: true
+  controlbus_brokers: ${backends.kafka.bootstrap_servers}
   controlbus_topics:
     - activation
     - policy

@@ -19,7 +19,7 @@ See also: Docker usage and full stack notes in [Docker & Compose](docker.md) and
 end-to-end tests in [E2E Testing](e2e_testing.md).
 
 !!! tip "Check the deployment profile"
-    `profile: dev` (default) allows in-memory fallbacks when Redis/Kafka/Neo4j/commit-log settings are empty. For production, set `profile: prod` and fill `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_*`, `gateway.commitlog_*`, `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, and `worldservice.server.redis` so that `qmtl config validate` and service startup succeed.
+    `profile: dev` (default) allows in-memory fallbacks when Redis/Kafka/Neo4j/commit-log settings are empty. For production, set `profile: prod` and fill `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_*`, `gateway.commitlog_*`, `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, `worldservice.server.redis`, and `worldservice.server.controlbus_brokers`/`controlbus_topic` so that `qmtl config validate` and service startup succeed.
 
 ## Prerequisites
 
@@ -152,4 +152,3 @@ For offline runs (no WS/GW): `python -m qmtl.examples.general_strategy`.
 - Apple Silicon: add `platform: linux/amd64` to services that lack arm64 images.
 
 {{ nav_links() }}
-

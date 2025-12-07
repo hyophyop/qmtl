@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any, Optional, TYPE_CHECKING
-
 import asyncio
 import inspect
 import time
@@ -77,11 +75,12 @@ class GatewayHealthCollector:
         client = self.redis_client
         if client is None:
             return "unknown"
+
         async def _call() -> Any:
             result = client.ping()
             if inspect.isawaitable(result):
-                return await result
-            return result
+                result = await result
+            return bool(result)
 
         return await self._probe(_call)
 
