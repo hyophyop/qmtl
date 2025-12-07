@@ -726,19 +726,23 @@ class DiffService:
                 schema_hash=entry.node.schema_hash,
                 context=entry.compute_context,
             )
-            try:
-                self.node_repo.add_compute_binding(
-                    entry.node.node_id, entry.compute_key
-                )
-            except Exception:  # pragma: no cover - defensive persistence guard
-                logger.warning(
-                    "dagmanager.compute_binding.persist_failed",
-                    exc_info=True,
-                    extra={
-                        "node_id": entry.node.node_id,
-                        "compute_key": entry.compute_key,
-                    },
-                )
+            repo_add_compute_binding = getattr(
+                type(self.node_repo), "add_compute_binding", None
+            )
+            if repo_add_compute_binding is not NodeRepository.add_compute_binding:
+                try:
+                    self.node_repo.add_compute_binding(
+                        entry.node.node_id, entry.compute_key
+                    )
+                except Exception:  # pragma: no cover - defensive persistence guard
+                    logger.warning(
+                        "dagmanager.compute_binding.persist_failed",
+                        exc_info=True,
+                        extra={
+                            "node_id": entry.node.node_id,
+                            "compute_key": entry.compute_key,
+                        },
+                    )
 
             key = self._partition_key_for(entry.node, entry.compute_key)
             queue_map[key] = topic
