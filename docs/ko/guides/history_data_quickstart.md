@@ -25,7 +25,7 @@
 
 자세한 설계는 다음 문서를 참고하세요.
 
-- [`design/seamless_data_provider.md`](../design/seamless_data_provider.md)
+- [`architecture/seamless_data_provider_v2.md`](../architecture/seamless_data_provider_v2.md)
 - [`architecture/seamless_data_provider_v2.md`](../architecture/seamless_data_provider_v2.md)
 
 ## Seamless 프로바이더를 스트림에 연결하기

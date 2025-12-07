@@ -24,7 +24,6 @@ In modern setups, you plug data into this flow by wiring a
 
 For the underlying architecture, see:
 
-- [`design/seamless_data_provider.md`](../design/seamless_data_provider.md)
 - [`architecture/seamless_data_provider_v2.md`](../architecture/seamless_data_provider_v2.md)
 
 ## Wiring a Seamless provider into a stream

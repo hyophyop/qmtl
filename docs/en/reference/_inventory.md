@@ -49,7 +49,6 @@ last_modified: 2025-08-26
 ## Design
 *Owner: Design Council*
 
-- `docs/design/seamless_data_provider.md`
 - `docs/design/yaml_config_overhaul.md`
 
 ## Guides

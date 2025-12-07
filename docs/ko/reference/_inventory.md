@@ -49,7 +49,6 @@ last_modified: 2025-08-26
 ## 설계(Design)
 *소유자: Design Council*
 
-- `docs/design/seamless_data_provider.md`
 - `docs/design/yaml_config_overhaul.md`
 
 ## 가이드(Guides)

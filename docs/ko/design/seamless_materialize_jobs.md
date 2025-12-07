@@ -78,7 +78,7 @@
 ## 8. 참고 문서
 
 - [Seamless Data Provider v2 아키텍처](../architecture/seamless_data_provider_v2.md)  
-- [Seamless Data Provider 설계](seamless_data_provider.md)  
+- [Seamless Data Provider 아키텍처](../architecture/seamless_data_provider_v2.md)  
 - 관련: [architecture/seamless_data_provider_v2.md](../architecture/seamless_data_provider_v2.md), [architecture/architecture.md Core Loop 요약](../architecture/architecture.md#core-loop-summary)
 
 ---

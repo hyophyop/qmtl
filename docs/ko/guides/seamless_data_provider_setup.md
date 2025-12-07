@@ -11,10 +11,10 @@ last_modified: 2025-08-21
 
 ## 1. 선행 준비 사항
 
-1. **저장소 및 페치 계층** – QuestDB와 같은 히스토리 저장소와 이를 채우는 `DataFetcher`를 준비합니다. `EnhancedQuestDBProvider`는 저장소와 페치 계층을 우선순위 기반으로 조합해 투명한 조회를 수행합니다.【F:qmtl/docs/design/seamless_data_provider.md†L45-L90】【F:qmtl/qmtl/runtime/io/seamless_provider.py†L1-L108】
+1. **저장소 및 페치 계층** – QuestDB와 같은 히스토리 저장소와 이를 채우는 `DataFetcher`를 준비합니다. `EnhancedQuestDBProvider`는 저장소와 페치 계층을 우선순위 기반으로 조합해 투명한 조회를 수행합니다. (참조: `docs/ko/architecture/seamless_data_provider_v2.md`, `qmtl/runtime/io/seamless_provider.py`)
 2. **분산 백필 코디네이터** – `qmtl.yml`의 `seamless.coordinator_url`을 설정하면 SDK가 자동으로 분산 백필 코디네이터와 통신합니다.【F:qmtl/docs/architecture/seamless_data_provider_v2.md†L38-L81】【F:qmtl/qmtl/runtime/sdk/seamless_data_provider.py†L421-L432】
-3. **정합성 파이프라인** – 기본 활성인 `ConformancePipeline`은 스키마·시간 롤업과 리포트를 생성하고 위반 시 요청을 차단합니다. 필요하면 `partial_ok=True`로 허용 모드를 사용할 수 있습니다.【F:qmtl/docs/design/seamless_data_provider.md†L31-L66】
-4. **SLA 정책** – `SLAPolicy`를 구성하면 단계별 대기 시간을 추적하고 기준 초과 시 `SeamlessSLAExceeded` 예외와 메트릭을 발행합니다.【F:qmtl/docs/design/seamless_data_provider.md†L66-L86】
+3. **정합성 파이프라인** – 기본 활성인 `ConformancePipeline`은 스키마·시간 롤업과 리포트를 생성하고 위반 시 요청을 차단합니다. 필요하면 `partial_ok=True`로 허용 모드를 사용할 수 있습니다. (참조: `docs/ko/architecture/seamless_data_provider_v2.md`)
+4. **SLA 정책** – `SLAPolicy`를 구성하면 단계별 대기 시간을 추적하고 기준 초과 시 `SeamlessSLAExceeded` 예외와 메트릭을 발행합니다. (참조: `docs/ko/architecture/seamless_data_provider_v2.md`)
 5. **아티팩트/메트릭 수집** – `seamless_sla_deadline_seconds`, `backfill_completion_ratio` 등의 관측 지표를 수집할 수 있도록 Prometheus와 대시보드를 구성합니다.【F:qmtl/docs/architecture/seamless_data_provider_v2.md†L82-L123】
 
 ## 2. 단계별 구성
@@ -59,7 +59,7 @@ last_modified: 2025-08-21
        conformance=ConformancePipeline.partial_ok(True),
    )
    ```
-   SLA 정책을 지정하면 메트릭과 예외 처리가 서비스 수준을 보장하고, 정합성 파이프라인 설정을 통해 데이터 품질을 제어할 수 있습니다.【F:qmtl/docs/design/seamless_data_provider.md†L31-L86】
+   SLA 정책을 지정하면 메트릭과 예외 처리가 서비스 수준을 보장하고, 정합성 파이프라인 설정을 통해 데이터 품질을 제어할 수 있습니다. (참조: `docs/ko/architecture/seamless_data_provider_v2.md`)
 
 4. **StreamInput에 연결**
    ```python
