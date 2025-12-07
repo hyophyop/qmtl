@@ -5,6 +5,7 @@ import contextlib
 
 import pytest
 
+from qmtl.foundation.config import DeploymentProfile
 from qmtl.services.dagmanager.config import DagManagerConfig
 from qmtl.services.dagmanager import server
 
@@ -120,3 +121,23 @@ async def test_run_stops_scheduler_when_server_fails(monkeypatch: pytest.MonkeyP
     scheduler = created_schedulers[0]
     assert scheduler.started is True
     assert scheduler.stopped is True
+
+
+@pytest.mark.asyncio
+async def test_run_requires_neo4j_and_kafka_in_prod(caplog: pytest.LogCaptureFixture) -> None:
+    cfg = DagManagerConfig(kafka_dsn="kafka://localhost:9092", controlbus_dsn="broker")
+
+    with pytest.raises(SystemExit):
+        await server._run(cfg, profile=DeploymentProfile.PROD)
+
+    assert "neo4j_dsn" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_run_requires_kafka_in_prod(caplog: pytest.LogCaptureFixture) -> None:
+    cfg = DagManagerConfig(neo4j_dsn="neo4j://localhost:7687", controlbus_dsn="broker")
+
+    with pytest.raises(SystemExit):
+        await server._run(cfg, profile=DeploymentProfile.PROD)
+
+    assert "kafka_dsn" in caplog.text

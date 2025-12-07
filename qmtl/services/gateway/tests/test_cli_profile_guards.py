@@ -42,3 +42,24 @@ def test_enforce_database_profile_requires_dsn(caplog: pytest.LogCaptureFixture)
 
     assert "gateway.database_dsn" in caplog.text
 
+
+def test_controlbus_required_in_prod(caplog: pytest.LogCaptureFixture) -> None:
+    config = GatewayConfig()
+
+    with pytest.raises(SystemExit):
+        cli._build_controlbus_consumer(config, profile=DeploymentProfile.PROD)
+
+    assert "controlbus_brokers/controlbus_topics" in caplog.text
+
+
+def test_controlbus_optional_in_dev(caplog: pytest.LogCaptureFixture) -> None:
+    config = GatewayConfig()
+
+    with caplog.at_level("INFO"):
+        consumer = cli._build_controlbus_consumer(
+            config, profile=DeploymentProfile.DEV
+        )
+
+    assert consumer is None
+    assert any("ControlBus consumer disabled" in msg for msg in caplog.messages)
+
