@@ -39,6 +39,7 @@ class NodeInfo:
     bucket: int | None = None
     is_global: bool = False
     compute_key: str | None = field(default=None, init=False)
+    compute_keys: tuple[str, ...] = field(default_factory=tuple, kw_only=True)
 
 
 @dataclass

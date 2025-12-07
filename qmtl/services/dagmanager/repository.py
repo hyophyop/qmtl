@@ -79,3 +79,15 @@ class NodeRepository:
         breaker: AsyncCircuitBreaker | None = None,
     ) -> list[str]:
         raise NotImplementedError
+
+    # compute-key bindings ------------------------------------------------
+
+    def add_compute_binding(
+        self,
+        node_id: str,
+        compute_key: str,
+        *,
+        breaker: AsyncCircuitBreaker | None = None,
+    ) -> None:
+        """Persist the domain-scoped compute key associated with a node."""
+        raise NotImplementedError

@@ -8,6 +8,8 @@ from typing import Iterable, Dict
 
 import networkx as nx
 
+from qmtl.foundation.common import AsyncCircuitBreaker
+
 from .models import NodeRecord
 from .repository import NodeRepository
 
@@ -71,6 +73,7 @@ class MemoryNodeRepository(NodeRepository):
             tags=list(record.tags),
             bucket=record.bucket,
             topic=record.topic,
+            compute_keys=list(record.compute_keys),
             **{"global": record.is_global},
         )
 
@@ -94,6 +97,7 @@ class MemoryNodeRepository(NodeRepository):
                     bucket=data.get("bucket"),
                     topic=data.get("topic", ""),
                     is_global=data.get("global", False),
+                    compute_keys=tuple(data.get("compute_keys", []) or ()),
                 )
         return records
 
@@ -151,6 +155,7 @@ class MemoryNodeRepository(NodeRepository):
                     bucket=data.get("bucket"),
                     topic=data.get("topic", ""),
                     is_global=data.get("global", False),
+                    compute_keys=tuple(data.get("compute_keys", []) or ()),
                 )
         return None
 
@@ -205,6 +210,37 @@ class MemoryNodeRepository(NodeRepository):
             if self._is_buffering(data, older_than_ms, compute_key):
                 result.append(node_id)
         return result
+
+    # compute-key bindings ------------------------------------------------
+
+    def add_compute_binding(
+        self,
+        node_id: str,
+        compute_key: str,
+        *,
+        breaker: AsyncCircuitBreaker | None = None,
+    ) -> None:
+        if not compute_key:
+            return
+        if not _GRAPH.has_node(node_id):
+            _GRAPH.add_node(
+                node_id,
+                type="compute",
+                compute_keys=[compute_key],
+            )
+            return
+        data = _GRAPH.nodes[node_id]
+        keys = data.get("compute_keys")
+        if isinstance(keys, list):
+            if compute_key not in keys:
+                keys.append(compute_key)
+                data["compute_keys"] = keys
+        elif isinstance(keys, (set, tuple)):
+            merged = set(keys)
+            merged.add(compute_key)
+            data["compute_keys"] = list(merged)
+        else:
+            data["compute_keys"] = [compute_key]
 
     def _is_buffering(
         self, data: dict[str, Any], older_than_ms: int, compute_key: str | None

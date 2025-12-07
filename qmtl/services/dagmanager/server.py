@@ -364,7 +364,9 @@ async def _run(
             missing.append("controlbus (dsn/topic)")
         if missing:
             joined = ", ".join(missing)
-            raise SystemExit(f"Prod profile requires persistent backends: {joined}")
+            message = f"Prod profile requires persistent backends: {joined}"
+            logging.error(message)
+            raise SystemExit(message)
 
     set_topic_namespace_enabled(cfg.enable_topic_namespace)
     _enforce_persistent_backends(cfg, profile=profile)
