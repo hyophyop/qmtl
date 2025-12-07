@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from typing import Any, Dict, Iterable, List, MutableMapping, TYPE_CHECKING, Mapping
+import logging
 import math
 from queue import Empty, Queue
 
@@ -13,6 +14,8 @@ except Exception:  # pragma: no cover - fallback
 _json_loads = _json.loads
 import time
 import asyncio
+
+logger = logging.getLogger(__name__)
 
 
 from .metrics import (
@@ -643,6 +646,7 @@ class DiffService:
             compute_key_value = self._ensure_compute_key(node, compute_context)
             cached = bindings.get(compute_key_value)
             record = existing.get(node.node_id)
+            existing_keys = tuple(record.compute_keys) if record else ()
 
             if cached and cached.code_hash == node.code_hash:
                 plan.append(
@@ -659,7 +663,10 @@ class DiffService:
                 continue
 
             if record and record.code_hash == node.code_hash:
-                if bindings and compute_key_value not in bindings:
+                if (
+                    compute_key_value not in existing_keys
+                    and (existing_keys or (bindings and compute_key_value not in bindings))
+                ):
                     self._handle_cross_context_violation(node, compute_context, bindings)
                 bindings[compute_key_value] = _CachedBinding(
                     topic=record.topic,
@@ -719,6 +726,23 @@ class DiffService:
                 schema_hash=entry.node.schema_hash,
                 context=entry.compute_context,
             )
+            repo_add_compute_binding = getattr(
+                type(self.node_repo), "add_compute_binding", None
+            )
+            if repo_add_compute_binding is not NodeRepository.add_compute_binding:
+                try:
+                    self.node_repo.add_compute_binding(
+                        entry.node.node_id, entry.compute_key
+                    )
+                except Exception:  # pragma: no cover - defensive persistence guard
+                    logger.warning(
+                        "dagmanager.compute_binding.persist_failed",
+                        exc_info=True,
+                        extra={
+                            "node_id": entry.node.node_id,
+                            "compute_key": entry.compute_key,
+                        },
+                    )
 
             key = self._partition_key_for(entry.node, entry.compute_key)
             queue_map[key] = topic
@@ -912,7 +936,8 @@ class Neo4jNodeRepository(NodeRepository):
             "RETURN c.node_id AS node_id, c.node_type AS node_type, "
             "c.code_hash AS code_hash, c.schema_hash AS schema_hash, "
             "c.schema_id AS schema_id, q.topic AS topic, "
-            "q.interval AS interval, c.period AS period, c.tags AS tags"
+            "q.interval AS interval, c.period AS period, c.tags AS tags, "
+            "c.compute_keys AS compute_keys"
         )
         with self._open_session(breaker) as session:
             result = session.run(query, ids=list(node_ids))
@@ -929,6 +954,7 @@ class Neo4jNodeRepository(NodeRepository):
                     tags=list(r.get("tags", [])),
                     topic=r.get("topic"),
                     is_global=r.get("global", False),
+                    compute_keys=tuple(r.get("compute_keys", []) or ()),
                 )
             return records
 
@@ -993,7 +1019,7 @@ class Neo4jNodeRepository(NodeRepository):
             "RETURN c.node_id AS node_id, c.node_type AS node_type, "
             "c.code_hash AS code_hash, c.schema_hash AS schema_hash, "
             "c.schema_id AS schema_id, q.topic AS topic, q.interval AS interval, "
-            "c.period AS period, c.tags AS tags "
+            "c.period AS period, c.tags AS tags, c.compute_keys AS compute_keys "
             "LIMIT 1"
         )
         with self._open_session(breaker) as session:
@@ -1012,6 +1038,7 @@ class Neo4jNodeRepository(NodeRepository):
                 tags=list(record.get("tags", [])),
                 topic=record.get("topic"),
                 is_global=record.get("global", False),
+                compute_keys=tuple(record.get("compute_keys", []) or ()),
             )
 
     # buffering -------------------------------------------------------------
@@ -1060,6 +1087,25 @@ class Neo4jNodeRepository(NodeRepository):
         with self._open_session(breaker) as session:
             result = session.run(query, cutoff=older_than_ms)
             return [r.get("node_id") for r in result]
+
+    def add_compute_binding(
+        self,
+        node_id: str,
+        compute_key: str,
+        *,
+        breaker: AsyncCircuitBreaker | None = None,
+    ) -> None:
+        if not compute_key:
+            return
+        query = (
+            "MATCH (c:ComputeNode {node_id: $nid}) "
+            "SET c.compute_keys = CASE "
+            "WHEN c.compute_keys IS NULL THEN [$ck] "
+            "WHEN $ck IN c.compute_keys THEN c.compute_keys "
+            "ELSE c.compute_keys + $ck END"
+        )
+        with self._open_session(breaker) as session:
+            session.run(query, nid=node_id, ck=compute_key)
 
 
 class KafkaQueueManager(QueueManager):

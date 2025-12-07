@@ -26,6 +26,7 @@ from .neo4j_init import init_schema, rollback as neo4j_rollback
 from ..gateway.dagmanager_client import DagManagerClient
 from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
 from qmtl.utils.i18n import _, set_language
+from qmtl.foundation.common import AsyncCircuitBreaker
 
 
 class _MemRepo(NodeRepository):
@@ -51,6 +52,35 @@ class _MemRepo(NodeRepository):
             if rec.topic == queue:
                 return rec
         return None
+
+    def add_compute_binding(
+        self,
+        node_id: str,
+        compute_key: str,
+        *,
+        breaker: AsyncCircuitBreaker | None = None,
+    ) -> None:
+        if not compute_key:
+            return
+        record = self.records.get(node_id)
+        if record is None:
+            record = NodeRecord(
+                node_id=node_id,
+                node_type="",
+                code_hash="",
+                schema_hash="",
+                schema_id="",
+                interval=None,
+                period=None,
+                tags=[],
+                topic="",
+                compute_keys=(compute_key,),
+            )
+            self.records[node_id] = record
+            return
+        current = set(record.compute_keys)
+        current.add(compute_key)
+        record.compute_keys = tuple(current)
 
 
 class _MemQueue(QueueManager):
