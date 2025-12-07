@@ -133,14 +133,20 @@ def test_hash_blake3_collision_extension() -> None:
     base_id = hash_blake3(payload)
 
     existing = {base_id}
-    for suffix in range(1, 6):
-        digest = blake3(payload + f"|{suffix}".encode()).hexdigest()
-        existing.add(f"blake3:{digest}")
 
-    extended = hash_blake3(payload, existing_ids=existing)
-    assert extended not in existing
-    assert extended.startswith("blake3:")
+    def expected(counter: int) -> str:
+        hasher = blake3()
+        hasher.update(payload)
+        hasher.update(b"|collision:")
+        hasher.update(str(counter).encode())
+        return f"blake3:{hasher.digest(length=64).hex()}"
 
-    recomputed = hash_blake3(payload, existing_ids=existing | {extended})
-    assert recomputed != base_id
-    assert recomputed.startswith("blake3:")
+    first = hash_blake3(payload, existing_ids=existing)
+    assert first == expected(1)
+    assert len(first) > len(base_id)
+
+    existing.add(first)
+    second = hash_blake3(payload, existing_ids=existing)
+
+    assert second == expected(2)
+    assert second not in existing
