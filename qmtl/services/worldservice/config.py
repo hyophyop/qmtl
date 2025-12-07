@@ -28,6 +28,8 @@ class WorldServiceServerConfig:
 
     dsn: str
     redis: str | None = None
+    controlbus_brokers: list[str] = field(default_factory=list)
+    controlbus_topic: str | None = "policy"
     bind: WorldServiceBindConfig = field(default_factory=WorldServiceBindConfig)
     auth: WorldServiceAuthConfig = field(default_factory=WorldServiceAuthConfig)
     compat_rebalance_v2: bool = False
@@ -67,6 +69,7 @@ def load_worldservice_server_config(data: Mapping[str, Any]) -> WorldServiceServ
         raise ValueError("WorldService configuration requires 'dsn'")
 
     redis_dsn = raw.get("redis")
+    controlbus_brokers = _parse_controlbus_brokers(raw)
     bind_cfg = _parse_bind_config(raw)
     auth_cfg = _parse_auth_config(raw)
     compat_rebalance_v2 = bool(raw.get("compat_rebalance_v2", False))
@@ -75,6 +78,8 @@ def load_worldservice_server_config(data: Mapping[str, Any]) -> WorldServiceServ
     return WorldServiceServerConfig(
         dsn=dsn,
         redis=redis_dsn,
+        controlbus_brokers=controlbus_brokers,
+        controlbus_topic=raw.get("controlbus_topic", "policy"),
         bind=bind_cfg,
         auth=auth_cfg,
         compat_rebalance_v2=compat_rebalance_v2,
@@ -105,6 +110,17 @@ def _parse_auth_config(raw: Mapping[str, Any]) -> WorldServiceAuthConfig:
         tokens = auth_data["tokens"]
         auth_kwargs["tokens"] = _normalize_auth_tokens(tokens)
     return WorldServiceAuthConfig(**auth_kwargs)
+
+
+def _parse_controlbus_brokers(raw: Mapping[str, Any]) -> list[str]:
+    brokers = raw.get("controlbus_brokers", [])
+    if brokers is None:
+        return []
+    if isinstance(brokers, list):
+        if not all(isinstance(item, str) for item in brokers):
+            raise TypeError("WorldService controlbus_brokers must be strings")
+        return list(brokers)
+    raise TypeError("WorldService controlbus_brokers must be provided as a list")
 
 
 def _normalize_auth_tokens(tokens: Any) -> list[str]:

@@ -56,6 +56,8 @@ class DeploymentProfile(str, Enum):
 _WORLD_INLINE_SERVER_KEYS: tuple[str, ...] = (
     "dsn",
     "redis",
+    "controlbus_brokers",
+    "controlbus_topic",
     "bind",
     "auth",
     "compat_rebalance_v2",
