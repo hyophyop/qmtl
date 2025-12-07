@@ -1,47 +1,44 @@
-"""CLI help tests.
-
-Note: As of v2.0, the legacy multi-level CLI structure has been replaced
-with a simplified flat structure. Legacy command tests are marked as skipped.
-"""
+"""CLI help tests for the v2 command surface."""
 
 import subprocess
 import sys
 
-import pytest
-
-
-def _run_help(*args: str) -> str:
+def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     cmd = [sys.executable, "-m", "qmtl", *args]
-    out = subprocess.run(cmd, capture_output=True, text=True)
-    # argparse writes help to stdout by default; fallback to stderr if empty
-    return out.stdout or out.stderr
+    return subprocess.run(cmd, capture_output=True, text=True)
 
 
-@pytest.mark.skip(reason="Legacy CLI removed in v2.0. Service commands accessed directly via 'qmtl gw' or 'qmtl dagmanager-server'.")
+def _output(result: subprocess.CompletedProcess[str]) -> str:
+    """Return stdout if present, otherwise stderr."""
+    return result.stdout or result.stderr
+
+
 def test_dagmanager_help_shows_subcommands() -> None:
-    """Legacy test - qmtl service dagmanager replaced by direct commands in v2.0."""
-    pass
+    result = _run_cli("dagmanager-server", "--help")
+    assert result.returncode == 0
+    text = _output(result)
+    assert "Operate DAG Manager" in text or "dagmanager" in text
+    assert "diff" in text or "server" in text
 
 
-@pytest.mark.skip(reason="Legacy CLI removed in v2.0. Use 'qmtl gw --help' directly.")
 def test_gateway_help_shows_flags() -> None:
-    """Legacy test - qmtl service gateway replaced by 'qmtl gw' in v2.0."""
-    pass
+    result = _run_cli("gw", "--help")
+    assert result.returncode == 0
+    text = _output(result)
+    assert "Gateway" in text
+    assert "--config" in text or "Run the Gateway HTTP server" in text
 
 
-@pytest.mark.skip(reason="Legacy CLI removed in v2.0. Use 'qmtl submit --help' instead.")
-def test_sdk_help_shows_subcommands() -> None:
-    """Legacy test - qmtl tools sdk replaced by 'qmtl submit' in v2.0."""
-    pass
-
-
-def test_v2_submit_help() -> None:
-    """Test v2 submit command shows help."""
-    text = _run_help("submit", "--help")
-    assert "strategy" in text.lower() or "usage" in text.lower()
+def test_submit_help_shows_usage() -> None:
+    result = _run_cli("submit", "--help")
+    assert result.returncode == 0
+    text = _output(result).lower()
+    assert "strategy" in text or "usage" in text
 
 
 def test_v2_world_help() -> None:
     """Test v2 world command shows subcommands."""
-    text = _run_help("world", "--help")
+    result = _run_cli("world", "--help")
+    assert result.returncode == 0
+    text = _output(result)
     assert "list" in text or "create" in text
