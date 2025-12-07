@@ -1,35 +1,53 @@
-# Local developer stack configuration.
+# Full-stack development configuration (Gateway/DAG Manager/WorldService/Seamless).
+# Use with the full docker-compose bundle and override secrets as needed.
 profile: dev
+
 worldservice:
   url: http://localhost:8080
   timeout: 0.3
   retries: 2
   enable_proxy: true
   enforce_live_guard: true
+  dsn: sqlite:///./worlds.db
+  redis: redis://localhost:6379/0
+  bind:
+    host: 0.0.0.0
+    port: 8080
 
 gateway:
-  host: 127.0.0.1
-  port: 8000
-  redis_dsn: redis://localhost:6379/0
+  host: 0.0.0.0
+  port: 8080
+  redis_dsn: redis://localhost:6379/1
   database_backend: sqlite
-  database_dsn: ./qmtl.dev.db
-  insert_sentinel: true
+  database_dsn: sqlite:///./gateway.db
+  controlbus_brokers:
+    - localhost:9092
   controlbus_topics:
     - activation
     - policy
     - queue
+  commitlog_topic: dev.gateway.ingest
+  commitlog_group: dev-gateway-commit
+  commitlog_transactional_id: dev-gateway-writer
   events:
-    secret: dev-gateway-secret
+    secret: dev-secret
     ttl: 300
+    stream_url: ws://localhost:8080/ws/evt
+    fallback_url: ws://localhost:8080/ws
   websocket:
-    rate_limit_per_sec: 0
+    rate_limit_per_sec: 50
 
 dagmanager:
-  memory_repo_path: memrepo.dev.gpickle
+  neo4j_dsn: neo4j://localhost:7687
+  neo4j_user: neo4j
+  neo4j_password: dev-password
+  kafka_dsn: localhost:9092
   grpc_host: 127.0.0.1
   grpc_port: 50051
   http_host: 127.0.0.1
-  http_port: 8001
+  http_port: 8101
+  controlbus_dsn: localhost:9092
+  controlbus_queue_topic: queue
   enable_topic_namespace: false
 
 seamless:

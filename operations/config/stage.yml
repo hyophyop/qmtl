@@ -42,6 +42,10 @@ dagmanager:
 
 seamless:
   coordinator_url: https://stage-seamless-coordinator.internal
+  redis_dsn: redis://stage-redis:6379/3
+  questdb_dsn: postgresql://qmtl:stage-questdb@stage-questdb:8812/qmtl
+  artifact_endpoint: https://stage-minio.internal
+  artifact_bucket: qmtl-seamless
   artifacts_enabled: true
   artifact_dir: /var/lib/qmtl/seamless-artifacts
   fingerprint_mode: canonical

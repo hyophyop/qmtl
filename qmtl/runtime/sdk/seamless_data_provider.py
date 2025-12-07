@@ -36,14 +36,14 @@ from itertools import count
 
 import yaml
 
-from qmtl.foundation.config import SeamlessConfig
+from qmtl.foundation.config import DeploymentProfile, SeamlessConfig
 from qmtl.foundation.common.compute_context import (
     normalize_context_value,
     resolve_execution_domain,
 )
 from qmtl.runtime.sdk.configuration import (
     get_runtime_config_path,
-    get_seamless_config,
+    get_runtime_config,
 )
 
 from .history_coverage import (
@@ -66,6 +66,10 @@ from .exceptions import SeamlessSLAExceeded
 from .artifacts import ArtifactRegistrar, ArtifactPublication
 from .artifacts.fingerprint import compute_artifact_fingerprint
 from qmtl.foundation.schema import SchemaRegistryClient, SchemaValidationError
+from qmtl.foundation.seamless_health import (
+    format_coordinator_probe,
+    probe_coordinator_health,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +91,10 @@ _FALSE_VALUES = {"0", "false", "no", "off"}
 _PUBLISH_OVERRIDE_CACHE_PATH: str | None = None
 _PUBLISH_OVERRIDE_CACHE_VALUE: bool | None = None
 _PUBLISH_OVERRIDE_CACHE_LOADED: bool = False
+
+_COORDINATOR_HEALTH_ATTEMPTS = 3
+_COORDINATOR_HEALTH_BACKOFF_SECONDS = 10.0
+_COORDINATOR_HEALTH_TIMEOUT_SECONDS = 5.0
 
 
 def _coerce_bool(value: object | None, *, default: bool) -> bool:
@@ -595,8 +603,15 @@ class SeamlessDataProvider(HistoryProvider):
         self.backfiller = backfiller
         self.live_feed = live_feed
         self.max_backfill_chunk_size = max_backfill_chunk_size
-        config = seamless_config or get_seamless_config()
+        unified_config = get_runtime_config()
+        if unified_config is not None:
+            config = seamless_config or unified_config.seamless
+            deployment_profile = unified_config.profile
+        else:
+            config = seamless_config or SeamlessConfig()
+            deployment_profile = DeploymentProfile.DEV
         self._seamless_config = config
+        self._deployment_profile = deployment_profile
 
         conformance_defaults = self._build_conformance_defaults(
             config=config,
@@ -792,17 +807,60 @@ class SeamlessDataProvider(HistoryProvider):
 
     def _create_default_coordinator(self) -> BackfillCoordinator:
         url = (self._seamless_config.coordinator_url or "").strip()
-        if url:
-            try:
-                return DistributedBackfillCoordinator(url)
-            except Exception as exc:  # pragma: no cover - defensive
-                logger.error("seamless.coordinator.init_failed", exc_info=exc)
+        profile = getattr(self, "_deployment_profile", DeploymentProfile.DEV)
+        if not url:
+            message = "Prod profile requires seamless.coordinator_url for distributed backfill"
+            if profile is DeploymentProfile.PROD:
+                logger.error(
+                    "seamless.coordinator.missing_for_profile",
+                    extra={"coordinator_url": "<unset>", "profile": profile.value},
+                )
+                raise RuntimeError(message)
+            logger.warning(
+                "seamless.coordinator.unset_falling_back_inmemory",
+                extra={"coordinator_url": "<unset>"},
+            )
+            return InMemoryBackfillCoordinator()
+
+        try:
+            coordinator = DistributedBackfillCoordinator(url)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.error("seamless.coordinator.init_failed", exc_info=exc)
+            if profile is DeploymentProfile.PROD:
                 raise
-        logger.warning(
-            "seamless.coordinator.unset_falling_back_inmemory",
-            extra={"coordinator_url": url or "<unset>"},
+            logger.warning(
+                "seamless.coordinator.init_failed_falling_back_inmemory",
+                extra={"coordinator_url": url},
+            )
+            return InMemoryBackfillCoordinator()
+
+        if profile is DeploymentProfile.PROD:
+            healthy = self._check_coordinator_health(url, strict=True)
+            if not healthy:
+                logger.warning(
+                    "seamless.coordinator.unhealthy_falling_back_inmemory",
+                    extra={"coordinator_url": url},
+                )
+                return InMemoryBackfillCoordinator()
+        return coordinator
+
+    def _check_coordinator_health(self, url: str, *, strict: bool) -> bool:
+        result = probe_coordinator_health(
+            url,
+            attempts=_COORDINATOR_HEALTH_ATTEMPTS,
+            backoff_seconds=_COORDINATOR_HEALTH_BACKOFF_SECONDS,
+            timeout_seconds=_COORDINATOR_HEALTH_TIMEOUT_SECONDS,
         )
-        return InMemoryBackfillCoordinator()
+        if result.ok:
+            return True
+
+        suffix = format_coordinator_probe(result)
+        log_extra = {"coordinator_url": url, "probe": suffix}
+        log_fn = logger.error if strict else logger.warning
+        log_fn("seamless.coordinator.healthcheck_failed", extra=log_extra)
+        if strict:
+            raise RuntimeError(f"Seamless coordinator health check failed: {suffix}")
+        return False
 
     def _cache_now(self) -> float:
         clock = self._cache_clock

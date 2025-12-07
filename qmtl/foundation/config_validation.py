@@ -19,6 +19,10 @@ from qmtl.foundation.adapters import (
     open_asyncpg_connection,
 )
 from qmtl.foundation.common.health import probe_http_async
+from qmtl.foundation.seamless_health import (
+    format_coordinator_probe,
+    probe_coordinator_health_async,
+)
 from qmtl.foundation.config import (
     CONFIG_SECTION_NAMES,
     DeploymentProfile,
@@ -34,6 +38,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from qmtl.services.dagmanager.config import DagManagerConfig
     from qmtl.services.gateway.config import GatewayConfig
     from qmtl.services.worldservice.config import WorldServiceServerConfig
+    from qmtl.foundation.config import SeamlessConfig
 
 
 @dataclass(slots=True)
@@ -243,6 +248,129 @@ def _format_worldservice_probe(result: object) -> str:
     return ", ".join(details) if details else "no additional detail"
 
 
+async def _validate_seamless_redis(
+    dsn: str | None, *, offline: bool, profile: DeploymentProfile
+) -> ValidationIssue:
+    if not dsn:
+        severity = "error" if profile is DeploymentProfile.PROD else "warning"
+        hint = (
+            "Prod profile requires seamless.redis_dsn"
+            if profile is DeploymentProfile.PROD
+            else "seamless.redis_dsn not configured; using in-memory defaults (dev-only)"
+        )
+        return ValidationIssue(severity, hint)
+
+    if offline:
+        return ValidationIssue("warning", f"Offline mode: skipped Redis ping for {dsn}")
+
+    client = None
+    try:
+        client = create_redis_client(dsn)
+        await client.ping()
+    except Exception as exc:
+        severity = "error" if profile is DeploymentProfile.PROD else "warning"
+        return ValidationIssue(severity, f"Redis connection failed: {exc}")
+    finally:
+        if client is not None:
+            with contextlib.suppress(Exception):
+                await client.close()
+
+    return ValidationIssue("ok", f"Redis reachable at {dsn}")
+
+
+async def _validate_seamless_questdb(
+    dsn: str | None, *, offline: bool, profile: DeploymentProfile
+) -> ValidationIssue:
+    if not dsn:
+        severity = "error" if profile is DeploymentProfile.PROD else "warning"
+        hint = (
+            "Prod profile requires seamless.questdb_dsn"
+            if profile is DeploymentProfile.PROD
+            else "seamless.questdb_dsn not configured; using in-memory defaults (dev-only)"
+        )
+        return ValidationIssue(severity, hint)
+    if offline:
+        return ValidationIssue("warning", f"Offline mode: skipped QuestDB check for {dsn}")
+
+    conn = None
+    try:
+        conn = await open_asyncpg_connection(dsn)
+    except Exception as exc:
+        severity = "error" if profile is DeploymentProfile.PROD else "warning"
+        return ValidationIssue(severity, f"QuestDB connection failed: {exc}")
+    finally:
+        if conn is not None:
+            with contextlib.suppress(Exception):
+                await conn.close()
+
+    return ValidationIssue("ok", f"QuestDB reachable at {dsn}")
+
+
+def _format_probe(result: object) -> str:
+    parts: list[str] = []
+    code = getattr(result, "code", None)
+    if code:
+        parts.append(f"code={code}")
+    status = getattr(result, "status", None)
+    if status is not None:
+        parts.append(f"status={status}")
+    err = getattr(result, "err", None)
+    if err:
+        parts.append(f"error={err}")
+    latency = getattr(result, "latency_ms", None)
+    if latency is not None:
+        parts.append(f"latency_ms={latency:.1f}")
+    return ", ".join(parts) if parts else "no additional detail"
+
+
+async def _validate_seamless_artifacts(
+    endpoint: str | None,
+    *,
+    offline: bool,
+    profile: DeploymentProfile,
+) -> ValidationIssue:
+    if not endpoint:
+        severity = "error" if profile is DeploymentProfile.PROD else "warning"
+        hint = (
+            "Prod profile requires seamless.artifact_endpoint"
+            if profile is DeploymentProfile.PROD
+            else "seamless.artifact_endpoint not configured; using in-memory defaults (dev-only)"
+        )
+        return ValidationIssue(severity, hint)
+    if offline:
+        return ValidationIssue(
+            "warning",
+            f"Offline mode: skipped artifact endpoint check for {endpoint}",
+        )
+
+    health_url = endpoint.rstrip("/") + "/minio/health/live"
+    result = await probe_http_async(
+        health_url,
+        service="seamless-artifacts",
+        endpoint="/minio/health/live",
+        timeout=5.0,
+    )
+    if result.ok:
+        return ValidationIssue("ok", f"Artifact endpoint healthy at {endpoint}")
+    suffix = _format_probe(result)
+    severity = "error" if profile is DeploymentProfile.PROD else "warning"
+    return ValidationIssue(severity, f"Artifact endpoint probe failed ({suffix})")
+
+
+def _validate_seamless_artifact_bucket(
+    bucket: str | None, *, profile: DeploymentProfile
+) -> ValidationIssue:
+    if not bucket:
+        severity = "error" if profile is DeploymentProfile.PROD else "warning"
+        hint = (
+            "Prod profile requires seamless.artifact_bucket"
+            if profile is DeploymentProfile.PROD
+            else "seamless.artifact_bucket not configured; using in-memory defaults (dev-only)"
+        )
+        return ValidationIssue(severity, hint)
+    return ValidationIssue("ok", f"Artifact bucket configured ({bucket})")
+
+
 def validate_worldservice_config(
     server: "WorldServiceServerConfig" | None,
     *,
@@ -434,6 +562,67 @@ async def validate_gateway_config(
     return issues
 
 
+async def validate_seamless_config(
+    config: "SeamlessConfig",
+    *,
+    offline: bool = False,
+    profile: DeploymentProfile = DeploymentProfile.DEV,
+) -> Dict[str, ValidationIssue]:
+    issues: Dict[str, ValidationIssue] = {}
+    url = (config.coordinator_url or "").strip()
+    if not url:
+        severity = "error" if profile is DeploymentProfile.PROD else "warning"
+        hint = (
+            "Prod profile requires seamless.coordinator_url for distributed backfill"
+            if profile is DeploymentProfile.PROD
+            else "Coordinator URL not configured; falling back to in-memory stub (dev-only)"
+        )
+        issues["coordinator_url"] = ValidationIssue(severity, hint)
+        return issues
+
+    issues["coordinator_url"] = ValidationIssue("ok", f"Coordinator configured at {url}")
+
+    issues["redis_dsn"] = await _validate_seamless_redis(
+        config.redis_dsn, offline=offline, profile=profile
+    )
+    issues["questdb_dsn"] = await _validate_seamless_questdb(
+        config.questdb_dsn, offline=offline, profile=profile
+    )
+    issues["artifact_endpoint"] = await _validate_seamless_artifacts(
+        config.artifact_endpoint,
+        offline=offline,
+        profile=profile,
+    )
+    issues["artifact_bucket"] = _validate_seamless_artifact_bucket(
+        config.artifact_bucket, profile=profile
+    )
+
+    if profile is not DeploymentProfile.PROD:
+        return issues
+    if offline:
+        issues["health"] = ValidationIssue(
+            "warning",
+            f"Offline mode: skipped coordinator health check for {url}",
+        )
+        return issues
+
+    result = await probe_coordinator_health_async(
+        url,
+        attempts=3,
+        backoff_seconds=10.0,
+        timeout_seconds=5.0,
+    )
+    if result.ok:
+        issues["health"] = ValidationIssue("ok", f"Coordinator healthy at {url}")
+    else:
+        suffix = format_coordinator_probe(result)
+        issues["health"] = ValidationIssue(
+            "error",
+            f"Coordinator health check failed ({suffix})",
+        )
+    return issues
+
+
 async def validate_dagmanager_config(
     config: "DagManagerConfig",
     *,
@@ -595,6 +784,7 @@ __all__ = [
     "ValidationIssue",
     "validate_gateway_config",
     "validate_dagmanager_config",
+    "validate_seamless_config",
     "validate_config_structure",
     "validate_worldservice_config",
 ]

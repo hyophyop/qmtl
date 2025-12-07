@@ -1,11 +1,26 @@
-# Production baseline configuration.
+# Full-stack production configuration (Gateway/DAG Manager/WorldService/Seamless).
+# Replace placeholders and secrets before deployment.
 profile: prod
+
 worldservice:
   url: https://worldservice.prod.internal
   timeout: 0.4
   retries: 3
   enable_proxy: true
   enforce_live_guard: true
+  dsn: postgresql://worldsvc:{{ secrets.WORLDS_DB_PASSWORD }}@worlds-db.prod.internal:5432/worlds
+  redis: redis://redis.prod.internal:6379/4
+  controlbus_brokers:
+    - kafka-a.prod.internal:9092
+    - kafka-b.prod.internal:9092
+  controlbus_topic: policy
+  bind:
+    host: 0.0.0.0
+    port: 8443
+  auth:
+    header: Authorization
+    tokens:
+      - {{ secrets.WORLDSERVICE_TOKEN }}
 
 gateway:
   host: 0.0.0.0

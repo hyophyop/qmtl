@@ -1,0 +1,69 @@
+version: "3.9"
+
+# Development overrides for the full-stack bundle.
+# Usage:
+#   docker compose -f operations/docker-compose.full.yml -f operations/docker-compose.dev.override.yml up
+
+services:
+  gateway:
+    environment:
+      QMTL_CONFIG: /etc/qmtl/config.dev.yml
+    volumes:
+      - ./config/dev.full.yml:/etc/qmtl/config.dev.yml:ro
+    ports:
+      - "18080:8080"
+
+  dagmanager:
+    environment:
+      QMTL_CONFIG: /etc/qmtl/config.dev.yml
+    volumes:
+      - ./config/dev.full.yml:/etc/qmtl/config.dev.yml:ro
+    ports:
+      - "18101:8101"
+      - "150051:50051"
+
+  worldservice:
+    environment:
+      QMTL_CONFIG: /etc/qmtl/config.dev.yml
+    volumes:
+      - ./config/dev.full.yml:/etc/qmtl/config.dev.yml:ro
+    ports:
+      - "18443:8443"
+
+  seamless-coordinator:
+    environment:
+      COORDINATOR_ID: ${SEAMLESS_COORDINATOR_ID:-dev}
+      REDIS_DSN: ${SEAMLESS_COORDINATOR_REDIS_DSN:-redis://redis:6379/3}
+      QUESTDB_DSN: ${SEAMLESS_COORDINATOR_QUESTDB_DSN:-postgresql://qmtl:qmtl@questdb:8812/qmtl}
+      ARTIFACT_BUCKET: ${MINIO_BUCKET:-qmtl-seamless}
+    ports:
+      - "15010:8080"
+      - "${SEAMLESS_COORDINATOR_PROMETHEUS_PORT:-9102}:9102"
+
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: qmtl
+    ports:
+      - "15432:5432"
+
+  controlbus:
+    ports:
+      - "19092:9092"
+
+  redis:
+    ports:
+      - "16379:6379"
+
+  questdb:
+    ports:
+      - "18812:8812"
+      - "19000:9000"
+
+  minio:
+    environment:
+      MINIO_ROOT_USER: seamless
+      MINIO_ROOT_PASSWORD: seamless123
+      MINIO_BUCKET: qmtl-seamless
+      MINIO_CONSOLE_PORT: ${MINIO_CONSOLE_PORT:-9001}
+    ports:
+      - "19001:${MINIO_CONSOLE_PORT:-9001}"

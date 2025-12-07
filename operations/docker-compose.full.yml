@@ -1,0 +1,182 @@
+version: "3.9"
+
+services:
+  gateway:
+    image: ghcr.io/qmtl/gateway:latest
+    depends_on:
+      - postgres
+      - redis
+      - controlbus
+      - worldservice
+    environment:
+      QMTL_CONFIG: /etc/qmtl/config.yml
+    volumes:
+      - ./config/prod.full.yml:/etc/qmtl/config.yml:ro
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  dagmanager:
+    image: ghcr.io/qmtl/dagmanager:latest
+    depends_on:
+      - neo4j
+      - controlbus
+    environment:
+      QMTL_CONFIG: /etc/qmtl/config.yml
+    volumes:
+      - ./config/prod.full.yml:/etc/qmtl/config.yml:ro
+    ports:
+      - "8101:8101"
+      - "50051:50051"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8101/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  worldservice:
+    image: ghcr.io/qmtl/worldservice:latest
+    depends_on:
+      - redis
+      - controlbus
+    environment:
+      QMTL_CONFIG: /etc/qmtl/config.yml
+    volumes:
+      - ./config/prod.full.yml:/etc/qmtl/config.yml:ro
+    ports:
+      - "8443:8443"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8443/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  seamless-coordinator:
+    image: ghcr.io/qmtl/seamless-coordinator:0.5.2
+    depends_on:
+      - redis
+      - questdb
+      - minio
+    environment:
+      COORDINATOR_ID: ${SEAMLESS_COORDINATOR_ID:-prod}
+      BIND_ADDR: ${SEAMLESS_COORDINATOR_BIND:-0.0.0.0:8080}
+      PROMETHEUS_PORT: ${SEAMLESS_COORDINATOR_PROMETHEUS_PORT:-9102}
+      REDIS_DSN: ${SEAMLESS_COORDINATOR_REDIS_DSN:-redis://redis:6379/3}
+      QUESTDB_DSN: ${SEAMLESS_COORDINATOR_QUESTDB_DSN:-postgresql://qmtl:qmtl@questdb:8812/qmtl}
+      ARTIFACT_ENDPOINT: http://minio:9000
+      ARTIFACT_BUCKET: ${MINIO_BUCKET:-qmtl-seamless}
+      ARTIFACT_ACCESS_KEY: ${MINIO_ROOT_USER:-seamless}
+      ARTIFACT_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-seamless123}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    ports:
+      - "5010:8080"
+      - "${SEAMLESS_COORDINATOR_PROMETHEUS_PORT:-9102}:9102"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  controlbus:
+    image: redpanda/redpanda:v23.1.17
+    command:
+      [
+        "redpanda",
+        "start",
+        "--smp",
+        "1",
+        "--memory",
+        "1G",
+        "--overprovisioned",
+        "--node-id",
+        "0",
+        "--check=false",
+        "--kafka-addr",
+        "PLAINTEXT://0.0.0.0:9092",
+        "--advertise-kafka-addr",
+        "PLAINTEXT://controlbus:9092",
+      ]
+    ports:
+      - "9092:9092"
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: qmtl
+      POSTGRES_USER: qmtl
+      POSTGRES_PASSWORD: qmtl
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qmtl"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  neo4j:
+    image: neo4j:5
+    environment:
+      NEO4J_AUTH: none
+    ports:
+      - "7687:7687"
+      - "7474:7474"
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell 'RETURN 1' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  questdb:
+    image: questdb/questdb:7.3.2
+    environment:
+      QDB_PG_USER: qmtl
+      QDB_PG_PASSWORD: qmtl
+      QDB_PG_DATABASE: qmtl
+    ports:
+      - "8812:8812"
+      - "9000:9000"
+    volumes:
+      - questdb_data:/var/lib/questdb
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  minio:
+    image: minio/minio:RELEASE.2024-05-10T02-41-44Z
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-seamless}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-seamless123}
+      MINIO_BUCKET: ${MINIO_BUCKET:-qmtl-seamless}
+      MINIO_CONSOLE_PORT: ${MINIO_CONSOLE_PORT:-9001}
+    command: ["server", "/data", "--console-address", ":${MINIO_CONSOLE_PORT:-9001}"]
+    ports:
+      - "9000:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:${MINIO_CONSOLE_PORT:-9001}"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${MINIO_CONSOLE_PORT:-9001}/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  questdb_data:
+  minio_data:
