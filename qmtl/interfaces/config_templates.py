@@ -14,6 +14,10 @@ __all__ = [
 ]
 
 CONFIG_TEMPLATE_FILES = {
+    # Preferred names aligned with deployment profiles
+    "dev": "qmtl.minimal.yml",
+    "prod": "qmtl.maximal.yml",
+    # Backward-compatible aliases
     "minimal": "qmtl.minimal.yml",
     "maximal": "qmtl.maximal.yml",
 }

@@ -155,7 +155,7 @@ Each track is structured as “Direction (Design North Star) → Key Milestones 
 ### 5.3 Concrete Work Examples
 
 - `docs/en/architecture/seamless_data_provider_v2.md` / `docs/ko/architecture/seamless_data_provider_v2.md`  
-  - Add world preset on-ramp rules from the data-plane viewpoint and integrate the archived `rewrite_architecture_docs.md` prescriptions.
+  - Add world preset on-ramp rules from the data-plane viewpoint and integrate the archived [rewrite_architecture_docs.md](../../../docs_archive/rewrite_architecture_docs.md) prescriptions.
 - `docs/en/world/world.md` / `docs/ko/world/world.md`  
   - Extend world examples with data preset sections and show how Runner/CLI derive Seamless configurations.
 

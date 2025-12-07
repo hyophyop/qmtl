@@ -133,12 +133,12 @@ def _command_tables(admin: bool = False) -> tuple[dict[str, CommandHandler], dic
         "world": cmd_world,
         "init": cmd_init,
         "version": cmd_version,
+        "config": lambda argv: int(import_module("qmtl.interfaces.cli.config").run(argv) or 0),
     }
     legacy = {
         "service": "Use 'qmtl submit' for strategy execution, 'qmtl --admin gw' for gateway",
         "tools": "Tools integrated into main commands. Use 'qmtl submit' instead",
         "project": "Use 'qmtl init' for project creation",
-        "config": "Configuration simplified - use environment variables",
         "run": "Use 'qmtl submit' instead",
         "offline": "Use 'qmtl submit --mode backtest' instead",
     }

@@ -16,7 +16,7 @@ last_modified: 2025-12-06
 
 - SDP v2는 런타임에서 cache→storage→backfill→live 경로와 ConformancePipeline/SLA/metrics를 통해 데이터 품질을 관리한다.
 - `world.data.presets[]`가 선언된 월드는 world/preset 정보를 기반으로 Runner/CLI가 **Seamless preset + data spec**만으로 SDP 인스턴스를 자동 구성해 `StreamInput`에 주입하며, 사용자는 data preset/fingerprint만 의식하면 된다.
-- 본 문서는 데이터 플레인 관점에서 Core Loop 정렬을 규범화하고, `rewrite_architecture_docs.md`와 함께 “world 중심 데이터 preset → SDP wiring” 규약까지 포함하도록 확장한다.
+- 본 문서는 데이터 플레인 관점에서 Core Loop 정렬을 규범화하고, [rewrite_architecture_docs.md](../../../docs_archive/rewrite_architecture_docs.md)와 함께 “world 중심 데이터 preset → SDP wiring” 규약까지 포함하도록 확장한다.
 
 > **상태:** 심리스 데이터 프로바이더 v2 아키텍처는 런타임에 정식 적용되었습니다. 분산 백필 코디네이터가 인프로세스 스텁을 대체했고, `SLAPolicy` 예산이 강제되며, 아래에서 언급하는 관측 지표가 기본으로 방출됩니다. Core Loop 골든 시그널 세트는 `../operations/core_loop_golden_signals.md`에 정리되었으며, 남은 로드맵은 스키마 거버넌스 유지·대시보드 확장 같은 점진 개선에 집중합니다.
 

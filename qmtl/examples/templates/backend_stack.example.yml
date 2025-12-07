@@ -57,6 +57,8 @@ backends:
 worldservice:
   dsn: ${backends.sql.worldservice_dsn}
   redis: ${backends.redis.worldservice_activation}
+  controlbus_brokers: *kafka_brokers
+  controlbus_topic: ${backends.kafka.controlbus_topics.policy}
   bind:
     host: 0.0.0.0
     port: 8080

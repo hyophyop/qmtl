@@ -3,6 +3,10 @@
 
 profile: prod
 
+kafka_brokers: &kafka_brokers
+  - kafka-1.example.com:9092
+  - kafka-2.example.com:9092
+
 worldservice:
   url: https://worldservice.example.com
   timeout: 1.5
@@ -13,6 +17,8 @@ worldservice:
   cache_max_entries: 2048
   dsn: postgresql://worldsvc:CHANGE_ME@worlds-db.example.com:5432/worlds
   redis: redis://cache.example.com:6379/4
+  controlbus_brokers: *kafka_brokers
+  controlbus_topic: policy
   bind:
     host: 0.0.0.0
     port: 8443
@@ -29,9 +35,7 @@ backends:
     gateway_dsn: postgresql://gateway:CHANGE_ME@gateway-db.example.com:5432/gateway
     dagmanager_dsn: postgresql://dagmgr:CHANGE_ME@dag-db.example.com:5432/dagmgr
   kafka:
-    bootstrap_servers:
-      - kafka-1.example.com:9092
-      - kafka-2.example.com:9092
+    bootstrap_servers: *kafka_brokers
     bootstrap: kafka-1.example.com:9092,kafka-2.example.com:9092
     sasl:
       mechanism: SCRAM-SHA-512
@@ -52,7 +56,7 @@ gateway:
   database_backend: postgres
   database_dsn: ${backends.sql.gateway_dsn}
   insert_sentinel: true
-  controlbus_brokers: ${backends.kafka.bootstrap_servers}
+  controlbus_brokers: *kafka_brokers
   controlbus_topics:
     - activation
     - policy
@@ -70,7 +74,7 @@ gateway:
   worldservice_url: ${worldservice.url}
 
 dagmanager:
-  memory_repo_path: null
+  memory_repo_path: /var/lib/qmtl/dagmanager/memrepo.gpickle
   neo4j_dsn: neo4j+s://neo4j.example.com:7687
   neo4j_user: dagmanager
   neo4j_password: ${NEO4J_PASSWORD}
@@ -140,5 +144,5 @@ test:
   test_mode: false
   fail_on_history_gap: true
   fixed_now: null
-  history_start: 2020-01-01T00:00:00Z
+  history_start: "2020-01-01T00:00:00Z"
   history_end: null

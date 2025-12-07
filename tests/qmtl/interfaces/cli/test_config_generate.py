@@ -32,7 +32,7 @@ def test_generate_refuses_to_overwrite(tmp_path: Path, capsys: pytest.CaptureFix
         config_cli.run([
             "generate",
             "--profile",
-            "minimal",
+            "dev",
             "--output",
             str(output),
         ])
@@ -50,20 +50,20 @@ def test_generate_force_overwrites(tmp_path: Path) -> None:
     config_cli.run([
         "generate",
         "--profile",
-        "maximal",
+        "prod",
         "--output",
         str(output),
         "--force",
     ])
 
-    expected = resolve_template("maximal").read_text()
+    expected = resolve_template("prod").read_text()
     assert output.read_text() == expected
 
 
 def test_generate_defaults_to_cwd(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
 
-    config_cli.run(["generate", "--profile", "minimal"])
+    config_cli.run(["generate", "--profile", "dev"])
 
-    expected = resolve_template("minimal").read_text()
+    expected = resolve_template("dev").read_text()
     assert Path("qmtl.yml").read_text() == expected

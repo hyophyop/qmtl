@@ -99,6 +99,7 @@ nav:
       - YAML-Only Configuration Overhaul: design/yaml_config_overhaul.md
       - Seamless Data Provider: design/seamless_data_provider.md
       - Seamless Materialize/Verify Surface: design/seamless_materialize_jobs.md
+      - Seamless Full-Stack Bundle: design/seamless_full_stack_bundle.md
   - Reference:
       - Overview: reference/README.md
       - FAQ: reference/faq.md
@@ -195,6 +196,7 @@ plugins:
             "Rebalancing Schema Coordination": "리밸런싱 스키마 조율"
             Design: 설계
             QMTL UI: QMTL UI
+            Seamless Full-Stack Bundle: 심리스 풀스택 번들
             Reference: 레퍼런스
             World: 월드
             "Backward Compatibility Cleanup Notes": "하위호환 제거 메모"

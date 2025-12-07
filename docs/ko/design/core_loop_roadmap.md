@@ -202,7 +202,7 @@ P‑A/B/C/P‑0 중 어느 것에도 매핑되지 않는 변경은 “합리적�
 ### 5.3 구체적인 작업 예시
 
 - `docs/ko/architecture/seamless_data_provider_v2.md`  
-  - world preset on‑ramp 규약을 데이터 플레인 관점에서 명시하고, `rewrite_architecture_docs.md`에서 정의한 규약을 통합한다.
+  - world preset on‑ramp 규약을 데이터 플레인 관점에서 명시하고, [rewrite_architecture_docs.md](../../../docs_archive/rewrite_architecture_docs.md)에서 정의한 규약을 통합한다.
 - `docs/ko/world/world.md`  
   - world 설정 예시에서 데이터 preset 항목을 추가하고, Runner/CLI가 실제로 어떻게 Seamless 인스턴스를 구성하는지 예제를 포함한다.
 

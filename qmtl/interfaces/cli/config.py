@@ -82,8 +82,8 @@ def _build_generate_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--profile",
         choices=profiles,
-        default="minimal",
-        help=_("Configuration template profile to write"),
+        default="dev",
+        help=_("Configuration template profile to write (dev/prod; minimal/maximal kept as aliases)"),
     )
     parser.add_argument(
         "--output",
