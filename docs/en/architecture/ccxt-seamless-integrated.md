@@ -4,7 +4,7 @@
 
 - Purpose: Define how CCXT-backed exchange data plugs into the Seamless data plane so strategies/worlds can rely on a **consistent history + live feed** across venues and symbols.
 - Core Loop position: Supports the Core Loop’s **“data supply automation” + “market replay backtest”** stages by specifying how history coverage and live updates are delivered to strategies.
-- Implementation status and evolution are tracked in [seamless_data_provider_v2.md](seamless_data_provider_v2.md) and [rewrite_architecture_docs.md](../../../docs_archive/rewrite_architecture_docs.md) from a Core Loop alignment perspective.
+- Implementation status and evolution are tracked in [seamless_data_provider_v2.md](seamless_data_provider_v2.md) and [rewrite_architecture_docs.md](../archive/rewrite_architecture_docs.md) from a Core Loop alignment perspective.
 
 ## Related Documents
 - [Seamless Data Provider v2](seamless_data_provider_v2.md)
