@@ -13,15 +13,17 @@ from .nodespec import CanonicalNodeSpec, serialize_nodespec
 def hash_blake3(data: bytes, existing_ids: Iterable[str] | None = None) -> str:
     """Return a ``blake3:``-prefixed digest for ``data``.
 
+    The initial digest uses the standard BLAKE3 hash. If a collision is detected
+    in ``existing_ids``, retries are produced via a domain-separated suffix
+    (``b"|collision:<n>"``) hashed with BLAKE3's XOF output, extending the digest
+    length for additional collision resistance while remaining deterministic.
+
     Parameters
     ----------
     data : bytes
         Payload to hash.
     existing_ids : Iterable[str] | None
         Optional set of already issued identifiers used to avoid collisions.
-        If provided and the computed digest already exists within ``existing_ids``
-        a deterministic suffix is appended to the payload and re-hashed until a
-        unique digest is produced.
     """
 
     digest = blake3(data).hexdigest()
@@ -36,7 +38,11 @@ def hash_blake3(data: bytes, existing_ids: Iterable[str] | None = None) -> str:
 
     counter = 1
     while True:
-        digest = blake3(data + f"|{counter}".encode()).hexdigest()
+        hasher = blake3()
+        hasher.update(data)
+        hasher.update(b"|collision:")
+        hasher.update(str(counter).encode())
+        digest = hasher.digest(length=64).hex()
         identifier = f"blake3:{digest}"
         if identifier not in seen:
             return identifier
