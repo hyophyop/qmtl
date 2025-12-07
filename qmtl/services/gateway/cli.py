@@ -82,7 +82,7 @@ async def _main(argv: list[str] | None = None) -> None:
 
     redis_client = _resolve_redis(config, profile=profile)
     insert_sentinel, enforce_live_guard = _resolve_flags(config, args)
-    controlbus_consumer = _build_controlbus_consumer(config)
+    controlbus_consumer = _build_controlbus_consumer(config, profile=profile)
     _enforce_database_profile(config, profile=profile)
     commit_writer, commit_consumer = await _build_commitlog_clients(
         config, profile=profile
@@ -230,9 +230,27 @@ def _resolve_flags(config: GatewayConfig, args: argparse.Namespace) -> tuple[boo
     return insert_sentinel, enforce_live_guard
 
 
-def _build_controlbus_consumer(config: GatewayConfig) -> ControlBusConsumer | None:
-    if not config.controlbus_topics:
+def _build_controlbus_consumer(
+    config: GatewayConfig, *, profile: DeploymentProfile
+) -> ControlBusConsumer | None:
+    missing_brokers = not config.controlbus_brokers
+    missing_topics = not config.controlbus_topics
+    if profile is DeploymentProfile.PROD and (missing_brokers or missing_topics):
+        message = _(
+            "Prod profile requires controlbus_brokers/controlbus_topics for Gateway"
+        )
+        logging.error(message)
+        raise SystemExit(message)
+
+    if missing_brokers or missing_topics:
+        logging.info(
+            _(
+                "ControlBus consumer disabled (dev profile): missing brokers/topics. "
+                "Set gateway.controlbus_brokers/topics for production."
+            )
+        )
         return None
+
     return ControlBusConsumer(
         brokers=config.controlbus_brokers,
         topics=config.controlbus_topics,

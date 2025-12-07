@@ -184,6 +184,34 @@ class TopicConfigLoader:
         return config
 
 
+def _enforce_persistent_backends(
+    cfg: DagManagerConfig, *, profile: DeploymentProfile
+) -> None:
+    if profile is not DeploymentProfile.PROD:
+        return
+
+    if not cfg.neo4j_dsn:
+        message = _(
+            "Prod profile requires dagmanager.neo4j_dsn; in-memory repository is disabled"
+        )
+        logging.error(message)
+        raise SystemExit(message)
+
+    if not cfg.kafka_dsn:
+        message = _(
+            "Prod profile requires dagmanager.kafka_dsn; in-memory queue manager is disabled"
+        )
+        logging.error(message)
+        raise SystemExit(message)
+
+    if not cfg.controlbus_dsn or not cfg.controlbus_queue_topic:
+        message = _(
+            "Prod profile requires ControlBus broker/topic for DAG Manager"
+        )
+        logging.error(message)
+        raise SystemExit(message)
+
+
 @dataclass
 class _KafkaAdminClient:
     """Thin wrapper around :mod:`confluent_kafka` for metadata access."""
@@ -339,6 +367,7 @@ async def _run(
             raise SystemExit(f"Prod profile requires persistent backends: {joined}")
 
     set_topic_namespace_enabled(cfg.enable_topic_namespace)
+    _enforce_persistent_backends(cfg, profile=profile)
     driver = None
     repo = None
     admin_client = None

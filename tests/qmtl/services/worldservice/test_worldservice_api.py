@@ -16,6 +16,11 @@ from qmtl.services.worldservice.services import WorldService
 from qmtl.services.worldservice.storage import PersistentStorage, Storage
 
 
+class _PersistentStoreStub:
+    async def close(self) -> None:  # pragma: no cover - interface stub
+        return None
+
+
 class DummyBus(ControlBusProducer):
     def __init__(self) -> None:
         self.events: list[tuple[str, str, dict]] = []
@@ -1307,6 +1312,21 @@ async def test_create_app_without_redis_uses_in_memory_storage():
         assert app.state.storage is app.state.world_service.store
 
 
+def test_create_app_requires_redis_in_prod_profile(tmp_path):
+    config_path = tmp_path / "worldservice.yml"
+    config_path.write_text(
+        """
+profile: prod
+worldservice:
+  server:
+    dsn: sqlite+aiosqlite:///worlds.db
+""".strip()
+    )
+
+    with pytest.raises(RuntimeError, match="worldservice.server.redis"):
+        create_app(config_path=config_path)
+
+
 def test_create_app_loads_config_from_explicit_path(tmp_path):
     config_path = tmp_path / "worldservice.yml"
     config_path.write_text(
@@ -1336,19 +1356,21 @@ worldservice:
 """.strip()
     )
 
-    with pytest.raises(RuntimeError, match="ControlBus"):
+    with pytest.raises(RuntimeError, match="PersistentStorage"):
         create_app(config_path=config_path, storage=Storage())
 
 
 def test_create_app_requires_controlbus_in_prod_profile():
     with pytest.raises(RuntimeError, match="ControlBus"):
-        create_app(profile=DeploymentProfile.PROD, storage=Storage())
+        create_app(profile=DeploymentProfile.PROD, storage=_PersistentStoreStub())
 
 
 def test_create_app_sets_controlbus_required_flag_in_prod():
     producer = ControlBusProducer(producer=_StubProducer(), required=False)
 
-    app = create_app(bus=producer, profile=DeploymentProfile.PROD, storage=Storage())
+    app = create_app(
+        bus=producer, profile=DeploymentProfile.PROD, storage=_PersistentStoreStub()
+    )
 
     assert producer._required is True
     assert app.state.world_service.bus is producer

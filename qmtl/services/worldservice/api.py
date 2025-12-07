@@ -88,6 +88,18 @@ def _config_storage_factory(config: WorldServiceServerConfig) -> Callable[[], Aw
     return _factory
 
 
+def _enforce_persistent_storage(
+    storage: Storage | StorageHandle, *, profile: DeploymentProfile
+) -> None:
+    instance = storage.storage if isinstance(storage, StorageHandle) else storage
+    if profile is not DeploymentProfile.PROD:
+        return
+    if isinstance(instance, Storage) and not isinstance(instance, PersistentStorage):
+        raise RuntimeError(
+            "Prod profile requires PersistentStorage; in-memory storage is disabled"
+        )
+
+
 def _coerce_profile(value: DeploymentProfile | str | None) -> DeploymentProfile | None:
     if value is None:
         return None
@@ -163,11 +175,36 @@ def create_app(
     if resolved_config is not None and storage is None and factory is None:
         if resolved_config.redis:
             factory = _config_storage_factory(resolved_config)
+        elif resolved_profile is DeploymentProfile.PROD:
+            raise RuntimeError(
+                "Prod profile requires worldservice.server.redis for activation cache"
+            )
+        else:
+            logger.warning(
+                "WorldService Redis not configured; using in-memory storage (dev profile)"
+            )
 
     if resolved_profile is None:
         resolved_profile = DeploymentProfile.DEV
 
     store = storage or Storage()
+    if storage is not None:
+        _enforce_persistent_storage(storage, profile=resolved_profile)
+
+    if resolved_profile is DeploymentProfile.PROD and storage is None and factory is None:
+        raise RuntimeError(
+            "Prod profile requires PersistentStorage; supply storage or redis/dsn config"
+        )
+
+    if factory is not None and resolved_profile is DeploymentProfile.PROD:
+        original_factory = factory
+
+        async def _guarded_factory() -> StorageHandle:
+            handle = _coerce_storage_handle(await original_factory())
+            _enforce_persistent_storage(handle, profile=resolved_profile)
+            return handle
+
+        factory = _guarded_factory
     bus_instance: ControlBusProducer | None = bus
     if bus_instance is None and resolved_config is not None:
         brokers = resolved_config.controlbus_brokers
