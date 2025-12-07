@@ -78,10 +78,7 @@ class GatewayHealthCollector:
         if client is None:
             return "unknown"
         async def _call() -> Any:
-            result = client.ping()
-            if inspect.isawaitable(result):
-                return await result
-            return result
+            return bool(await client.ping())
 
         return await self._probe(_call)
 
