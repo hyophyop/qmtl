@@ -120,6 +120,8 @@ class ApplyRequest(EvaluateRequest):
 
 class ApplyResponse(BaseModel):
     active: List[str]
+    evaluation_run_id: str | None = None
+    evaluation_run_url: str | None = None
 
 
 class ApplyAck(BaseModel):

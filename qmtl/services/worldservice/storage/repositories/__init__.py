@@ -16,6 +16,7 @@ from ..worlds import WorldRepository
 
 from .activation_repo import PersistentActivationRepository
 from .binding_repo import PersistentBindingRepository
+from .evaluation_runs import PersistentEvaluationRunRepository
 from .policy_repo import PersistentPolicyRepository
 from .world_repo import PersistentWorldRepository
 
@@ -38,4 +39,5 @@ __all__ = [
     "PersistentPolicyRepository",
     "PersistentBindingRepository",
     "PersistentActivationRepository",
+    "PersistentEvaluationRunRepository",
 ]

@@ -311,7 +311,98 @@ class WorldService:
 
     async def evaluate(self, world_id: str, payload: EvaluateRequest) -> ApplyResponse:
         active = await self._evaluator.determine_active(world_id, payload)
-        return ApplyResponse(active=active)
+        run_id, strategy_id = await self._maybe_record_evaluation_run(world_id, payload, active)
+        eval_url = (
+            self._build_evaluation_run_url(world_id, strategy_id, run_id)
+            if run_id and strategy_id
+            else None
+        )
+        return ApplyResponse(
+            active=active,
+            evaluation_run_id=run_id,
+            evaluation_run_url=eval_url,
+        )
+
+    async def _maybe_record_evaluation_run(
+        self,
+        world_id: str,
+        payload: EvaluateRequest,
+        active: list[str] | None,
+    ) -> tuple[str | None, str | None]:
+        strategy_id = self._resolve_strategy_id(payload)
+        if strategy_id is None:
+            return None, None
+
+        run_id = payload.run_id or self._default_evaluation_run_id(strategy_id)
+        stage = (payload.stage or "backtest").lower()
+        risk_tier = (payload.risk_tier or "unknown").lower()
+        metrics = self._extract_metrics(payload, strategy_id)
+        validation_payload = self._extract_validation_payload(payload)
+        active_flag = strategy_id in (active or [])
+        summary = {
+            "status": "pass" if active_flag else "fail",
+            "active": active_flag,
+            "active_set": list(active or []),
+        }
+
+        try:
+            await self.store.record_evaluation_run(
+                world_id,
+                strategy_id,
+                run_id,
+                stage=stage,
+                risk_tier=risk_tier,
+                metrics=metrics,
+                validation=validation_payload,
+                summary=summary,
+            )
+        except Exception:  # pragma: no cover - defensive best-effort
+            logger.exception("Failed to record evaluation run for %s/%s", world_id, strategy_id)
+
+        return run_id, strategy_id
+
+    @staticmethod
+    def _resolve_strategy_id(payload: EvaluateRequest) -> str | None:
+        if payload.strategy_id:
+            return payload.strategy_id
+        if payload.metrics:
+            try:
+                return next(iter(payload.metrics.keys()))
+            except StopIteration:
+                return None
+        return None
+
+    @staticmethod
+    def _extract_metrics(payload: EvaluateRequest, strategy_id: str) -> dict[str, float]:
+        metrics = payload.metrics or {}
+        strategy_metrics = metrics.get(strategy_id)
+        if not isinstance(strategy_metrics, dict):
+            return {}
+        # Normalize to EvaluationMetrics shape; if already structured, pass through.
+        structured_keys = {"returns", "sample", "risk", "robustness", "diagnostics"}
+        if structured_keys & set(strategy_metrics.keys()):
+            return dict(strategy_metrics)
+        return {"returns": dict(strategy_metrics)}
+
+    @staticmethod
+    def _extract_validation_payload(payload: EvaluateRequest) -> dict | None:
+        if payload.policy is None:
+            return None
+        try:
+            return payload.policy.model_dump()  # type: ignore[union-attr]
+        except Exception:
+            return payload.policy if isinstance(payload.policy, dict) else None
+
+    @staticmethod
+    def _default_evaluation_run_id(strategy_id: str) -> str:
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        return f"eval-{strategy_id}-{ts}"
+
+    @staticmethod
+    def _build_evaluation_run_url(world_id: str, strategy_id: str | None, run_id: str | None) -> str | None:
+        if strategy_id is None or run_id is None:
+            return None
+        return f"/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}"
 
     async def decide(self, world_id: str) -> DecisionEnvelope:
         now = datetime.now(timezone.utc)

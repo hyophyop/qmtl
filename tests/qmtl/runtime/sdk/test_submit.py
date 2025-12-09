@@ -533,6 +533,61 @@ class TestSubmitResult:
         assert payload["ws"]["decision"]["world_id"] == "world-x"
         assert payload["ws"]["activation"]["weight"] == 0.33
 
+    def test_submit_result_carries_evaluation_run_metadata(self):
+        class DummyMetrics:
+            sharpe = 1.2
+            max_drawdown = 0.1
+            win_ratio = 0.6
+            profit_factor = 1.3
+            car_mdd = 0.0
+            rar_mdd = 0.0
+            total_return = 0.05
+            num_trades = 12
+            correlation_avg = 0.2
+
+        class DummyValidation:
+            def __init__(self):
+                self.status = ValidationStatus.PASSED
+                self.weight = 0.2
+                self.rank = 1
+                self.contribution = 0.04
+                self.activated = True
+                self.metrics = DummyMetrics()
+                self.violations = []
+                self.improvement_hints = []
+                self.correlation_avg = 0.2
+
+        ws_eval = WsEvalResult(
+            active=True,
+            weight=0.2,
+            rank=1,
+            contribution=0.04,
+            violations=[],
+            correlation_avg=0.2,
+            evaluation_run_id="eval-abc123",
+            evaluation_run_url="http://gw/worlds/w/strategies/s/runs/eval-abc123",
+        )
+        validation = DummyValidation()
+        strategy = SimpleStrategy()
+
+        result = _build_submit_result_from_validation(
+            strategy=strategy,
+            strategy_class_name="SimpleStrategy",
+            strategy_id="sid-eval",
+            resolved_world="world-eval",
+            mode=Mode.BACKTEST,
+            world_notice=[],
+            validation_result=validation,
+            ws_eval=ws_eval,
+            gateway_available=True,
+        )
+
+        assert result.evaluation_run_id == "eval-abc123"
+        assert result.evaluation_run_url.endswith("eval-abc123")
+        payload = result.to_dict()
+        assert payload["evaluation_run_id"] == "eval-abc123"
+        assert payload["ws"]["evaluation_run_url"].endswith("eval-abc123")
+
 
 class TestSubmitFunction:
     """Tests for submit() function."""

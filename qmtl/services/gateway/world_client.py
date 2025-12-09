@@ -407,6 +407,31 @@ class WorldServiceClient:
             params=params,
         )
 
+    async def get_evaluation_runs(
+        self,
+        world_id: str,
+        strategy_id: str,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> Any:
+        return await self._request_json(
+            "GET",
+            f"/worlds/{world_id}/strategies/{strategy_id}/runs",
+            headers=headers,
+        )
+
+    async def get_evaluation_run(
+        self,
+        world_id: str,
+        strategy_id: str,
+        run_id: str,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> Any:
+        return await self._request_json(
+            "GET",
+            f"/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}",
+            headers=headers,
+        )
+
     async def post_evaluate(self, world_id: str, payload: Any, headers: Optional[Dict[str, str]] = None) -> Any:
         return await self._request_json(
             "POST",
