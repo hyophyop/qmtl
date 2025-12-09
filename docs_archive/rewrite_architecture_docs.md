@@ -23,7 +23,7 @@ status: archived
   - 아키텍처 개요: `docs/ko/architecture/architecture.md`
   - 월드/정책: `docs/ko/world/world.md`
   - 단순화 제안: `docs/ko/architecture/architecture.md#core-loop-합의-요약-편입` 편입
-  - Auto Returns: `./auto_returns_unified_design.md` (통합안)
+- Auto Returns: `../docs/ko/archive/auto_returns_unified_design.md` (통합안)
   - SR 통합: `./sr_integration_proposal.md`
 
 이 가이드는 **완전한 구현이 아직 없는 상태에서도**,  
@@ -109,7 +109,7 @@ status: archived
 
 - **핵심 부족/불연결**
   - **auto_returns 미구현**
-    - 설계 문서(`./auto_returns_unified_design.md`)의 `AutoReturnsConfig`, `auto_returns` 파라미터, `returns_derive.py`는 코드에 없다.
+    - 설계 문서(`../docs/ko/archive/auto_returns_unified_design.md`)의 `AutoReturnsConfig`, `auto_returns` 파라미터, `returns_derive.py`는 코드에 없다.
     - 실제 `submit_async`는
       - 인자로 받은 `returns`, 또는
       - `_extract_returns_from_strategy`로 `strategy.returns / equity / pnl`만 본다.
@@ -177,7 +177,7 @@ As‑Is 분석을 바탕으로, 핵심 복잡도 요인은 다음 세 가지로 
        - 실패 시에는 “파생 실패”를 improvement_hint로 남기고, 기존 동작(returns 없음)에 맞춰 거절
 
 - **문서 반영**
-  - `./auto_returns_unified_design.md`를 업데이트해:
+- `../docs/ko/archive/auto_returns_unified_design.md`를 업데이트해:
     - Runner.submit 전처리 레이어만 확장하고
     - ValidationPipeline 계약은 그대로 유지한다는 점을 명시
     - SR 통합 설계(`./sr_integration_proposal.md`)와 auto_returns 연결 지점을 Core Loop 기준으로 설명
@@ -272,7 +272,7 @@ As‑Is 분석을 바탕으로, 핵심 복잡도 요인은 다음 세 가지로 
 
 ### 4.4 Auto Returns / SR 관련 설계 문서들
 
-- `./auto_returns_unified_design.md`  
+- `../docs/ko/archive/auto_returns_unified_design.md`  
   `./sr_integration_proposal.md`
 
 - **As‑Is**
@@ -284,7 +284,7 @@ As‑Is 분석을 바탕으로, 핵심 복잡도 요인은 다음 세 가지로 
     - `목적:` Core Loop의 어느 단계를 단순화/자동화하기 위한 설계인지 한 줄로 설명
     - `As‑Is:` 현재 구현/사용 경험에서 사용자가 겪는 문제 요약
     - `To‑Be:` 이 설계가 성공했을 때 사용자가 얻게 될 경험(전략 작성/제출/평가 관점) 요약
-  - `./auto_returns_unified_design.md`의 경우:
+  - `../docs/ko/archive/auto_returns_unified_design.md`의 경우:
     - 구현/체크리스트 상태를 상단에서 계속 갱신해  
       Runner 전처리/returns_source/파생 헬퍼의 정합성을 추적 가능하게 한다.
 

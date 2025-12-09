@@ -90,6 +90,10 @@ nav:
       - CI: operations/ci.md
   - Design:
       - QMTL UI: design/qmtl_ui.md
+      - Core Loop × World Roadmap: design/core_loop_world_roadmap.md
+      - World Validation Architecture: design/world_validation_architecture.md
+      - World Validation v1 Implementation Plan: design/world_validation_v1_implementation_plan.md
+      - Model Risk Management Framework: design/model_risk_management_framework.md
       - WorldService Evaluation Runs & Metrics API: design/worldservice_evaluation_runs_and_metrics_api.md
       - YAML-Only Configuration Overhaul: design/yaml_config_overhaul.md
       - Seamless Materialize/Verify Surface: design/seamless_materialize_jobs.md
@@ -184,6 +188,10 @@ plugins:
             "Rebalancing Schema Coordination": "리밸런싱 스키마 조율"
             Design: 설계
             QMTL UI: QMTL UI
+            "Core Loop × World Roadmap": "Core Loop × World 로드맵"
+            "World Validation Architecture": "World 검증 계층 설계"
+            "Model Risk Management Framework": "모델 리스크 관리 프레임워크"
+            "World Validation v1 Implementation Plan": "World 검증 v1 구현 계획"
             Seamless Full-Stack Bundle: 심리스 풀스택 번들
             Reference: 레퍼런스
             World: 월드
