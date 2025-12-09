@@ -228,6 +228,13 @@ async def test_evaluation_run_creation_and_fetch():
             assert record["stage"] == "backtest"
             assert record["metrics"]["returns"]["sharpe"] == 1.5
             assert record["summary"]["status"] == "pass"
+            assert record["validation"]["results"]
+            assert set(record["validation"]["results"].keys()) >= {
+                "data_currency",
+                "sample",
+                "performance",
+                "risk_constraint",
+            }
 
 
 @pytest.mark.asyncio
