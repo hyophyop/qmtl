@@ -1,11 +1,95 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Tuple
-
 import math
+from dataclasses import dataclass, field
+from typing import Any, Dict, Iterable, Iterator, List, Mapping, Protocol, Sequence, Tuple
+
 import yaml
 from pydantic import BaseModel, Field
+
+
+def _flatten_metrics(values: Mapping[str, Any] | None) -> Dict[str, float]:
+    """Flatten nested metric payloads into a simple name -> float mapping."""
+    if not values:
+        return {}
+
+    flat: Dict[str, float] = {}
+    for key, value in values.items():
+        if isinstance(value, Mapping):
+            for sub_key, sub_value in value.items():
+                if isinstance(sub_value, (int, float)) and not isinstance(sub_value, bool):
+                    flat[sub_key] = float(sub_value)
+        elif isinstance(value, (int, float)) and not isinstance(value, bool):
+            flat[key] = float(value)
+    return flat
+
+
+def _normalize_metrics(metrics: Mapping[str, Mapping[str, Any]] | None) -> Dict[str, Dict[str, float]]:
+    """Normalize raw metrics to a per-strategy flat mapping."""
+    normalized: Dict[str, Dict[str, float]] = {}
+    if not metrics:
+        return normalized
+    for strategy_id, values in metrics.items():
+        normalized[strategy_id] = _flatten_metrics(values)
+    return normalized
+
+
+class RuleResult(BaseModel):
+    status: str
+    severity: str = "blocking"
+    owner: str = "quant"
+    reason_code: str
+    reason: str
+    tags: List[str] = Field(default_factory=list)
+    details: Dict[str, Any] = Field(default_factory=dict)
+
+
+@dataclass
+class RuleContext:
+    strategy_id: str
+    previous_active: Iterable[str] | None = None
+    correlations: Dict[Tuple[str, str], float] | None = None
+
+
+class ValidationRule(Protocol):
+    name: str
+
+    def evaluate(self, metrics: Mapping[str, float], context: RuleContext) -> RuleResult:
+        ...
+
+
+@dataclass
+class PolicyEvaluationResult(Iterable[str]):
+    selected_ids: List[str]
+    rule_results: Dict[str, Dict[str, RuleResult]] = field(default_factory=dict)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.selected_ids)
+
+    def __len__(self) -> int:
+        return len(self.selected_ids)
+
+    def __contains__(self, item: object) -> bool:
+        return item in self.selected_ids
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, PolicyEvaluationResult):
+            return self.selected_ids == other.selected_ids and self.rule_results == other.rule_results
+        if isinstance(other, list):
+            return self.selected_ids == other
+        return False
+
+    @property
+    def selected(self) -> List[str]:
+        return self.selected_ids
+
+    @property
+    def selected_ids_compat(self) -> List[str]:
+        """Alias for older callers expecting a selected_ids attribute."""
+        return self.selected_ids
+
+    def for_strategy(self, strategy_id: str) -> Dict[str, RuleResult]:
+        return self.rule_results.get(strategy_id, {})
 
 
 class ThresholdRule(BaseModel):
@@ -47,6 +131,7 @@ def parse_policy(raw: str | bytes | dict) -> Policy:
 
 
 def _apply_thresholds(metrics: Dict[str, Dict[str, float]], policy: Policy) -> List[str]:
+    """Legacy thresholds helper retained for compatibility."""
     result: List[str] = []
     for sid, vals in metrics.items():
         ok = True
@@ -111,12 +196,12 @@ def _apply_hysteresis(
 
 
 def evaluate_policy(
-    metrics: Dict[str, Dict[str, float]],
+    metrics: Mapping[str, Mapping[str, Any]],
     policy: Policy,
     prev_active: Iterable[str] | None = None,
     correlations: Dict[Tuple[str, str], float] | None = None,
-) -> List[str]:
-    """Return strategy ids that satisfy the policy.
+) -> PolicyEvaluationResult:
+    """Return strategy ids that satisfy the policy and detailed rule results.
 
     Args:
         metrics: per-strategy metric mapping.
@@ -124,22 +209,449 @@ def evaluate_policy(
         prev_active: previously active strategies for hysteresis.
         correlations: optional pairwise correlation matrix keyed by tuple(sorted((a,b))).
     """
-    candidates = _apply_thresholds(metrics, policy)
+    normalized = _normalize_metrics(metrics)
+    threshold_passed, threshold_failures = _evaluate_thresholds_with_details(normalized, policy.thresholds)
+
+    candidates = threshold_passed
+    topk_ranks: Dict[str, int] = {sid: idx for idx, sid in enumerate(candidates)}
     if policy.top_k:
-        candidates = _apply_topk(metrics, candidates, policy.top_k)
+        candidates, topk_ranks = _apply_topk_with_details(normalized, candidates, policy.top_k)
+    topk_selected = set(candidates)
+
+    correlation_violations: Dict[str, List[Tuple[str, float]]] = {}
     if policy.correlation:
-        candidates = _apply_correlation(correlations, candidates, policy.correlation)
+        candidates, correlation_violations = _apply_correlation_with_details(
+            correlations, candidates, policy.correlation
+        )
+
+    hysteresis_blocked: Dict[str, str] = {}
     if policy.hysteresis:
-        candidates = _apply_hysteresis(metrics, candidates, prev_active, policy.hysteresis)
-    return list(candidates)
+        candidates, hysteresis_blocked = _apply_hysteresis_with_details(
+            normalized, candidates, prev_active, policy.hysteresis
+        )
+
+    selected_ids = list(candidates)
+
+    grouped_thresholds = _group_thresholds(policy.thresholds)
+    rules: List[ValidationRule] = [
+        DataCurrencyRule(required_metrics=[t.metric for t in grouped_thresholds["data_currency"]]),
+        SampleRule(thresholds=grouped_thresholds["sample"]),
+        PerformanceRule(
+            thresholds=grouped_thresholds["performance"] or list(policy.thresholds.values()),
+            threshold_failures=threshold_failures,
+            top_k=policy.top_k,
+            topk_selected=topk_selected,
+            topk_ranks=topk_ranks,
+        ),
+        RiskConstraintRule(
+            correlation_rule=policy.correlation,
+            hysteresis_rule=policy.hysteresis,
+            correlation_violations=correlation_violations,
+            hysteresis_blocked=hysteresis_blocked,
+        ),
+    ]
+
+    rule_results: Dict[str, Dict[str, RuleResult]] = {}
+    previous = set(prev_active or [])
+    for strategy_id, strategy_metrics in normalized.items():
+        context = RuleContext(
+            strategy_id=strategy_id,
+            previous_active=previous,
+            correlations=correlations,
+        )
+        per_rule: Dict[str, RuleResult] = {}
+        for rule in rules:
+            per_rule[rule.name] = rule.evaluate(strategy_metrics, context)
+        rule_results[strategy_id] = per_rule
+
+    return PolicyEvaluationResult(selected_ids=selected_ids, rule_results=rule_results)
+
+
+def _group_thresholds(thresholds: Mapping[str, ThresholdRule]) -> Dict[str, List[ThresholdRule]]:
+    grouped: Dict[str, List[ThresholdRule]] = {
+        "data_currency": [],
+        "sample": [],
+        "performance": [],
+        "risk": [],
+    }
+    for rule in thresholds.values():
+        group = _classify_metric(rule.metric)
+        grouped[group].append(rule)
+    return grouped
+
+
+def _classify_metric(metric: str) -> str:
+    name = metric.lower()
+    if name.startswith(("lag", "stale", "fresh", "as_of", "coverage")):
+        return "data_currency"
+    if name.startswith(("sample", "history", "effective_history", "n_trades", "num_trades")) or "trade" in name:
+        return "sample"
+    if name.startswith(
+        (
+            "adv_",
+            "participation_rate",
+            "exposure",
+            "var",
+            "es",
+            "beta",
+            "correlation",
+            "leverage",
+            "tail",
+        )
+    ):
+        return "risk"
+    return "performance"
+
+
+def _evaluate_thresholds_with_details(
+    metrics: Mapping[str, Mapping[str, float]],
+    thresholds: Mapping[str, ThresholdRule],
+) -> Tuple[List[str], Dict[str, List[Dict[str, Any]]]]:
+    passed: List[str] = []
+    failures: Dict[str, List[Dict[str, Any]]] = {}
+
+    for sid, values in metrics.items():
+        strategy_failures: List[Dict[str, Any]] = []
+        for rule in thresholds.values():
+            val = values.get(rule.metric)
+            if val is None:
+                strategy_failures.append(
+                    {"metric": rule.metric, "reason": "missing_metric"}
+                )
+                continue
+            if rule.min is not None and val < rule.min:
+                strategy_failures.append(
+                    {
+                        "metric": rule.metric,
+                        "reason": "below_min",
+                        "min": rule.min,
+                        "value": val,
+                    }
+                )
+            if rule.max is not None and val > rule.max:
+                strategy_failures.append(
+                    {
+                        "metric": rule.metric,
+                        "reason": "above_max",
+                        "max": rule.max,
+                        "value": val,
+                    }
+                )
+        if strategy_failures:
+            failures[sid] = strategy_failures
+        else:
+            passed.append(sid)
+    return passed, failures
+
+
+def _apply_topk_with_details(
+    metrics: Dict[str, Dict[str, float]],
+    candidates: Iterable[str],
+    rule: TopKRule,
+) -> Tuple[List[str], Dict[str, int]]:
+    scored = [(sid, metrics.get(sid, {}).get(rule.metric, -math.inf)) for sid in candidates]
+    scored.sort(key=lambda x: x[1], reverse=True)
+    selected = [sid for sid, _ in scored[: rule.k]]
+    ranks: Dict[str, int] = {sid: idx for idx, (sid, _) in enumerate(scored)}
+    return selected, ranks
+
+
+def _apply_correlation_with_details(
+    correlations: Dict[Tuple[str, str], float] | None,
+    candidates: Iterable[str],
+    rule: CorrelationRule,
+) -> Tuple[List[str], Dict[str, List[Tuple[str, float]]]]:
+    if not correlations:
+        return list(candidates), {}
+    selected: List[str] = []
+    violations: Dict[str, List[Tuple[str, float]]] = {}
+    for sid in candidates:
+        blocked_by: List[Tuple[str, float]] = []
+        for other in selected:
+            corr = correlations.get((sid, other) if sid <= other else (other, sid), 0.0)
+            if abs(corr) > rule.max:
+                blocked_by.append((other, corr))
+        if blocked_by:
+            violations[sid] = blocked_by
+            continue
+        selected.append(sid)
+    return selected, violations
+
+
+def _apply_hysteresis_with_details(
+    metrics: Dict[str, Dict[str, float]],
+    candidates: Iterable[str],
+    prev_active: Iterable[str] | None,
+    rule: HysteresisRule,
+) -> Tuple[List[str], Dict[str, str]]:
+    prev = set(prev_active or [])
+    result: List[str] = []
+    blocked: Dict[str, str] = {}
+    for sid in candidates:
+        val = metrics.get(sid, {}).get(rule.metric)
+        if val is None:
+            continue
+        if sid in prev:
+            if val >= rule.exit:
+                result.append(sid)
+            else:
+                blocked[sid] = "exit"
+        else:
+            if val >= rule.enter:
+                result.append(sid)
+            else:
+                blocked[sid] = "enter"
+    return result, blocked
+
+
+@dataclass
+class DataCurrencyRule:
+    required_metrics: Sequence[str] | None = None
+    name: str = "data_currency"
+    severity: str = "blocking"
+    owner: str = "ops"
+    tags: Sequence[str] = ("data_currency",)
+
+    def evaluate(self, metrics: Mapping[str, float], context: RuleContext) -> RuleResult:
+        missing: List[str] = []
+        required = list(self.required_metrics or [])
+        if required:
+            missing = [metric for metric in required if metric not in metrics]
+        status = "pass"
+        reason_code = "data_currency_ok"
+        reason = "Required metrics present"
+        if not metrics:
+            status = "fail"
+            reason_code = "metrics_missing"
+            reason = "No metrics provided for strategy"
+        elif missing:
+            status = "fail"
+            reason_code = "missing_metric"
+            reason = f"Missing metrics: {', '.join(sorted(missing))}"
+        details = {
+            "missing_metrics": missing,
+            "available_metrics": sorted(metrics.keys()),
+        }
+        return RuleResult(
+            status=status,
+            severity=self.severity,
+            owner=self.owner,
+            reason_code=reason_code,
+            reason=reason,
+            tags=list(self.tags),
+            details=details,
+        )
+
+
+@dataclass
+class SampleRule:
+    thresholds: Sequence[ThresholdRule] = field(default_factory=list)
+    name: str = "sample"
+    severity: str = "soft"
+    owner: str = "quant"
+    tags: Sequence[str] = ("sample",)
+
+    def evaluate(self, metrics: Mapping[str, float], context: RuleContext) -> RuleResult:
+        sample_metrics = {
+            key: value
+            for key, value in metrics.items()
+            if key in {"n_trades_total", "n_trades_per_year", "num_trades", "effective_history_years", "sample_days"}
+        }
+        if self.thresholds:
+            _, failures = _evaluate_thresholds_with_details({"_": sample_metrics}, {t.metric: t for t in self.thresholds})
+            if failures:
+                detail = failures.get("_", [])
+                reason = f"Sample thresholds failed: {', '.join(item['metric'] for item in detail)}"
+                return RuleResult(
+                    status="fail",
+                    severity=self.severity,
+                    owner=self.owner,
+                    reason_code="sample_thresholds_failed",
+                    reason=reason,
+                    tags=list(self.tags),
+                    details={"violations": detail},
+                )
+
+        if sample_metrics and any(value is not None and value > 0 for value in sample_metrics.values()):
+            return RuleResult(
+                status="pass",
+                severity=self.severity,
+                owner=self.owner,
+                reason_code="sample_ok",
+                reason="Sample depth present",
+                tags=list(self.tags),
+                details={"sample_metrics": sample_metrics},
+            )
+
+        return RuleResult(
+            status="warn",
+            severity=self.severity,
+            owner=self.owner,
+            reason_code="sample_metrics_missing",
+            reason="No sample metrics found",
+            tags=list(self.tags),
+            details={"sample_metrics": sample_metrics},
+        )
+
+
+@dataclass
+class PerformanceRule:
+    thresholds: Sequence[ThresholdRule]
+    threshold_failures: Dict[str, List[Dict[str, Any]]]
+    top_k: TopKRule | None
+    topk_selected: set[str]
+    topk_ranks: Dict[str, int]
+    name: str = "performance"
+    severity: str = "blocking"
+    owner: str = "quant"
+    tags: Sequence[str] = ("performance", "thresholds")
+
+    def evaluate(self, metrics: Mapping[str, float], context: RuleContext) -> RuleResult:
+        sid = context.strategy_id
+        failures = self.threshold_failures.get(sid, [])
+        if failures:
+            reason = self._format_failure_reason(failures[0])
+            return RuleResult(
+                status="fail",
+                severity=self.severity,
+                owner=self.owner,
+                reason_code="performance_thresholds_failed",
+                reason=reason,
+                tags=list(self.tags),
+                details={"violations": failures},
+            )
+
+        if self.top_k and sid not in self.topk_selected:
+            rank = self.topk_ranks.get(sid)
+            reason = (
+                f"Rank {rank + 1} outside top_k={self.top_k.k}"
+                if rank is not None
+                else f"Not selected by top_k={self.top_k.k}"
+            )
+            return RuleResult(
+                status="fail",
+                severity=self.severity,
+                owner=self.owner,
+                reason_code="performance_rank_outside_top_k",
+                reason=reason,
+                tags=list(set(self.tags) | {"top_k"}),
+                details={"rank": rank, "top_k": self.top_k.k},
+            )
+
+        return RuleResult(
+            status="pass",
+            severity=self.severity,
+            owner=self.owner,
+            reason_code="performance_ok",
+            reason="Passed thresholds and ranking",
+            tags=list(self.tags),
+            details={
+                "rank": self.topk_ranks.get(sid),
+                "top_k": self.top_k.k if self.top_k else None,
+            },
+        )
+
+    @staticmethod
+    def _format_failure_reason(failure: Dict[str, Any]) -> str:
+        metric = failure.get("metric", "unknown")
+        reason = failure.get("reason", "threshold_failed")
+        if reason == "below_min":
+            return f"{metric} below minimum {failure.get('min')}"
+        if reason == "above_max":
+            return f"{metric} above maximum {failure.get('max')}"
+        if reason == "missing_metric":
+            return f"{metric} missing"
+        return f"{metric} failed"
+
+
+@dataclass
+class RiskConstraintRule:
+    correlation_rule: CorrelationRule | None
+    hysteresis_rule: HysteresisRule | None
+    correlation_violations: Dict[str, List[Tuple[str, float]]] = field(default_factory=dict)
+    hysteresis_blocked: Dict[str, str] = field(default_factory=dict)
+    name: str = "risk_constraint"
+    severity: str = "blocking"
+    owner: str = "risk"
+    tags: Sequence[str] = ("risk",)
+
+    def evaluate(self, metrics: Mapping[str, float], context: RuleContext) -> RuleResult:
+        sid = context.strategy_id
+        if self.correlation_rule and sid in self.correlation_violations:
+            blocked = [
+                {"strategy_id": other, "correlation": corr}
+                for other, corr in self.correlation_violations[sid]
+            ]
+            return RuleResult(
+                status="fail",
+                severity=self.severity,
+                owner=self.owner,
+                reason_code="correlation_constraint_failed",
+                reason=f"Correlation exceeds max {self.correlation_rule.max}",
+                tags=list(self.tags),
+                details={"blocked_by": blocked},
+            )
+
+        if self.hysteresis_rule and sid in self.hysteresis_blocked:
+            mode = self.hysteresis_blocked.get(sid)
+            reason_code = "hysteresis_exit" if mode == "exit" else "hysteresis_not_entered"
+            reason = (
+                f"{self.hysteresis_rule.metric} below exit {self.hysteresis_rule.exit} "
+                f"for previously active strategy"
+                if mode == "exit"
+                else f"{self.hysteresis_rule.metric} below enter {self.hysteresis_rule.enter}"
+            )
+            return RuleResult(
+                status="fail",
+                severity=self.severity,
+                owner=self.owner,
+                reason_code=reason_code,
+                reason=reason,
+                tags=list(self.tags),
+                details={
+                    "metric": self.hysteresis_rule.metric,
+                    "previously_active": sid in set(context.previous_active or []),
+                    "mode": mode,
+                    "value": metrics.get(self.hysteresis_rule.metric),
+                },
+            )
+
+        if not self.correlation_rule and not self.hysteresis_rule:
+            return RuleResult(
+                status="pass",
+                severity="info",
+                owner=self.owner,
+                reason_code="risk_constraints_not_configured",
+                reason="No risk constraints configured",
+                tags=list(self.tags),
+                details={},
+            )
+
+        return RuleResult(
+            status="pass",
+            severity=self.severity,
+            owner=self.owner,
+            reason_code="risk_constraints_ok",
+            reason="Risk constraints satisfied",
+            tags=list(self.tags),
+            details={},
+        )
 
 
 __all__ = [
     "Policy",
+    "PolicyEvaluationResult",
+    "ValidationRule",
+    "RuleContext",
+    "RuleResult",
     "ThresholdRule",
     "TopKRule",
     "CorrelationRule",
     "HysteresisRule",
+    "DataCurrencyRule",
+    "SampleRule",
+    "PerformanceRule",
+    "RiskConstraintRule",
     "parse_policy",
     "evaluate_policy",
 ]

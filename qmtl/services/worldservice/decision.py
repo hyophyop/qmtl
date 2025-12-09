@@ -11,7 +11,7 @@ from qmtl.runtime.transforms.linearity_metrics import (
     equity_linearity_metrics_v2,
 )
 
-from .policy_engine import Policy, evaluate_policy
+from .policy_engine import Policy, PolicyEvaluationResult, evaluate_policy
 from .schemas import ApplyRequest, EvaluateRequest, StrategySeries
 from .alpha_metrics import (
     alpha_performance_metrics_from_returns,
@@ -132,7 +132,7 @@ class DecisionEvaluator:
 
     async def determine_active(
         self, world_id: str, payload: ApplyRequest | EvaluateRequest
-    ) -> List[str]:
+    ) -> PolicyEvaluationResult:
         if isinstance(payload, ApplyRequest) and payload.plan:
             return await self._apply_plan(world_id, payload)
 
@@ -141,11 +141,12 @@ class DecisionEvaluator:
         metrics = self._augment_metrics(payload)
         return evaluate_policy(metrics, policy, prev, payload.correlations)
 
-    async def _apply_plan(self, world_id: str, payload: ApplyRequest) -> List[str]:
+    async def _apply_plan(self, world_id: str, payload: ApplyRequest) -> PolicyEvaluationResult:
         prev = payload.previous or await self.store.get_decisions(world_id)
         activate = set(payload.plan.activate)
         deactivate = set(payload.plan.deactivate)
-        return sorted((set(prev) - deactivate) | activate)
+        selected = sorted((set(prev) - deactivate) | activate)
+        return PolicyEvaluationResult(selected_ids=selected)
 
     async def _resolve_policy(
         self, world_id: str, payload: ApplyRequest | EvaluateRequest

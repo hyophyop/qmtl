@@ -20,6 +20,7 @@ from .apply_flow import ApplyCoordinator
 from .controlbus_producer import ControlBusProducer
 from .decision import DecisionEvaluator, augment_metrics_with_linearity
 from .policy import GatingPolicy
+from .policy_engine import PolicyEvaluationResult
 from .rebalancing import MultiWorldProportionalRebalancer, MultiWorldRebalanceContext, PositionSlice, SymbolDelta
 from .rebalancing.overlay import OverlayConfigError, OverlayPlanner
 from .run_state import ApplyRunRegistry, ApplyRunState, ApplyStage
@@ -310,8 +311,9 @@ class WorldService:
         )
 
     async def evaluate(self, world_id: str, payload: EvaluateRequest) -> ApplyResponse:
-        active = await self._evaluator.determine_active(world_id, payload)
-        run_id, strategy_id = await self._maybe_record_evaluation_run(world_id, payload, active)
+        evaluation = await self._evaluator.determine_active(world_id, payload)
+        active = list(evaluation)
+        run_id, strategy_id = await self._maybe_record_evaluation_run(world_id, payload, evaluation)
         eval_url = (
             self._build_evaluation_run_url(world_id, strategy_id, run_id)
             if run_id and strategy_id
@@ -327,7 +329,7 @@ class WorldService:
         self,
         world_id: str,
         payload: EvaluateRequest,
-        active: list[str] | None,
+        evaluation: PolicyEvaluationResult | None,
     ) -> tuple[str | None, str | None]:
         strategy_id = self._resolve_strategy_id(payload)
         if strategy_id is None:
@@ -338,11 +340,17 @@ class WorldService:
         risk_tier = (payload.risk_tier or "unknown").lower()
         metrics = self._extract_metrics(payload, strategy_id)
         validation_payload = self._extract_validation_payload(payload)
-        active_flag = strategy_id in (active or [])
+        rule_results = evaluation.for_strategy(strategy_id) if evaluation else {}
+        if rule_results:
+            validation_payload = validation_payload or {}
+            validation_payload["results"] = {
+                name: result.model_dump() for name, result in rule_results.items()
+            }
+        active_flag = strategy_id in (evaluation.selected if evaluation else [])
         summary = {
             "status": "pass" if active_flag else "fail",
             "active": active_flag,
-            "active_set": list(active or []),
+            "active_set": list(evaluation.selected if evaluation else []),
         }
 
         try:
