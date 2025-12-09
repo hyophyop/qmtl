@@ -11,7 +11,13 @@ from .constants import (
 )
 from .facade import Storage
 from .persistent import PersistentStorage
-from .models import ValidationCacheEntry, WorldActivation, WorldAuditLog, WorldPolicies
+from .models import (
+    EvaluationRunRecord,
+    ValidationCacheEntry,
+    WorldActivation,
+    WorldAuditLog,
+    WorldPolicies,
+)
 
 __all__ = [
     "DEFAULT_EDGE_OVERRIDES",
@@ -21,6 +27,7 @@ __all__ = [
     "WORLD_NODE_STATUSES",
     "Storage",
     "PersistentStorage",
+    "EvaluationRunRecord",
     "ValidationCacheEntry",
     "WorldActivation",
     "WorldAuditLog",

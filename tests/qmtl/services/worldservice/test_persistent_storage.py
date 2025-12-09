@@ -275,6 +275,83 @@ async def test_allocation_runs_and_world_allocations(persistent_storage):
 
 
 @pytest.mark.asyncio
+async def test_persistent_storage_evaluation_runs(persistent_storage):
+    world_id = "world-evaluation"
+    strategy_id = "strategy-eval"
+    run_id = "eval-run-1"
+    await persistent_storage.create_world({"id": world_id})
+
+    metrics = {
+        "returns": {
+            "sharpe": 1.23,
+            "max_drawdown": -0.15,
+            "gain_to_pain_ratio": 2.1,
+            "time_under_water_ratio": 0.4,
+        },
+        "sample": {
+            "effective_history_years": 4.2,
+            "n_trades_total": 230,
+            "n_trades_per_year": 115.0,
+        },
+        "risk": {
+            "adv_utilization_p95": 0.2,
+            "participation_rate_p95": 0.35,
+        },
+        "robustness": {
+            "deflated_sharpe_ratio": 1.1,
+            "sharpe_first_half": 1.3,
+            "sharpe_second_half": 0.9,
+        },
+        "diagnostics": {
+            "strategy_complexity": 2.0,
+            "search_intensity": 5,
+            "returns_source": "explicit:strategy",
+            "validation_health": {
+                "metric_coverage_ratio": 0.95,
+                "rules_executed_ratio": 0.9,
+            },
+        },
+    }
+    validation = {
+        "policy_version": "v1",
+        "ruleset_hash": "hash-123",
+        "profile": "backtest",
+    }
+    summary = {
+        "status": "pass",
+        "recommended_stage": "paper_ok_live_candidate",
+    }
+
+    recorded = await persistent_storage.record_evaluation_run(
+        world_id,
+        strategy_id,
+        run_id,
+        stage="paper",
+        risk_tier="high",
+        metrics=metrics,
+        validation=validation,
+        summary=summary,
+    )
+
+    assert recorded["world_id"] == world_id
+    assert recorded["strategy_id"] == strategy_id
+    assert recorded["stage"] == "paper"
+    assert recorded["validation"]["policy_version"] == "v1"
+    assert recorded["summary"]["status"] == "pass"
+
+    fetched = await persistent_storage.get_evaluation_run(world_id, strategy_id, run_id)
+    assert fetched is not None
+    assert fetched["created_at"] == recorded["created_at"]
+    assert fetched["metrics"]["returns"]["sharpe"] == 1.23
+
+    listed = await persistent_storage.list_evaluation_runs(
+        world_id=world_id, strategy_id=strategy_id
+    )
+    assert len(listed) == 1
+    assert listed[0]["run_id"] == run_id
+
+
+@pytest.mark.asyncio
 async def test_update_world_invalidates_validation_cache(persistent_storage):
     world_id = "world-update"
     await persistent_storage.create_world({"id": world_id, "contract_id": "cid-1"})

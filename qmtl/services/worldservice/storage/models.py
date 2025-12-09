@@ -374,6 +374,61 @@ class AllocationRun:
 
 
 @dataclass
+class EvaluationRunRecord:
+    """Evaluation run metadata with metrics/validation snapshots."""
+
+    run_id: str
+    world_id: str
+    strategy_id: str
+    stage: str
+    risk_tier: str
+    metrics: Dict[str, Any] = field(default_factory=dict)
+    validation: Dict[str, Any] = field(default_factory=dict)
+    summary: Dict[str, Any] = field(default_factory=dict)
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "run_id": self.run_id,
+            "world_id": self.world_id,
+            "strategy_id": self.strategy_id,
+            "stage": self.stage,
+            "risk_tier": self.risk_tier,
+            "metrics": deepcopy(self.metrics),
+            "validation": deepcopy(self.validation),
+            "summary": deepcopy(self.summary),
+        }
+        if self.created_at is not None:
+            payload["created_at"] = self.created_at
+        if self.updated_at is not None:
+            payload["updated_at"] = self.updated_at
+        return payload
+
+    @classmethod
+    def from_payload(cls, payload: Mapping[str, Any]) -> "EvaluationRunRecord":
+        metrics = payload.get("metrics")
+        metrics_dict = dict(metrics) if isinstance(metrics, Mapping) else {}
+        validation = payload.get("validation")
+        validation_dict = dict(validation) if isinstance(validation, Mapping) else {}
+        summary = payload.get("summary")
+        summary_dict = dict(summary) if isinstance(summary, Mapping) else {}
+
+        return cls(
+            run_id=str(payload["run_id"]),
+            world_id=str(payload["world_id"]),
+            strategy_id=str(payload["strategy_id"]),
+            stage=str(payload.get("stage", "")),
+            risk_tier=str(payload.get("risk_tier", "")),
+            metrics=metrics_dict,
+            validation=validation_dict,
+            summary=summary_dict,
+            created_at=payload.get("created_at"),
+            updated_at=payload.get("updated_at"),
+        )
+
+
+@dataclass
 class ValidationCacheEntry:
     """Cached validation result scoped by ExecutionDomain."""
 
@@ -464,6 +519,7 @@ __all__ = [
     "ActivationEntry",
     "ActivationState",
     "EdgeOverrideRecord",
+    "EvaluationRunRecord",
     "PolicyVersion",
     "ValidationCacheEntry",
     "WorldActivation",

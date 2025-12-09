@@ -6,7 +6,14 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
-from .models import AllocationRun, AllocationState, ValidationCacheEntry, WorldActivation, WorldAuditLog
+from .models import (
+    AllocationRun,
+    AllocationState,
+    EvaluationRunRecord,
+    ValidationCacheEntry,
+    WorldActivation,
+    WorldAuditLog,
+)
 from .repositories import (
     ActivationRepository,
     AuditLogRepository,
@@ -38,6 +45,7 @@ class Storage:
         self._edge_overrides = EdgeOverrideRepository(self._audit)
         self._world_allocations: Dict[str, AllocationState] = {}
         self._allocation_runs: Dict[str, AllocationRun] = {}
+        self._evaluation_runs: Dict[tuple[str, str, str], EvaluationRunRecord] = {}
         self._history_metadata: Dict[str, Dict[str, Dict[str, Any]]] = {}
 
     async def create_world(self, world: Dict[str, Any]) -> None:
@@ -310,6 +318,66 @@ class Storage:
             created_at=datetime_now(),
         )
         self._allocation_runs[run_id] = record
+
+    async def record_evaluation_run(
+        self,
+        world_id: str,
+        strategy_id: str,
+        run_id: str,
+        *,
+        stage: str,
+        risk_tier: str,
+        metrics: Mapping[str, Any] | None = None,
+        validation: Mapping[str, Any] | None = None,
+        summary: Mapping[str, Any] | None = None,
+        created_at: str | None = None,
+        updated_at: str | None = None,
+    ) -> Dict[str, Any]:
+        now = updated_at or datetime_now()
+        created = created_at or now
+        record = EvaluationRunRecord(
+            run_id=run_id,
+            world_id=world_id,
+            strategy_id=strategy_id,
+            stage=stage,
+            risk_tier=risk_tier,
+            metrics=deepcopy(metrics) if metrics else {},
+            validation=deepcopy(validation) if validation else {},
+            summary=deepcopy(summary) if summary else {},
+            created_at=created,
+            updated_at=now,
+        )
+        self._evaluation_runs[(world_id, strategy_id, run_id)] = record
+        self._audit.append(
+            world_id,
+            {
+                "event": "evaluation_run_recorded",
+                "strategy_id": strategy_id,
+                "run_id": run_id,
+                "stage": stage,
+                "risk_tier": risk_tier,
+            },
+        )
+        return record.to_dict()
+
+    async def get_evaluation_run(
+        self, world_id: str, strategy_id: str, run_id: str
+    ) -> Optional[Dict[str, Any]]:
+        record = self._evaluation_runs.get((world_id, strategy_id, run_id))
+        return None if record is None else record.to_dict()
+
+    async def list_evaluation_runs(
+        self, *, world_id: str | None = None, strategy_id: str | None = None
+    ) -> List[Dict[str, Any]]:
+        runs: List[Dict[str, Any]] = []
+        for (wid, sid, _), record in self._evaluation_runs.items():
+            if world_id and wid != world_id:
+                continue
+            if strategy_id and sid != strategy_id:
+                continue
+            runs.append(record.to_dict())
+        runs.sort(key=lambda entry: entry.get("created_at") or "")
+        return runs
 
     async def mark_allocation_run_executed(self, run_id: str) -> None:
         record = self._allocation_runs.get(run_id)
