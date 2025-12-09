@@ -352,6 +352,41 @@ async def test_persistent_storage_evaluation_runs(persistent_storage):
 
 
 @pytest.mark.asyncio
+async def test_persistent_storage_evaluation_override(persistent_storage):
+    world_id = "world-override"
+    strategy_id = "strategy-eval"
+    run_id = "eval-run-override"
+    await persistent_storage.create_world({"id": world_id})
+
+    await persistent_storage.record_evaluation_run(
+        world_id,
+        strategy_id,
+        run_id,
+        stage="paper",
+        risk_tier="medium",
+        model_card_version="v0.1",
+        metrics={"returns": {"sharpe": 1.0}},
+        summary={"status": "warn"},
+    )
+
+    override = await persistent_storage.record_evaluation_override(
+        world_id,
+        strategy_id,
+        run_id,
+        {"status": "approved", "reason": "manual sign-off", "actor": "risk_lead"},
+    )
+
+    assert override["summary"]["override_status"] == "approved"
+    assert override["summary"]["override_reason"] == "manual sign-off"
+    assert override["summary"]["override_actor"] == "risk_lead"
+    assert override["model_card_version"] == "v0.1"
+    fetched = await persistent_storage.get_evaluation_run(world_id, strategy_id, run_id)
+    assert fetched is not None
+    assert fetched["summary"]["override_status"] == "approved"
+    assert fetched["updated_at"] == override["summary"]["override_timestamp"]
+
+
+@pytest.mark.asyncio
 async def test_update_world_invalidates_validation_cache(persistent_storage):
     world_id = "world-update"
     await persistent_storage.create_world({"id": world_id, "contract_id": "cid-1"})

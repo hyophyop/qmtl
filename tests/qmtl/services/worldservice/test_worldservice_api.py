@@ -226,6 +226,7 @@ async def test_evaluation_run_creation_and_fetch():
             assert record["run_id"] == "run-eval-1"
             assert record["strategy_id"] == "s-eval"
             assert record["stage"] == "backtest"
+            assert record["model_card_version"] == "v1.0"
             assert record["metrics"]["returns"]["sharpe"] == 1.5
             assert record["summary"]["status"] == "pass"
             assert record["validation"]["results"]
@@ -235,6 +236,52 @@ async def test_evaluation_run_creation_and_fetch():
                 "performance",
                 "risk_constraint",
             }
+
+
+@pytest.mark.asyncio
+async def test_evaluation_run_override_flow():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wover", "name": "Override World"})
+            payload = {
+                "strategy_id": "s-eval",
+                "metrics": {"s-eval": {"sharpe": 1.2}},
+                "policy": {},
+                "run_id": "override-1",
+                "stage": "paper",
+                "risk_tier": "high",
+            }
+            resp = await client.post("/worlds/wover/evaluate", json=payload)
+            assert resp.status_code == 200
+
+            override_payload = {
+                "status": "approved",
+                "reason": "risk sign-off",
+                "actor": "risk_team",
+            }
+            override_resp = await client.post(
+                "/worlds/wover/strategies/s-eval/runs/override-1/override",
+                json=override_payload,
+            )
+            assert override_resp.status_code == 200
+            override_body = override_resp.json()
+            summary = override_body["summary"]
+            assert summary["override_status"] == "approved"
+            assert summary["override_reason"] == "risk sign-off"
+            assert summary["override_actor"] == "risk_team"
+            assert summary["override_timestamp"]
+            assert override_body["model_card_version"] == "v1.0"
+
+            # A rejection should update the override fields
+            reject_resp = await client.post(
+                "/worlds/wover/strategies/s-eval/runs/override-1/override",
+                json={"status": "rejected", "reason": "policy change", "actor": "risk_team"},
+            )
+            assert reject_resp.status_code == 200
+            latest = reject_resp.json()["summary"]
+            assert latest["override_status"] == "rejected"
+            assert latest["override_reason"] == "policy change"
 
 
 @pytest.mark.asyncio

@@ -440,6 +440,21 @@ class WorldServiceClient:
             json=payload,
         )
 
+    async def post_evaluation_override(
+        self,
+        world_id: str,
+        strategy_id: str,
+        run_id: str,
+        payload: Any,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> Any:
+        return await self._request_json(
+            "POST",
+            f"/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/override",
+            headers=headers,
+            json=payload,
+        )
+
     async def post_apply(self, world_id: str, payload: Any, headers: Optional[Dict[str, str]] = None) -> Any:
         return await self._request_json(
             "POST",

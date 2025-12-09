@@ -382,6 +382,7 @@ class EvaluationRunRecord:
     strategy_id: str
     stage: str
     risk_tier: str
+    model_card_version: str | None = None
     metrics: Dict[str, Any] = field(default_factory=dict)
     validation: Dict[str, Any] = field(default_factory=dict)
     summary: Dict[str, Any] = field(default_factory=dict)
@@ -395,6 +396,7 @@ class EvaluationRunRecord:
             "strategy_id": self.strategy_id,
             "stage": self.stage,
             "risk_tier": self.risk_tier,
+            "model_card_version": self.model_card_version,
             "metrics": deepcopy(self.metrics),
             "validation": deepcopy(self.validation),
             "summary": deepcopy(self.summary),
@@ -420,6 +422,7 @@ class EvaluationRunRecord:
             strategy_id=str(payload["strategy_id"]),
             stage=str(payload.get("stage", "")),
             risk_tier=str(payload.get("risk_tier", "")),
+            model_card_version=payload.get("model_card_version"),
             metrics=metrics_dict,
             validation=validation_dict,
             summary=summary_dict,

@@ -398,6 +398,13 @@ WORLD_ROUTES: tuple[WorldRoute, ...] = (
     ),
     WorldRoute(
         "post",
+        "/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/override",
+        "post_evaluation_override",
+        path_params=("world_id", "strategy_id", "run_id"),
+        include_payload=True,
+    ),
+    WorldRoute(
+        "post",
         "/worlds/{world_id}/apply",
         "post_apply",
         path_params=("world_id",),

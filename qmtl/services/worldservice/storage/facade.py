@@ -327,6 +327,7 @@ class Storage:
         *,
         stage: str,
         risk_tier: str,
+        model_card_version: str | None = None,
         metrics: Mapping[str, Any] | None = None,
         validation: Mapping[str, Any] | None = None,
         summary: Mapping[str, Any] | None = None,
@@ -341,6 +342,7 @@ class Storage:
             strategy_id=strategy_id,
             stage=stage,
             risk_tier=risk_tier,
+            model_card_version=model_card_version,
             metrics=deepcopy(metrics) if metrics else {},
             validation=deepcopy(validation) if validation else {},
             summary=deepcopy(summary) if summary else {},
@@ -365,6 +367,54 @@ class Storage:
     ) -> Optional[Dict[str, Any]]:
         record = self._evaluation_runs.get((world_id, strategy_id, run_id))
         return None if record is None else record.to_dict()
+
+    async def record_evaluation_override(
+        self,
+        world_id: str,
+        strategy_id: str,
+        run_id: str,
+        override: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        record = self._evaluation_runs.get((world_id, strategy_id, run_id))
+        if record is None:
+            raise KeyError("evaluation run not found")
+
+        override_timestamp = str(override.get("timestamp") or datetime_now())
+        summary = dict(record.summary or {})
+        summary.update(
+            {
+                "override_status": override.get("status"),
+                "override_reason": override.get("reason"),
+                "override_actor": override.get("actor"),
+                "override_timestamp": override_timestamp,
+            }
+        )
+        updated = EvaluationRunRecord(
+            run_id=record.run_id,
+            world_id=record.world_id,
+            strategy_id=record.strategy_id,
+            stage=record.stage,
+            risk_tier=record.risk_tier,
+            model_card_version=record.model_card_version,
+            metrics=deepcopy(record.metrics),
+            validation=deepcopy(record.validation),
+            summary=summary,
+            created_at=record.created_at,
+            updated_at=override_timestamp,
+        )
+        self._evaluation_runs[(world_id, strategy_id, run_id)] = updated
+        self._audit.append(
+            world_id,
+            {
+                "event": "evaluation_run_override_recorded",
+                "strategy_id": strategy_id,
+                "run_id": run_id,
+                "status": override.get("status"),
+                "actor": override.get("actor"),
+                "timestamp": override_timestamp,
+            },
+        )
+        return updated.to_dict()
 
     async def list_evaluation_runs(
         self, *, world_id: str | None = None, strategy_id: str | None = None

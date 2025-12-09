@@ -13,6 +13,7 @@ from typing import Any, Dict, Iterable, Mapping, Optional
 
 from fastapi import HTTPException
 
+from qmtl.model_cards import ModelCardRegistry
 from qmtl.foundation.common.hashutils import hash_bytes
 from qmtl.foundation.common.compute_context import canonicalize_world_mode
 
@@ -35,6 +36,7 @@ from .schemas import (
     ApplyResponse,
     DecisionEnvelope,
     EvaluateRequest,
+    EvaluationOverride,
     MultiWorldRebalanceRequest,
     PositionSliceModel,
     SeamlessArtifactPayload,
@@ -79,6 +81,7 @@ class WorldService:
         store: Storage,
         bus: ControlBusProducer | None = None,
         rebalance_executor: Any | None = None,
+        model_cards: ModelCardRegistry | None = None,
     ) -> None:
         self.bus = bus
         self.rebalance_executor = rebalance_executor
@@ -87,6 +90,7 @@ class WorldService:
         self.apply_locks = self._runs.locks
         self._activation = ActivationEventPublisher(store, bus)
         self._evaluator = DecisionEvaluator(store)
+        self._model_cards = model_cards or ModelCardRegistry()
         self._coordinator = ApplyCoordinator(
             store=store,
             bus=bus,
@@ -109,6 +113,14 @@ class WorldService:
         self._activation.store = value
         self._evaluator.store = value
         self._coordinator.store = value
+
+    @property
+    def model_cards(self) -> ModelCardRegistry:
+        return self._model_cards
+
+    @model_cards.setter
+    def model_cards(self, value: ModelCardRegistry) -> None:
+        self._model_cards = value
 
     def _allocation_lock_for(self, world_id: str) -> asyncio.Lock:
         lock = self._allocation_locks.get(world_id)
@@ -358,6 +370,19 @@ class WorldService:
             "active": active_flag,
             "active_set": list(evaluation.selected if evaluation else []),
         }
+        override = getattr(payload, "override", None)
+        if override:
+            summary.update(
+                {
+                    "override_status": override.status,
+                    "override_reason": override.reason,
+                    "override_actor": override.actor,
+                    "override_timestamp": self._override_timestamp(override.timestamp),
+                }
+            )
+        model_card_version = self._resolve_model_card_version(
+            strategy_id, getattr(payload, "model_card_version", None)
+        )
 
         try:
             await self.store.record_evaluation_run(
@@ -366,6 +391,7 @@ class WorldService:
                 run_id,
                 stage=stage,
                 risk_tier=risk_tier,
+                model_card_version=model_card_version,
                 metrics=metrics,
                 validation=validation_payload,
                 summary=summary,
@@ -374,6 +400,46 @@ class WorldService:
             logger.exception("Failed to record evaluation run for %s/%s", world_id, strategy_id)
 
         return run_id, strategy_id
+
+    async def record_evaluation_override(
+        self,
+        world_id: str,
+        strategy_id: str,
+        run_id: str,
+        override: EvaluationOverride,
+    ) -> Dict[str, Any]:
+        try:
+            return await self.store.record_evaluation_override(
+                world_id,
+                strategy_id,
+                run_id,
+                override=override.model_dump(),
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="evaluation run not found") from exc
+        except Exception as exc:  # pragma: no cover - defensive best-effort
+            logger.exception("Failed to record evaluation override for %s/%s", world_id, strategy_id)
+            raise HTTPException(status_code=500, detail="failed to record evaluation override") from exc
+
+    def _resolve_model_card_version(self, strategy_id: str, provided: str | None) -> str | None:
+        if provided:
+            return provided
+        try:
+            return self._model_cards.version(strategy_id)
+        except Exception:  # pragma: no cover - defensive fallback
+            logger.exception("Failed to resolve model card for %s", strategy_id)
+            return None
+
+    @staticmethod
+    def _override_timestamp(provided: str | None) -> str:
+        if provided:
+            return str(provided)
+        return (
+            datetime.now(timezone.utc)
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
 
     @staticmethod
     def _resolve_strategy_id(payload: EvaluateRequest) -> str | None:
