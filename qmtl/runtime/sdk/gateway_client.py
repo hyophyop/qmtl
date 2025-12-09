@@ -213,6 +213,9 @@ class GatewayClient:
         metrics: dict[str, float],
         returns: list[float],
         policy_payload: dict[str, Any] | None = None,
+        evaluation_run_id: str | None = None,
+        stage: str | None = None,
+        risk_tier: str | None = None,
     ) -> dict[str, Any]:
         """Ask WorldService (via Gateway) to evaluate strategy metrics.
 
@@ -225,7 +228,14 @@ class GatewayClient:
         payload: dict[str, Any] = {
             "metrics": {strategy_id: metrics},
             "series": {strategy_id: {"returns": returns}},
+            "strategy_id": strategy_id,
         }
+        if evaluation_run_id:
+            payload["run_id"] = evaluation_run_id
+        if stage:
+            payload["stage"] = stage
+        if risk_tier:
+            payload["risk_tier"] = risk_tier
         if policy_payload:
             payload["policy"] = policy_payload
 
@@ -239,6 +249,25 @@ class GatewayClient:
             return {"error": result.error or f"WS evaluate error {result.status_code}"}
 
         return result.payload if isinstance(result.payload, dict) else {}
+
+    async def get_evaluation_run(
+        self,
+        *,
+        gateway_url: str,
+        world_id: str,
+        strategy_id: str,
+        run_id: str,
+    ) -> dict[str, Any] | None:
+        """Fetch a recorded EvaluationRun from WorldService via Gateway."""
+        url = gateway_url.rstrip("/") + f"/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}"
+        headers = self._build_headers()
+        result = await self._get(url, headers)
+        status = result.status_code or 0
+        if status == 404:
+            return None
+        if result.error or status >= 400:
+            return {"error": result.error or f"gateway error {status}"}
+        return result.payload if isinstance(result.payload, dict) else None
 
     async def _get(
         self,

@@ -20,6 +20,7 @@ import asyncio
 import logging
 import numbers
 import os
+import uuid
 from decimal import Decimal
 from threading import Thread
 from dataclasses import dataclass, field
@@ -180,6 +181,8 @@ class SubmitResult:
     allocation: "AllocationSnapshot | None" = None
     allocation_notice: str | None = None
     allocation_stale: bool = False
+    evaluation_run_id: str | None = None
+    evaluation_run_url: str | None = None
     
     # Rejection info (if status == "rejected")
     rejection_reason: str | None = None
@@ -238,6 +241,8 @@ class SubmitResult:
             "allocation": allocation_dump,
             "allocation_notice": self.allocation_notice,
             "allocation_stale": self.allocation_stale,
+            "evaluation_run_id": self.evaluation_run_id,
+            "evaluation_run_url": self.evaluation_run_url,
         }
 
         payload["ws"] = {
@@ -258,6 +263,8 @@ class SubmitResult:
             "downgraded": self.downgraded,
             "downgrade_reason": self.downgrade_reason,
             "safe_mode": self.safe_mode,
+            "evaluation_run_id": self.evaluation_run_id,
+            "evaluation_run_url": self.evaluation_run_url,
         }
         return payload
 
@@ -299,6 +306,7 @@ class AutoReturnsConfig:
 DEFAULT_WORLD = "__default__"
 DEFAULT_GATEWAY_URL = "http://localhost:8000"
 DEFAULT_PRESET = "sandbox"  # Use sandbox preset for zero-config submissions
+DEFAULT_EVALUATION_RISK_TIER = "medium"
 
 # Environment variable names
 ENV_GATEWAY_URL = "QMTL_GATEWAY_URL"
@@ -334,6 +342,19 @@ def _normalize_world_id(world: str | None) -> str:
             "world must be provided; set --world or QMTL_DEFAULT_WORLD / project.default_world"
         )
     return candidate
+
+
+def _build_evaluation_run_id(strategy_id: str, world_id: str) -> str:
+    """Create a unique evaluation run identifier."""
+    suffix = uuid.uuid4().hex[:12]
+    safe_world = str(world_id).replace("/", "-").replace(" ", "_")
+    safe_strategy = str(strategy_id).replace("/", "-").replace(" ", "_")
+    return f"{safe_world}-{safe_strategy}-{suffix}"
+
+
+def _build_evaluation_run_url(gateway_url: str, world_id: str, strategy_id: str, run_id: str) -> str:
+    base = gateway_url.rstrip("/")
+    return f"{base}/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}"
 
 
 def _world_id_candidates(world_id: str) -> tuple[str, ...]:
@@ -660,6 +681,7 @@ async def submit_async(
             resolved_preset=world_ctx.resolved_preset,
             validation_policy=world_ctx.validation_policy,
             backtest_returns=backtest_returns,
+            mode=mode,
             services=services,
             gateway_url=gateway_url,
             gateway_available=gateway_available,
@@ -1125,6 +1147,7 @@ async def _run_validation_and_ws_eval(
     resolved_preset: str | None,
     validation_policy: Any | None,
     backtest_returns: Sequence[float],
+    mode: Mode,
     services: "RunnerServices",
     gateway_url: str,
     gateway_available: bool,
@@ -1147,6 +1170,7 @@ async def _run_validation_and_ws_eval(
         win_rate=validation_result.metrics.win_ratio,
         profit_factor=validation_result.metrics.profit_factor,
     )
+    evaluation_run_id = _build_evaluation_run_id(strategy_id, resolved_world)
     ws_eval = await _evaluate_with_worldservice(
         gateway_url=gateway_url,
         world_id=resolved_world,
@@ -1155,6 +1179,9 @@ async def _run_validation_and_ws_eval(
         returns=backtest_returns,
         preset=resolved_preset,
         client=services.gateway_client,
+        evaluation_run_id=evaluation_run_id,
+        stage=mode.value,
+        risk_tier=DEFAULT_EVALUATION_RISK_TIER,
     )
     if ws_eval.error:
         logger.debug("WorldService evaluation fallback error: %s", ws_eval.error)
@@ -1225,6 +1252,7 @@ def _build_submit_result_from_validation(
         mode=mode,
         world_notice=world_notice,
         validation_result=validation_result,
+        ws_eval=ws_eval,
     )
 
 
@@ -1260,6 +1288,7 @@ def _build_passed_result(
     metrics_out = _base_metrics_from_validation(validation_result)
     if ws_eval and ws_eval.correlation_avg is not None:
         metrics_out = _clone_metrics_with_corr(metrics_out, ws_eval.correlation_avg)
+    eval_run_id, eval_run_url = _evaluation_run_fields(ws_eval)
 
     return SubmitResult(
         strategy_id=_strategy_id_or_fallback(strategy_id, strategy),
@@ -1278,6 +1307,8 @@ def _build_passed_result(
         allocation=ws_eval.allocation if ws_eval else None,
         allocation_notice=ws_eval.allocation_notice if ws_eval else None,
         allocation_stale=ws_eval.allocation_stale if ws_eval else False,
+        evaluation_run_id=eval_run_id,
+        evaluation_run_url=eval_run_url,
     )
 
 
@@ -1297,6 +1328,7 @@ def _ws_rejection_result(
     if not has_rejection:
         return None
     ws_reject_violations = _final_threshold_violations(validation_result, ws_eval)
+    eval_run_id, eval_run_url = _evaluation_run_fields(ws_eval)
     return SubmitResult(
         strategy_id=_strategy_id_or_fallback(strategy_id, strategy, prefix="rejected"),
         status="rejected",
@@ -1313,6 +1345,8 @@ def _ws_rejection_result(
         allocation=ws_eval.allocation,
         allocation_notice=ws_eval.allocation_notice,
         allocation_stale=ws_eval.allocation_stale,
+        evaluation_run_id=eval_run_id,
+        evaluation_run_url=eval_run_url,
     )
 
 
@@ -1345,6 +1379,13 @@ def _merge_ws_eval_fields(
         rank = ws_eval.rank
         contribution = ws_eval.contribution
     return weight, rank, contribution
+
+
+def _evaluation_run_fields(ws_eval: WsEvalResult | None) -> tuple[str | None, str | None]:
+    """Return evaluation run identifiers from a WS evaluation result."""
+    if ws_eval is None:
+        return None, None
+    return ws_eval.evaluation_run_id, ws_eval.evaluation_run_url
 
 
 def _build_failed_result(
@@ -1415,6 +1456,7 @@ def _ws_accepts_after_fail(
             v.metric, v.value, v.threshold_type, v.threshold_value,
         )
     metrics_out = _clone_metrics_with_corr(_base_metrics_from_validation(validation_result), ws_eval.correlation_avg)
+    eval_run_id, eval_run_url = _evaluation_run_fields(ws_eval)
     return SubmitResult(
         strategy_id=_strategy_id_or_fallback(strategy_id, strategy, prefix="ws_accepted"),
         status="active",
@@ -1434,6 +1476,8 @@ def _ws_accepts_after_fail(
         allocation=ws_eval.allocation,
         allocation_notice=ws_eval.allocation_notice,
         allocation_stale=ws_eval.allocation_stale,
+        evaluation_run_id=eval_run_id,
+        evaluation_run_url=eval_run_url,
     )
 
 
@@ -1459,6 +1503,7 @@ def _pending_after_failed_validation(
             "Local validation warning (WS unavailable): %s=%s (threshold %s %s)",
             v.metric, v.value, v.threshold_type, v.threshold_value,
         )
+    eval_run_id, eval_run_url = _evaluation_run_fields(ws_eval)
     return SubmitResult(
         strategy_id=_strategy_id_or_fallback(strategy_id, strategy, prefix="pending"),
         status="pending",
@@ -1482,6 +1527,8 @@ def _pending_after_failed_validation(
         allocation=ws_eval.allocation if ws_eval else None,
         allocation_notice=ws_eval.allocation_notice if ws_eval else None,
         allocation_stale=ws_eval.allocation_stale if ws_eval else False,
+        evaluation_run_id=eval_run_id,
+        evaluation_run_url=eval_run_url,
     )
 
 
@@ -1497,6 +1544,7 @@ def _reject_after_failed_validation(
 ) -> SubmitResult:
     rejection_reason, ws_extra_violations = _rejection_details(ws_eval, validation_result)
     final_thresholds = ws_extra_violations if ws_extra_violations else _final_threshold_violations(validation_result, ws_eval)
+    eval_run_id, eval_run_url = _evaluation_run_fields(ws_eval)
 
     return SubmitResult(
         strategy_id=_strategy_id_or_fallback(strategy_id, strategy, prefix="rejected"),
@@ -1519,6 +1567,8 @@ def _reject_after_failed_validation(
         allocation=ws_eval.allocation if ws_eval else None,
         allocation_notice=ws_eval.allocation_notice if ws_eval else None,
         allocation_stale=ws_eval.allocation_stale if ws_eval else False,
+        evaluation_run_id=eval_run_id,
+        evaluation_run_url=eval_run_url,
     )
 
 
@@ -1558,7 +1608,9 @@ def _build_error_result(
     mode: Mode,
     world_notice: list[str],
     validation_result: Any,
+    ws_eval: WsEvalResult | None,
 ) -> SubmitResult:
+    eval_run_id, eval_run_url = _evaluation_run_fields(ws_eval)
     return SubmitResult(
         strategy_id=_strategy_id_or_fallback(strategy_id, strategy, prefix="error"),
         status="rejected",
@@ -1568,6 +1620,8 @@ def _build_error_result(
         improvement_hints=world_notice + validation_result.improvement_hints,
         strategy=strategy,
         precheck=_precheck_from_validation(validation_result),
+        evaluation_run_id=eval_run_id,
+        evaluation_run_url=eval_run_url,
     )
 
 
@@ -1998,6 +2052,8 @@ class WsEvalResult:
     allocation: AllocationSnapshot | None = None
     allocation_notice: str | None = None
     allocation_stale: bool = False
+    evaluation_run_id: str | None = None
+    evaluation_run_url: str | None = None
 
 
 async def _evaluate_with_worldservice(
@@ -2009,6 +2065,9 @@ async def _evaluate_with_worldservice(
     returns: Sequence[float],
     preset: str | None,
     client: "GatewayClient | None" = None,
+    evaluation_run_id: str | None = None,
+    stage: str | None = None,
+    risk_tier: str | None = None,
 ) -> WsEvalResult:
     """Ask WorldService (via Gateway) to evaluate strategy metrics."""
     payload_metrics: dict[str, float] = {}
@@ -2027,6 +2086,23 @@ async def _evaluate_with_worldservice(
         except Exception:
             policy_payload = None
 
+    def _attach_metadata(result: WsEvalResult) -> WsEvalResult:
+        if result.evaluation_run_id is None:
+            result.evaluation_run_id = evaluation_run_id
+        if result.evaluation_run_url and result.evaluation_run_url.startswith("/"):
+            result.evaluation_run_url = gateway_url.rstrip("/") + result.evaluation_run_url
+        if (
+            result.evaluation_run_url is None
+            and result.evaluation_run_id
+            and gateway_url
+            and world_id
+            and strategy_id
+        ):
+            result.evaluation_run_url = _build_evaluation_run_url(
+                gateway_url, world_id, strategy_id, result.evaluation_run_id
+            )
+        return result
+
     # Use GatewayClient if provided
     if client is not None:
         data = await client.evaluate_strategy(
@@ -2036,16 +2112,26 @@ async def _evaluate_with_worldservice(
             metrics=payload_metrics,
             returns=list(returns),
             policy_payload=policy_payload,
+            evaluation_run_id=evaluation_run_id,
+            stage=stage,
+            risk_tier=risk_tier,
         )
         if "error" in data:
-            return WsEvalResult(error=str(data["error"]))
-        return _parse_ws_eval_response(data, strategy_id)
+            return _attach_metadata(WsEvalResult(error=str(data["error"])))
+        return _attach_metadata(_parse_ws_eval_response(data, strategy_id))
 
     # Fallback to direct httpx
     payload: dict[str, Any] = {
         "metrics": {strategy_id: payload_metrics},
         "series": {strategy_id: {"returns": list(returns)}},
+        "strategy_id": strategy_id,
     }
+    if evaluation_run_id:
+        payload["run_id"] = evaluation_run_id
+    if stage:
+        payload["stage"] = stage
+    if risk_tier:
+        payload["risk_tier"] = risk_tier
     if policy_payload:
         payload["policy"] = policy_payload
     try:
@@ -2055,11 +2141,11 @@ async def _evaluate_with_worldservice(
                 json=payload,
             )
             if resp.status_code >= 400:
-                return WsEvalResult(error=f"WS evaluate error {resp.status_code}")
+                return _attach_metadata(WsEvalResult(error=f"WS evaluate error {resp.status_code}"))
             data = resp.json()
-            return _parse_ws_eval_response(data, strategy_id)
+            return _attach_metadata(_parse_ws_eval_response(data, strategy_id))
     except Exception as exc:  # pragma: no cover - network/JSON issues
-        return WsEvalResult(error=str(exc))
+        return _attach_metadata(WsEvalResult(error=str(exc)))
 
 
 async def _fetch_decision_envelope(
@@ -2231,6 +2317,8 @@ def _parse_ws_eval_response(data: dict[str, Any], strategy_id: str) -> WsEvalRes
     ranks = data.get("ranks", {}) or {}
     violations = data.get("violations") or data.get("threshold_violations")
     correlation_avg = data.get("correlation_avg") or data.get("correlation")
+    evaluation_run_id = data.get("evaluation_run_id")
+    evaluation_run_url = data.get("evaluation_run_url")
 
     is_active = strategy_id in active_list if isinstance(active_list, list) else None
     weight = _value_from_mapping(weights, strategy_id)
@@ -2238,6 +2326,8 @@ def _parse_ws_eval_response(data: dict[str, Any], strategy_id: str) -> WsEvalRes
     rank = _value_from_mapping(ranks, strategy_id)
     violations_list = violations if isinstance(violations, list) else None
     corr = float(correlation_avg) if isinstance(correlation_avg, (int, float)) else None
+    eval_run_id_str = str(evaluation_run_id) if evaluation_run_id is not None else None
+    eval_run_url_str = str(evaluation_run_url) if evaluation_run_url is not None else None
 
     return WsEvalResult(
         active=is_active,
@@ -2246,6 +2336,8 @@ def _parse_ws_eval_response(data: dict[str, Any], strategy_id: str) -> WsEvalRes
         rank=rank,
         violations=violations_list,
         correlation_avg=corr,
+        evaluation_run_id=eval_run_id_str,
+        evaluation_run_url=eval_run_url_str,
     )
 
 

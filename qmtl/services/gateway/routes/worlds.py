@@ -385,6 +385,18 @@ WORLD_ROUTES: tuple[WorldRoute, ...] = (
         include_payload=True,
     ),
     WorldRoute(
+        "get",
+        "/worlds/{world_id}/strategies/{strategy_id}/runs",
+        "get_evaluation_runs",
+        path_params=("world_id", "strategy_id"),
+    ),
+    WorldRoute(
+        "get",
+        "/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}",
+        "get_evaluation_run",
+        path_params=("world_id", "strategy_id", "run_id"),
+    ),
+    WorldRoute(
         "post",
         "/worlds/{world_id}/apply",
         "post_apply",

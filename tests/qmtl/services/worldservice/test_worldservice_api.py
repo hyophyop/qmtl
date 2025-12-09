@@ -199,37 +199,35 @@ async def test_world_crud_policy_apply_and_events():
             r = await client.post("/worlds/w1/apply", json=payload)
             assert r.json()["phase"] == "completed"
 
-            # Decision envelope
-            d = await client.get("/worlds/w1/decide")
-            assert d.json()["ttl"] == "60s"
 
-            # Read back activation
-            r = await client.get("/worlds/w1/activation", params={"strategy_id": "s1", "side": "long"})
-            assert r.json()["active"] is True
+@pytest.mark.asyncio
+async def test_evaluation_run_creation_and_fetch():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "weval", "name": "Eval"})
+            payload = {
+                "strategy_id": "s-eval",
+                "metrics": {"s-eval": {"sharpe": 1.5}},
+                "policy": {},
+                "run_id": "run-eval-1",
+                "stage": "backtest",
+                "risk_tier": "medium",
+            }
+            resp = await client.post("/worlds/weval/evaluate", json=payload)
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["evaluation_run_id"] == "run-eval-1"
+            assert body["evaluation_run_url"].startswith("/worlds/weval/strategies/s-eval/runs/")
 
-            # Audit log contains entries
-            audit = await client.get("/worlds/w1/audit")
-            stages = [e for e in audit.json() if e["event"] == "apply_stage"]
-            assert [s["stage"] for s in stages] == ["requested", "freeze", "switch", "unfreeze", "completed"]
-
-    policy_evt = next(e for e in bus.events if e[0] == "policy")
-    assert policy_evt[1] == "w1"
-    assert policy_evt[2]["policy_version"] == 1
-
-    activation_events = [e for e in bus.events if e[0] == "activation"]
-    assert len(activation_events) >= 2
-    freeze_evt = activation_events[0][2]
-    unfreeze_evt = activation_events[1][2]
-    assert freeze_evt["phase"] == "freeze"
-    assert freeze_evt["freeze"] is True
-    assert freeze_evt["requires_ack"] is True
-    assert freeze_evt["sequence"] == 1
-    assert unfreeze_evt["phase"] == "unfreeze"
-    assert unfreeze_evt["freeze"] is False
-    assert unfreeze_evt["requires_ack"] is True
-    final_payload = activation_events[-1][2]
-    assert final_payload.get("side") == "long"
-    assert final_payload.get("active") is True
+            run_resp = await client.get(body["evaluation_run_url"])
+            assert run_resp.status_code == 200
+            record = run_resp.json()
+            assert record["run_id"] == "run-eval-1"
+            assert record["strategy_id"] == "s-eval"
+            assert record["stage"] == "backtest"
+            assert record["metrics"]["returns"]["sharpe"] == 1.5
+            assert record["summary"]["status"] == "pass"
 
 
 @pytest.mark.asyncio

@@ -150,7 +150,7 @@ class DecisionEvaluator:
     async def _resolve_policy(
         self, world_id: str, payload: ApplyRequest | EvaluateRequest
     ) -> Policy:
-        policy_payload = payload.policy or await self.store.get_default_policy(world_id)
+        policy_payload = payload.policy if payload.policy is not None else await self.store.get_default_policy(world_id)
         policy = policy_payload
         if isinstance(policy, Policy):
             return policy

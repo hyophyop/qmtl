@@ -18,6 +18,7 @@ from .routers import (
     create_activation_router,
     create_allocations_router,
     create_bindings_router,
+    create_evaluation_runs_router,
     create_policies_router,
     create_rebalancing_router,
     create_validations_router,
@@ -319,6 +320,7 @@ def create_app(
     app.include_router(create_bindings_router(service))
     app.include_router(create_activation_router(service))
     app.include_router(create_allocations_router(service))
+    app.include_router(create_evaluation_runs_router(service))
     app.include_router(
         create_rebalancing_router(
             service,

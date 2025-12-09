@@ -43,6 +43,10 @@ class EvaluateRequest(BaseModel):
     correlations: Dict[tuple[str, str], float] | None = None
     policy: Policy | Dict[str, Any] | None = None
     series: Dict[str, StrategySeries] | None = None
+    run_id: str | None = None
+    stage: str | None = None
+    risk_tier: str | None = None
+    strategy_id: str | None = None
 
 
 class ActivationEnvelope(BaseModel):

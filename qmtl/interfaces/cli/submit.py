@@ -205,6 +205,11 @@ def _print_submission_result_json(result) -> None:
 def _print_ws_section(result) -> None:
     print(_t("\n🌐 WorldService decision (SSOT)"))
     print(f"Status: {result.status}")
+    eval_run_id = getattr(result, "evaluation_run_id", None)
+    if eval_run_id:
+        eval_url = getattr(result, "evaluation_run_url", None)
+        suffix = f" ({eval_url})" if eval_url else ""
+        print(_t("Evaluation run: {}").format(f"{eval_run_id}{suffix}"))
     if result.status == "rejected" and result.rejection_reason:
         print(f"Reason: {result.rejection_reason}")
     if result.threshold_violations:
