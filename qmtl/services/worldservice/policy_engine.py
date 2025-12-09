@@ -62,6 +62,7 @@ class ValidationRule(Protocol):
 class PolicyEvaluationResult(Iterable[str]):
     selected_ids: List[str]
     rule_results: Dict[str, Dict[str, RuleResult]] = field(default_factory=dict)
+    profile: str | None = None
 
     def __iter__(self) -> Iterator[str]:
         return iter(self.selected_ids)
@@ -74,7 +75,11 @@ class PolicyEvaluationResult(Iterable[str]):
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, PolicyEvaluationResult):
-            return self.selected_ids == other.selected_ids and self.rule_results == other.rule_results
+            return (
+                self.selected_ids == other.selected_ids
+                and self.rule_results == other.rule_results
+                and self.profile == other.profile
+            )
         if isinstance(other, list):
             return self.selected_ids == other
         return False
@@ -113,11 +118,130 @@ class HysteresisRule(BaseModel):
     exit: float
 
 
+class SampleProfile(BaseModel):
+    min_effective_years: float | None = None
+    min_trades_total: int | None = None
+
+    def to_thresholds(self) -> Dict[str, ThresholdRule]:
+        thresholds: Dict[str, ThresholdRule] = {}
+        if self.min_effective_years is not None:
+            thresholds["effective_history_years"] = ThresholdRule(
+                metric="effective_history_years",
+                min=float(self.min_effective_years),
+            )
+        if self.min_trades_total is not None:
+            thresholds["n_trades_total"] = ThresholdRule(
+                metric="n_trades_total",
+                min=float(self.min_trades_total),
+            )
+        return thresholds
+
+
+class PerformanceProfile(BaseModel):
+    sharpe_min: float | None = None
+    max_dd_max: float | None = None
+    gain_to_pain_min: float | None = None
+
+    def to_thresholds(self) -> Dict[str, ThresholdRule]:
+        thresholds: Dict[str, ThresholdRule] = {}
+        if self.sharpe_min is not None:
+            thresholds["sharpe"] = ThresholdRule(metric="sharpe", min=float(self.sharpe_min))
+        if self.max_dd_max is not None:
+            thresholds["max_drawdown"] = ThresholdRule(metric="max_drawdown", max=float(self.max_dd_max))
+        if self.gain_to_pain_min is not None:
+            thresholds["gain_to_pain_ratio"] = ThresholdRule(
+                metric="gain_to_pain_ratio",
+                min=float(self.gain_to_pain_min),
+            )
+        return thresholds
+
+
+class RobustnessProfile(BaseModel):
+    dsr_min: float | None = None
+    severity: str | None = None  # reserved for v1.5+ metadata passthrough
+    owner: str | None = None     # reserved for v1.5+ metadata passthrough
+
+    def to_thresholds(self) -> Dict[str, ThresholdRule]:
+        thresholds: Dict[str, ThresholdRule] = {}
+        if self.dsr_min is not None:
+            thresholds["deflated_sharpe_ratio"] = ThresholdRule(
+                metric="deflated_sharpe_ratio",
+                min=float(self.dsr_min),
+            )
+        return thresholds
+
+
+class RiskProfile(BaseModel):
+    adv_utilization_p95_max: float | None = None
+    participation_rate_p95_max: float | None = None
+
+    def to_thresholds(self) -> Dict[str, ThresholdRule]:
+        thresholds: Dict[str, ThresholdRule] = {}
+        if self.adv_utilization_p95_max is not None:
+            thresholds["adv_utilization_p95"] = ThresholdRule(
+                metric="adv_utilization_p95",
+                max=float(self.adv_utilization_p95_max),
+            )
+        if self.participation_rate_p95_max is not None:
+            thresholds["participation_rate_p95"] = ThresholdRule(
+                metric="participation_rate_p95",
+                max=float(self.participation_rate_p95_max),
+            )
+        return thresholds
+
+
+class ValidationProfile(BaseModel):
+    sample: SampleProfile | None = None
+    performance: PerformanceProfile | None = None
+    robustness: RobustnessProfile | None = None
+    risk: RiskProfile | None = None
+
+    def to_thresholds(self) -> Dict[str, ThresholdRule]:
+        thresholds: Dict[str, ThresholdRule] = {}
+        for section in (self.sample, self.performance, self.robustness, self.risk):
+            if section:
+                thresholds.update(section.to_thresholds())
+        return thresholds
+
+
+class SelectionConfig(BaseModel):
+    thresholds: dict[str, ThresholdRule] = Field(default_factory=dict)
+    top_k: TopKRule | None = None
+    correlation: CorrelationRule | None = None
+    hysteresis: HysteresisRule | None = None
+
+
 class Policy(BaseModel):
     thresholds: dict[str, ThresholdRule] = Field(default_factory=dict)
     top_k: TopKRule | None = None
     correlation: CorrelationRule | None = None
     hysteresis: HysteresisRule | None = None
+    selection: SelectionConfig | None = None
+    validation_profiles: dict[str, ValidationProfile] = Field(default_factory=dict)
+    default_profile_by_stage: dict[str, str] = Field(default_factory=dict)
+
+    def model_post_init(self, __context: Any) -> None:  # type: ignore[override]
+        self._normalize_selection()
+
+    def _normalize_selection(self) -> None:
+        selection = self.selection or SelectionConfig()
+        merged_thresholds = dict(selection.thresholds)
+        merged_thresholds.update(self.thresholds)
+
+        top_k = selection.top_k or self.top_k
+        correlation = selection.correlation or self.correlation
+        hysteresis = selection.hysteresis or self.hysteresis
+
+        self.selection = SelectionConfig(
+            thresholds=merged_thresholds,
+            top_k=top_k,
+            correlation=correlation,
+            hysteresis=hysteresis,
+        )
+        self.thresholds = merged_thresholds
+        self.top_k = top_k
+        self.correlation = correlation
+        self.hysteresis = hysteresis
 
 
 def parse_policy(raw: str | bytes | dict) -> Policy:
@@ -128,6 +252,74 @@ def parse_policy(raw: str | bytes | dict) -> Policy:
     else:
         data = raw
     return Policy.model_validate(data)
+
+
+def _normalize_key(value: str | None) -> str | None:
+    if value is None:
+        return None
+    return str(value).strip().lower().replace("-", "_")
+
+
+def _choose_profile(policy: Policy, stage: str | None, profile: str | None) -> str | None:
+    if not policy.validation_profiles:
+        return None
+
+    profiles = policy.validation_profiles
+    normalized_profiles: Dict[str, str] = {_normalize_key(name) or "": name for name in profiles}
+
+    def resolve(candidate: str | None) -> str | None:
+        normalized = _normalize_key(candidate)
+        if normalized and normalized in normalized_profiles:
+            return normalized_profiles[normalized]
+        return None
+
+    selected = resolve(profile)
+    if selected:
+        return selected
+
+    normalized_stage = _normalize_key(stage)
+    if normalized_stage:
+        mapping = {_normalize_key(k) or "": v for k, v in policy.default_profile_by_stage.items()}
+        for key in (normalized_stage, f"{normalized_stage}_only"):
+            mapped = mapping.get(key)
+            selected = resolve(mapped)
+            if selected:
+                return selected
+        selected = resolve(stage)
+        if selected:
+            return selected
+
+    for mapped in policy.default_profile_by_stage.values():
+        selected = resolve(mapped)
+        if selected:
+            return selected
+
+    if "backtest" in normalized_profiles:
+        return normalized_profiles["backtest"]
+    if "paper" in normalized_profiles:
+        return normalized_profiles["paper"]
+
+    return next(iter(profiles.keys()))
+
+
+def _materialize_policy(policy: Policy, *, stage: str | None, profile: str | None) -> tuple[Policy, str | None]:
+    """Return an evaluatable Policy and the profile name applied."""
+    selected_profile = _choose_profile(policy, stage, profile)
+
+    selection = policy.selection or SelectionConfig()
+    thresholds = dict(selection.thresholds)
+    if selected_profile:
+        profile_cfg = policy.validation_profiles.get(selected_profile)
+        if profile_cfg:
+            thresholds.update(profile_cfg.to_thresholds())
+
+    resolved_policy = Policy(
+        thresholds=thresholds,
+        top_k=selection.top_k,
+        correlation=selection.correlation,
+        hysteresis=selection.hysteresis,
+    )
+    return resolved_policy, selected_profile
 
 
 def _apply_thresholds(metrics: Dict[str, Dict[str, float]], policy: Policy) -> List[str]:
@@ -200,52 +392,58 @@ def evaluate_policy(
     policy: Policy,
     prev_active: Iterable[str] | None = None,
     correlations: Dict[Tuple[str, str], float] | None = None,
+    *,
+    stage: str | None = None,
+    profile: str | None = None,
 ) -> PolicyEvaluationResult:
     """Return strategy ids that satisfy the policy and detailed rule results.
 
     Args:
         metrics: per-strategy metric mapping.
-        policy: policy definition.
+        policy: policy definition, potentially with validation profiles.
         prev_active: previously active strategies for hysteresis.
         correlations: optional pairwise correlation matrix keyed by tuple(sorted((a,b))).
+        stage: optional evaluation stage (e.g., backtest/paper) used to pick a validation profile.
+        profile: explicit validation profile override.
     """
+    resolved_policy, selected_profile = _materialize_policy(policy, stage=stage, profile=profile)
     normalized = _normalize_metrics(metrics)
-    threshold_passed, threshold_failures = _evaluate_thresholds_with_details(normalized, policy.thresholds)
+    threshold_passed, threshold_failures = _evaluate_thresholds_with_details(normalized, resolved_policy.thresholds)
 
     candidates = threshold_passed
     topk_ranks: Dict[str, int] = {sid: idx for idx, sid in enumerate(candidates)}
-    if policy.top_k:
-        candidates, topk_ranks = _apply_topk_with_details(normalized, candidates, policy.top_k)
+    if resolved_policy.top_k:
+        candidates, topk_ranks = _apply_topk_with_details(normalized, candidates, resolved_policy.top_k)
     topk_selected = set(candidates)
 
     correlation_violations: Dict[str, List[Tuple[str, float]]] = {}
-    if policy.correlation:
+    if resolved_policy.correlation:
         candidates, correlation_violations = _apply_correlation_with_details(
-            correlations, candidates, policy.correlation
+            correlations, candidates, resolved_policy.correlation
         )
 
     hysteresis_blocked: Dict[str, str] = {}
-    if policy.hysteresis:
+    if resolved_policy.hysteresis:
         candidates, hysteresis_blocked = _apply_hysteresis_with_details(
-            normalized, candidates, prev_active, policy.hysteresis
+            normalized, candidates, prev_active, resolved_policy.hysteresis
         )
 
     selected_ids = list(candidates)
 
-    grouped_thresholds = _group_thresholds(policy.thresholds)
+    grouped_thresholds = _group_thresholds(resolved_policy.thresholds)
     rules: List[ValidationRule] = [
         DataCurrencyRule(required_metrics=[t.metric for t in grouped_thresholds["data_currency"]]),
         SampleRule(thresholds=grouped_thresholds["sample"]),
         PerformanceRule(
-            thresholds=grouped_thresholds["performance"] or list(policy.thresholds.values()),
+            thresholds=grouped_thresholds["performance"] or list(resolved_policy.thresholds.values()),
             threshold_failures=threshold_failures,
-            top_k=policy.top_k,
+            top_k=resolved_policy.top_k,
             topk_selected=topk_selected,
             topk_ranks=topk_ranks,
         ),
         RiskConstraintRule(
-            correlation_rule=policy.correlation,
-            hysteresis_rule=policy.hysteresis,
+            correlation_rule=resolved_policy.correlation,
+            hysteresis_rule=resolved_policy.hysteresis,
             correlation_violations=correlation_violations,
             hysteresis_blocked=hysteresis_blocked,
         ),
@@ -264,7 +462,11 @@ def evaluate_policy(
             per_rule[rule.name] = rule.evaluate(strategy_metrics, context)
         rule_results[strategy_id] = per_rule
 
-    return PolicyEvaluationResult(selected_ids=selected_ids, rule_results=rule_results)
+    return PolicyEvaluationResult(
+        selected_ids=selected_ids,
+        rule_results=rule_results,
+        profile=selected_profile,
+    )
 
 
 def _group_thresholds(thresholds: Mapping[str, ThresholdRule]) -> Dict[str, List[ThresholdRule]]:
@@ -641,6 +843,12 @@ class RiskConstraintRule:
 __all__ = [
     "Policy",
     "PolicyEvaluationResult",
+    "SelectionConfig",
+    "ValidationProfile",
+    "SampleProfile",
+    "PerformanceProfile",
+    "RobustnessProfile",
+    "RiskProfile",
     "ValidationRule",
     "RuleContext",
     "RuleResult",
