@@ -14,22 +14,44 @@ last_modified: 2025-08-21
 샘플 정책은 [`sample_policy.yml`](./sample_policy.yml)에 포함되어 있습니다:
 
 ```yaml
-thresholds:
-  sharpe:
+validation_profiles:
+  backtest:
+    sample:
+      min_effective_years: 2.0
+      min_trades_total: 50
+    performance:
+      sharpe_min: 0.5
+      max_dd_max: 0.25
+      gain_to_pain_min: 1.0
+    robustness:
+      dsr_min: 0.15
+    risk:
+      adv_utilization_p95_max: 0.5
+      participation_rate_p95_max: 0.4
+  paper:
+    sample:
+      min_effective_years: 3.0
+    performance:
+      sharpe_min: 0.8
+      max_dd_max: 0.2
+      gain_to_pain_min: 1.2
+    robustness:
+      dsr_min: 0.25
+
+default_profile_by_stage:
+  backtest_only: backtest
+  paper_only: paper
+
+selection:
+  top_k:
     metric: sharpe
-    min: 0.5
-  drawdown:
-    metric: drawdown
-    max: 0.2
-top_k:
-  metric: sharpe
-  k: 3
-correlation:
-  max: 0.8
-hysteresis:
-  metric: sharpe
-  enter: 0.6
-  exit: 0.4
+    k: 3
+  correlation:
+    max: 0.8
+  hysteresis:
+    metric: sharpe
+    enter: 0.6
+    exit: 0.4
 ```
 
 ## 정책 적용

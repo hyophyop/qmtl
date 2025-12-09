@@ -719,7 +719,7 @@ class ValidationPipeline:
         policy: Policy,
     ) -> bool:
         metrics_dict = {strategy_id: metrics.to_policy_metrics()}
-        active = evaluate_policy(metrics_dict, policy)
+        active = evaluate_policy(metrics_dict, policy, stage="backtest")
         return strategy_id in active
 
     def _build_failure_result(

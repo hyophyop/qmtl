@@ -7,6 +7,8 @@ Import ``create_app`` from ``qmtl.services.worldservice.api`` where needed.
 from .policy_engine import (
     Policy,
     PolicyEvaluationResult,
+    SelectionConfig,
+    ValidationProfile,
     DataCurrencyRule,
     SampleRule,
     PerformanceRule,
@@ -19,6 +21,8 @@ from .policy_engine import (
 __all__ = [
     "Policy",
     "PolicyEvaluationResult",
+    "SelectionConfig",
+    "ValidationProfile",
     "DataCurrencyRule",
     "SampleRule",
     "PerformanceRule",

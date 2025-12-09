@@ -169,3 +169,55 @@ def test_rule_results_include_expected_metadata():
     assert risk.status == "fail"
     assert risk.reason_code == "correlation_constraint_failed"
     assert set(result.rule_results["s1"].keys()) >= {"data_currency", "sample", "performance", "risk_constraint"}
+
+
+def test_validation_profiles_switch_by_stage():
+    policy = parse_policy(
+        {
+            "validation_profiles": {
+                "backtest": {
+                    "sample": {"min_effective_years": 2.0, "min_trades_total": 100},
+                    "performance": {"sharpe_min": 0.5, "max_dd_max": 0.3},
+                },
+                "paper": {
+                    "sample": {"min_effective_years": 3.0},
+                    "performance": {"sharpe_min": 0.8, "max_dd_max": 0.2, "gain_to_pain_min": 1.2},
+                    "robustness": {"dsr_min": 0.25},
+                    "risk": {"adv_utilization_p95_max": 0.3},
+                },
+            },
+            "default_profile_by_stage": {"backtest_only": "backtest", "paper_only": "paper"},
+            "selection": {"top_k": {"metric": "sharpe", "k": 1}},
+        }
+    )
+    metrics = {
+        "s1": {
+            "effective_history_years": 2.5,
+            "n_trades_total": 150,
+            "sharpe": 0.65,
+            "max_drawdown": 0.25,
+            "gain_to_pain_ratio": 1.1,
+            "deflated_sharpe_ratio": 0.3,
+            "adv_utilization_p95": 0.25,
+        }
+    }
+
+    backtest = evaluate_policy(metrics, policy, stage="backtest")
+    paper = evaluate_policy(metrics, policy, stage="paper_only")
+
+    assert backtest.profile == "backtest"
+    assert backtest.selected == ["s1"]
+    assert paper.profile == "paper"
+    assert paper.selected == []
+    assert paper.for_strategy("s1")["performance"].reason_code == "performance_thresholds_failed"
+
+
+def test_selection_thresholds_alias_retained():
+    policy = parse_policy({"selection": {"thresholds": {"sharpe": {"metric": "sharpe", "min": 0.6}}}})
+    metrics = {"s1": {"sharpe": 0.7}, "s2": {"sharpe": 0.4}}
+
+    result = evaluate_policy(metrics, policy)
+
+    assert result.selected == ["s1"]
+    assert policy.selection is not None
+    assert "sharpe" in policy.selection.thresholds

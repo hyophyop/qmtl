@@ -18,13 +18,14 @@ async def test_get_policy_and_missing_version():
 
             r = await client.get("/worlds/w1/policies/1")
             assert r.status_code == 200
-            assert r.json() == {
-                "thresholds": {},
-                "top_k": {"metric": "m", "k": 1},
-                "correlation": None,
-                "hysteresis": None,
-            }
+            payload = r.json()
+            assert payload["thresholds"] == {}
+            assert payload["top_k"] == {"metric": "m", "k": 1}
+            assert payload.get("correlation") is None
+            assert payload.get("hysteresis") is None
+            assert payload.get("validation_profiles", {}) == {}
+            assert payload.get("default_profile_by_stage", {}) == {}
+            assert payload.get("selection", {}).get("top_k") == {"metric": "m", "k": 1}
 
             r = await client.get("/worlds/w1/policies/2")
             assert r.status_code == 404
-

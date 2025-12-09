@@ -139,7 +139,13 @@ class DecisionEvaluator:
         policy = await self._resolve_policy(world_id, payload)
         prev = await self._resolve_previous(world_id, payload)
         metrics = self._augment_metrics(payload)
-        return evaluate_policy(metrics, policy, prev, payload.correlations)
+        return evaluate_policy(
+            metrics,
+            policy,
+            prev,
+            payload.correlations,
+            stage=getattr(payload, "stage", None),
+        )
 
     async def _apply_plan(self, world_id: str, payload: ApplyRequest) -> PolicyEvaluationResult:
         prev = payload.previous or await self.store.get_decisions(world_id)

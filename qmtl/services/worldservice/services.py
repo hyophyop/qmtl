@@ -346,6 +346,9 @@ class WorldService:
             validation_payload["results"] = {
                 name: result.model_dump() for name, result in rule_results.items()
             }
+        if evaluation and evaluation.profile:
+            validation_payload = validation_payload or {}
+            validation_payload.setdefault("profile", evaluation.profile)
         active_flag = strategy_id in (evaluation.selected if evaluation else [])
         summary = {
             "status": "pass" if active_flag else "fail",
