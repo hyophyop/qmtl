@@ -81,6 +81,33 @@ status: draft
 과거 SDK auto_returns 설계는 [`archive/auto_returns_unified_design.md`](../archive/auto_returns_unified_design.md)에 아카이브되어 있으며,  
 이 문서는 World/WS 기반 평가 모델을 기준으로 검증 계층을 정의한다.
 
+### 0.3 Runner.wait_for_evaluation 헬퍼 (dev/prod 공통)
+
+- Runner는 WS EvaluationRun 상태/지표를 조회하는 폴링 헬퍼를 제공한다.
+  - `Runner.wait_for_evaluation(..., timeout=300, interval=runtime.POLL_INTERVAL_SECONDS)` 또는 async 버전을 사용한다.
+  - `run_id`(또는 `evaluation_run_url`)와 `strategy_id`/`world`는 `SubmitResult`로부터 그대로 전달한다.
+  - 반환값은 `summary.status`·`summary.recommended_stage`·metrics dict 등을 담은 `EvaluationRunStatus` 이다.
+- dev/prod 모두 `Runner.submit` 이후 동일하게 사용 가능하다.
+
+```python
+from qmtl.runtime.sdk import Runner
+from scripts.generate_validation_report import generate_markdown_report
+
+submit_result = Runner.submit(MyStrategy, world="dev-world")
+eval_status = Runner.wait_for_evaluation(
+    world=submit_result.world,
+    run_id=submit_result.evaluation_run_url or submit_result.evaluation_run_id,
+    strategy_id=submit_result.strategy_id,
+    timeout=180,
+    interval=5,
+)
+
+report_markdown = generate_markdown_report(
+    eval_status.to_dict(),
+    model_card={"strategy_id": submit_result.strategy_id},
+)
+```
+
 ---
 
 ## 1. 설계 원칙

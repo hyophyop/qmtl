@@ -18,6 +18,7 @@ from .execution_context import (
     normalize_default_context,
     resolve_execution_context,
 )
+from .evaluation_runs import EvaluationRunStatus, wait_for_evaluation_run
 from .optional_services import KafkaConsumerFactory, RayExecutor
 from .protocols import (
     HistoryProviderProtocol,
@@ -182,6 +183,67 @@ class Runner:
             returns=returns,
             auto_returns=auto_returns,
             auto_validate=auto_validate,
+        )
+
+    # ==================================================================
+    # EvaluationRun helpers
+    # ==================================================================
+
+    @classmethod
+    def wait_for_evaluation(
+        cls,
+        world: str | None = None,
+        run_id: str | None = None,
+        *,
+        strategy_id: str | None = None,
+        gateway_url: str | None = None,
+        timeout: float | None = 300.0,
+        interval: float | None = None,
+        result: SubmitResult | None = None,
+    ) -> EvaluationRunStatus:
+        """Poll WorldService for an EvaluationRun until summary/metrics are available."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(
+                cls.wait_for_evaluation_async(
+                    world=world,
+                    run_id=run_id,
+                    strategy_id=strategy_id,
+                    gateway_url=gateway_url,
+                    timeout=timeout,
+                    interval=interval,
+                    result=result,
+                )
+            )
+        raise RuntimeError(
+            "Runner.wait_for_evaluation cannot be called from a running event loop; "
+            "use Runner.wait_for_evaluation_async instead."
+        )
+
+    @classmethod
+    async def wait_for_evaluation_async(
+        cls,
+        world: str | None = None,
+        run_id: str | None = None,
+        *,
+        strategy_id: str | None = None,
+        gateway_url: str | None = None,
+        timeout: float | None = 300.0,
+        interval: float | None = None,
+        result: SubmitResult | None = None,
+    ) -> EvaluationRunStatus:
+        """Async variant of wait_for_evaluation."""
+        poll_interval = runtime.POLL_INTERVAL_SECONDS if interval is None else float(max(interval, 0.0))
+        return await wait_for_evaluation_run(
+            gateway_client=cls.services().gateway_client,
+            world=world,
+            run_id=run_id,
+            strategy_id=strategy_id,
+            submit_result=result,
+            gateway_url=gateway_url,
+            timeout=timeout,
+            interval=poll_interval,
         )
 
     # ==================================================================

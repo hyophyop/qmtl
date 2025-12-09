@@ -159,6 +159,8 @@ _EXTENDED_API: Mapping[str, tuple[str, str | None]] = {
     "build_seamless_assembly": ("qmtl.runtime.sdk.seamless", "build_assembly"),
     "MaterializeSeamlessJob": ("qmtl.runtime.sdk.materialize_job", "MaterializeSeamlessJob"),
     "MaterializeReport": ("qmtl.runtime.sdk.materialize_job", "MaterializeReport"),
+    # Evaluation run helpers
+    "EvaluationRunStatus": ("qmtl.runtime.sdk.evaluation_runs", "EvaluationRunStatus"),
 }
 
 _ALL_API = {**_PUBLIC_API, **_EXTENDED_API}
