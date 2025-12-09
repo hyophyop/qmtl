@@ -1,13 +1,47 @@
 ---
-title: "SDK 자동 returns 파생 통합 설계안"
+title: "SDK 자동 returns 파생 통합 설계안 (Archived)"
 tags: [design, returns, validation, sr, sdk]
 author: "QMTL Team"
-last_modified: 2025-11-30
-status: draft
+last_modified: 2025-12-09
+status: archived
 related_issue: "hyophyop/qmtl#1723"
 ---
 
-# SDK 자동 returns 파생 통합 설계안
+# SDK 자동 returns 파생 통합 설계안 (Archived)
+
+!!! danger "Archived 설계 — World 기반 평가로 대체됨"
+    이 문서는 SDK 레벨에서 price/equity 시계열로부터 returns를 자동 파생(auto_returns)하는 **기존 설계**를 담고 있습니다.  
+    QMTL v2 이후 방향은:
+    
+    - returns/지표/검증은 **항상 World/WorldService 평가 파이프라인**에서 계산하고,
+    - SDK/Runner는 전략 제출 + EvaluationRun/지표 조회만 담당하며,
+    - 로컬 DX는 dev/prod 두 가지 World 스택(dev=로컬, prod=운영)을 통해 **prod와 동일한 플로우를 그대로 dev에서 실행**하는 방식으로 지원합니다.
+    
+    따라서 본 문서의 auto_returns 설계는 **새 구현에서 사용하지 않으며**, 역사적 참고용으로만 유지됩니다.  
+    최신 설계는 다음 문서를 참조하세요:
+    
+    - World 검증 계층 설계: `docs/ko/design/world_validation_architecture.md`
+    - 모델 리스크 관리 프레임워크: `docs/ko/design/model_risk_management_framework.md`
+
+## 0.1 v2 방향 전환: World 기반 평가 & dev/prod 스택
+
+QMTL v2 이후의 returns/지표/검증 플로우는 다음 원칙을 따른다.
+
+- **auto_returns 제거**
+  - SDK/Runner는 price/equity 시계열에서 returns를 자동 파생하지 않는다.
+  - 검증/World 평가에서 사용하는 returns는 전략이 내보낸 equity/pnl/position 시계열과 WorldService 평가 파이프라인에서 파생된 값만 사용한다.
+
+- **World/WS 기반 평가**
+  - `Runner.submit(..., world="...")`는 dev/prod 모두 World/WS 경로를 통해 EvaluationRun과 지표를 생성한다.
+  - SDK는 `SubmitResult`에서 `evaluation_run_id` 또는 WS 링크를 받아,  
+    필요 시 별도 헬퍼(예: `Runner.poll_evaluation(world, run_id, ...)`)로 지표가 준비되었는지 확인하고 EvaluationRun/metrics를 조회한다.
+
+- **dev/prod 두 가지 구성**
+  - dev 스택: 로컬/테스트용 WorldService/Gateway/Seamless 구성 (인메모리 또는 경량 백엔드)로, prod와 동일한 평가/검증 플로우를 사용한다.
+  - prod 스택: 운영용 World/WS 구성을 사용하며, 동일한 Runner/CLI 인터페이스로 연결된다.
+  - 로컬 DX는 “dev World에서 prod와 동일한 제출→EvaluationRun→지표 조회” 플로우를 그대로 실행할 수 있게 하는 방식으로만 지원한다.
+
+이후 섹션들은 SDK auto_returns 설계의 역사적 스냅샷으로 남겨 두며, 새로운 개발에서는 사용하지 않는다.
 
 ## 0. As‑Is / To‑Be 요약
 
@@ -671,4 +705,4 @@ worlds:
 
 - [hyophyop/qmtl#1723](https://github.com/hyophyop/qmtl/issues/1723) — 원본 이슈
 - [hyophyop/hft-factory-strategies#9](https://github.com/hyophyop/hft-factory-strategies/issues/9) — 실제 PnL 검증 에픽
-- [`sr_integration_proposal.md`](./sr_integration_proposal.md) — SR 통합 설계
+- [`sr_integration_proposal.md`](../design/sr_integration_proposal.md) — SR 통합 설계

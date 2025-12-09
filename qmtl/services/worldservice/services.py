@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from copy import deepcopy
 import asyncio
 import json
 import logging
@@ -40,6 +41,7 @@ from .schemas import (
     StrategySeries,
 )
 from .storage import Storage
+from .validation_checks import ensure_validation_health
 
 
 logger = logging.getLogger(__name__)
@@ -346,6 +348,7 @@ class WorldService:
             validation_payload["results"] = {
                 name: result.model_dump() for name, result in rule_results.items()
             }
+        metrics = ensure_validation_health(metrics, rule_results)
         if evaluation and evaluation.profile:
             validation_payload = validation_payload or {}
             validation_payload.setdefault("profile", evaluation.profile)
@@ -384,7 +387,7 @@ class WorldService:
         return None
 
     @staticmethod
-    def _extract_metrics(payload: EvaluateRequest, strategy_id: str) -> dict[str, float]:
+    def _extract_metrics(payload: EvaluateRequest, strategy_id: str) -> dict[str, Any]:
         metrics = payload.metrics or {}
         strategy_metrics = metrics.get(strategy_id)
         if not isinstance(strategy_metrics, dict):
@@ -392,8 +395,8 @@ class WorldService:
         # Normalize to EvaluationMetrics shape; if already structured, pass through.
         structured_keys = {"returns", "sample", "risk", "robustness", "diagnostics"}
         if structured_keys & set(strategy_metrics.keys()):
-            return dict(strategy_metrics)
-        return {"returns": dict(strategy_metrics)}
+            return deepcopy(strategy_metrics)
+        return {"returns": deepcopy(strategy_metrics)}
 
     @staticmethod
     def _extract_validation_payload(payload: EvaluateRequest) -> dict | None:

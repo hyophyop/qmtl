@@ -22,7 +22,7 @@ from the perspective of the Core Loop and the external feedback in [hyophyop/qmt
 Related docs:
 
 - [Architecture](../architecture/architecture.md), [WorldService](../architecture/worldservice.md)
-- [auto_returns unified design (Korean source)](../../ko/design/auto_returns_unified_design.md)
+- [auto_returns unified design (Korean source)](../../ko/archive/auto_returns_unified_design.md)
 - Core Loop decisions: [architecture.md](../architecture/architecture.md#core-loop-summary)
 
 All API shapes and schemas here are **draft-level**. They are meant to drive discussion; any implementation must be reconciled with existing worldservice/gateway/SDK contracts.

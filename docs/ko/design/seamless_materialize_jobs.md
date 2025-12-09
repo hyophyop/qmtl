@@ -9,6 +9,14 @@
 - 한편, “데이터를 미리 채워 두고 검증/아티팩트만 확보”하려는 요구가 있지만, 현 상태에서는 전략 DAG/Runner.submit/WorldService 경로에 얹어야 해 목적이 다른 흐름과 충돌한다.
 - 목표: **동일한 SDP 엔진을 유지**하면서도 전략용과 데이터 물질화/검증용 표면을 명시적으로 분리해 책임 경계를 선명하게 만들고, 재현성·안전 가드를 동일하게 적용한다.
 
+## 0-1. 목적/비범위(작업자용 TL;DR)
+
+- 만들 것: **하나의 Seamless 엔진** 위에 얇은 두 표면  
+  - 전략 표면: 기존 Runner.submit/WS 경로(변경 없음)  
+  - 물질화/검증 표면: SDK 백필 호출을 래핑해 범위 물질화 + conformance/SLA 리포트 + 아티팩트/TTL/priority 처리(WS/activation/allocations 없음)
+- 만들지 않을 것(비범위): 새로운 데이터 플레인/스토리지, Runner/WS 변경, 별도 백필 엔진, 일반 ETL 도구
+- 구현 방향 한 줄: **“SDK backfill 패턴을 그대로 호출하는 compute-only Job 레이어”**를 추가하고 검증/리포트/보존/경합 정책만 붙인다.
+
 ## 1. 설계 원칙
 
 1. **엔진 단일화, 표면 분리**: `SeamlessDataProvider`(컨포먼스·SLA·레지스트리·백필 엔진)는 그대로 두고, 전략용/물질화용 얇은 래퍼를 나눈다.
@@ -32,6 +40,50 @@
   - **DX 단순화**: 대표 진입점 2–3개(`materialize_and_pin(preset, start, end, retention=...)`, `require_materialized_snapshot(fingerprint=...)`)만 노출해 초기 사용자가 모드 혼동 없이 접근하도록 가이드.
 
 > 선택 사항: 위 Job을 감싼 전용 CLI(`qmtl data materialize …`, `qmtl data verify …`)는 Core Loop CLI와 다른 네임스페이스로 두어 경계를 유지한다.
+
+### 구현 가이드 (SDK 백필 패턴 우선)
+
+- 새로운 백필 엔진/파이프라인을 만들지 않고 **기존 SDK 백필 경로**(`SeamlessDataProvider.fetch` / `backfill_async`, preset + SeamlessBuilder) 위에 Job/헬퍼를 얹는다.  
+- Job은 SDK 패턴을 그대로 호출하되, 입력 검증/리포트/아티팩트/TTL/priority 같은 **오케스트레이션 레이어**만 추가한다.  
+- Runner.submit/WorldService 경로를 변경하거나 별도 데이터 저장 스택을 추가하지 않는다(단일 엔진 원칙 유지).
+
+### Core Loop 분리·DAG 실행 방식
+
+- **world/submit/WS를 통하지 않는다**: materialize Job은 SDK에서 바로 실행하고, 필요하면 world 파일에서 preset 값만 읽을 뿐 WS/activation/allocations 호출은 없다.  
+- **compute-only ExecutionContext**: execution_domain=`compute-only`·mode=`backtest`를 기본으로 해 live 전환을 차단하고, preset에 live가 정의돼 있으면 미제공 시 실패시킨다.  
+- **DAG 실행이 필요할 때**: Runner 대신 내부 DAG 실행기로 노드 그래프를 compute-only 컨텍스트에서 돌려 fetch/backfill만 수행한다(라이브 구독·배분 없음).  
+- **입력/출력 계약**: 입력은 preset/builder config(+선택적 DAG spec, start/end), 출력은 `{dataset_fingerprint, as_of, coverage_bounds, conformance_flags, sla_violation, attempts, checkpoint_key, retention_class}`.  
+- **가드**: live 발견 시 실패, contract_version/fingerprint 불일치 시 실패, artifacts_enabled+artifact_dir(선택적) 검증, priority/TTL는 보고서·정책에 반영.
+
+### 최소 API 스케치 (예시)
+
+```python
+class MaterializeReport(TypedDict):
+    dataset_fingerprint: str
+    as_of: int
+    coverage_bounds: tuple[int, int]
+    conformance_flags: dict[str, str]
+    sla_deadline_ms: int
+    retention_class: str
+
+class MaterializeSeamlessJob:
+    def __init__(
+        self,
+        preset: str,
+        start: int | None,
+        end: int | None,
+        *,
+        artifact_dir: str | None = None,
+        retention_class: str = "research-short",
+        priority: str | None = None,
+        contract_version: str | None = None,
+    ): ...
+
+    async def run(self) -> MaterializeReport: ...
+```
+
+필수: preset, (start/end 또는 as_of now), preset에 live가 있으면 live 설정 제공.  
+옵션: artifact_dir, retention_class, priority, contract_version(불일치 시 실패), SLA/conformance override는 preset 기준.
 
 ## 3. 동작 규약 (전략 vs 물질화)
 
@@ -68,12 +120,40 @@
 - 실패/복구 시나리오: 네트워크 중단·partial 물질화 후 resume, schema evolution(새 `contract_version`) 시 실패/경고 처리, rate-limit 초과 시 백오프 정책을 계약 테스트로 고정.  
 - E2E 예시: core-loop demo preset으로 materialize → fingerprint/coverage 확인 → 동일 preset/contract_version으로 Runner.submit 실행 시 동일 스냅샷 소비 확인.
 
+### 테스트 케이스 체크리스트
+
+- 계약 위반: preset interval/kind 불일치 → 즉시 실패.  
+- live 필수 preset에서 live 누락 → 실패. live 없는 preset은 성공.  
+- contract_version 불일치 → 실패. fingerprint mismatch → 실패.  
+- SLA/컨포먼스 위반 → 예외 전파, 리포트에 flag 기록.  
+- resume: 중간 실패 후 동일 key로 재시도 시 덮어쓰기/재개 동작 확인.  
+- rate-limit 초과 → 백오프/경고 동작.  
+- retention_class/TTL 설정 시 만료 후 GC 또는 보관 이동 로그 확인.  
+- E2E: materialize → Runner.submit 동일 preset/contract_version 소비 시 동일 coverage/fingerprint.
+
 ## 7. 롤아웃 메모
 
 - 코드 변경 범위는 SDK 층에 국한(엔진 재사용), Core Loop CLI/WS 경로는 변경하지 않는다.  
 - 문서: 본 설계를 `../architecture/seamless_data_provider_v2.md`와 가이드에 링크하고, “데이터 물질화/검증 전용” 섹션을 추가해 범위·경계를 명시.  
 - CLI 추가 시 별도 네임스페이스를 사용해 Runner.submit 흐름과 UI 충돌을 방지한다.  
 - 도입 절차: feature flag로 shadow 모드 → 팀/preset 단위 opt-in → 문제 없을 때 일반 공개. 롤백 시 flag로 즉시 차단. `qmtl --help`에서 data 네임스페이스와 core-loop 네임스페이스를 명확히 분리해 혼동을 줄인다.
+
+## 8. 구현 시 DoD/체크리스트
+
+- API: `MaterializeSeamlessJob`/`MaterializeReport` 시그니처, 필수/옵션 인자 표기.  
+- 검증: preset kind/interval, live 필수 여부, contract_version/fingerprint 일치, SLA/컨포먼스 fail-closed.  
+- 리포트: `dataset_fingerprint`, `as_of`, `coverage_bounds`, `conformance_flags`, `sla_deadline_ms`, `retention_class` 필수.  
+- 보존/우선순위: `retention_class` → TTL/보관 정책, `priority`/`rate_limit_profile` 적용.  
+- 아티팩트: artifacts_enabled 적용 시 artifact_dir 필수, 기록 경로 로그.  
+- 관측: 메트릭/로그(coverage, conformance_flags, SLA, resume/attempts) 방출.  
+- 테스트: 위 테스트 체크리스트 항목 구현.
+
+## 9. 워크플로 예시 (요약)
+
+1) `MaterializeSeamlessJob(preset="ohlcv.binance.spot.1m", start=..., end=..., contract_version="v1")` 생성 → `run()`  
+2) 리포트에서 `dataset_fingerprint/as_of/coverage_bounds` 확인, artifacts 확인(필요 시)  
+3) 동일 preset/contract_version으로 `Runner.submit(..., world=..., ...)` 실행 → WS/activation 출력에서 Seamless 메타(coverage/fingerprint) 일치 확인  
+4) 만료 정책(retention_class)에 따라 아티팩트/스토리지 GC 또는 보관 이동
 
 ## 8. 참고 문서
 
