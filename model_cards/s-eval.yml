@@ -1,0 +1,12 @@
+strategy_id: s-eval
+model_card_version: v1.0
+objective: Demo model card linking evaluation runs to strategy metadata
+data_overview:
+  - Synthetic returns from SDK validation fixtures
+  - 1h bar data with limited coverage for smoke tests
+key_assumptions:
+  - Momentum signal remains stable across the evaluated horizon
+  - Liquidity is sufficient for simulated position sizes
+key_limitations:
+  - No live execution evidence; backtest metrics only
+  - Risk calibration is not production-grade

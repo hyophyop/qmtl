@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Literal
 
 from pydantic import BaseModel, Field
 
@@ -18,6 +18,13 @@ class SeamlessArtifactPayload(BaseModel):
     as_of: str | None = None
     rows: int | None = None
     uri: str | None = None
+
+
+class EvaluationOverride(BaseModel):
+    status: Literal["approved", "rejected", "none"]
+    reason: str | None = None
+    actor: str | None = None
+    timestamp: str | None = None
 
 
 class DecisionEnvelope(BaseModel):
@@ -47,6 +54,8 @@ class EvaluateRequest(BaseModel):
     stage: str | None = None
     risk_tier: str | None = None
     strategy_id: str | None = None
+    model_card_version: str | None = None
+    override: EvaluationOverride | None = None
 
 
 class ActivationEnvelope(BaseModel):
@@ -70,6 +79,7 @@ class ActivationEnvelope(BaseModel):
 __all__ = [
     "ActivationEnvelope",
     "DecisionEnvelope",
+    "EvaluationOverride",
     "EvaluateRequest",
     "SeamlessArtifactPayload",
     "StrategySeries",

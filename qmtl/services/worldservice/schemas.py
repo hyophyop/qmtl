@@ -10,6 +10,7 @@ from .shared_schemas import (
     ActivationEnvelope,
     DecisionEnvelope,
     EvaluateRequest,
+    EvaluationOverride,
     SeamlessArtifactPayload,
     StrategySeries,
 )
@@ -430,6 +431,7 @@ class EvaluationRunModel(BaseModel):
     run_id: str
     stage: Literal["backtest", "paper", "live"] | str
     risk_tier: Literal["high", "medium", "low"] | str
+    model_card_version: str | None = None
     metrics: EvaluationMetrics | None = None
     validation: EvaluationValidation | None = None
     summary: EvaluationSummary | None = None
@@ -451,6 +453,7 @@ __all__ = [
     'BindingsResponse',
     'DecisionEnvelope',
     'DecisionsRequest',
+    'EvaluationOverride',
     'EdgeOverrideResponse',
     'EdgeOverrideUpsertRequest',
     'EvaluateRequest',

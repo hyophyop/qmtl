@@ -781,6 +781,7 @@ class PersistentStorage:
         *,
         stage: str,
         risk_tier: str,
+        model_card_version: str | None = None,
         metrics: Mapping[str, Any] | None = None,
         validation: Mapping[str, Any] | None = None,
         summary: Mapping[str, Any] | None = None,
@@ -794,6 +795,7 @@ class PersistentStorage:
             strategy_id=strategy_id,
             stage=stage,
             risk_tier=risk_tier,
+            model_card_version=model_card_version if model_card_version is not None else (existing.model_card_version if existing else None),
             metrics=deepcopy(metrics) if metrics else {},
             validation=deepcopy(validation) if validation else {},
             summary=deepcopy(summary) if summary else {},
@@ -801,6 +803,55 @@ class PersistentStorage:
             updated_at=now,
         )
         await self._evaluation_repo.upsert(record)
+        return record.to_dict()
+
+    async def record_evaluation_override(
+        self,
+        world_id: str,
+        strategy_id: str,
+        run_id: str,
+        override: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        existing = await self._evaluation_repo.get(world_id, strategy_id, run_id)
+        if existing is None:
+            raise KeyError("evaluation run not found")
+
+        override_timestamp = str(override.get("timestamp") or _utc_now())
+        summary = dict(existing.summary or {})
+        summary.update(
+            {
+                "override_status": override.get("status"),
+                "override_reason": override.get("reason"),
+                "override_actor": override.get("actor"),
+                "override_timestamp": override_timestamp,
+            }
+        )
+
+        record = EvaluationRunRecord(
+            run_id=existing.run_id,
+            world_id=existing.world_id,
+            strategy_id=existing.strategy_id,
+            stage=existing.stage,
+            risk_tier=existing.risk_tier,
+            model_card_version=existing.model_card_version,
+            metrics=deepcopy(existing.metrics),
+            validation=deepcopy(existing.validation),
+            summary=summary,
+            created_at=existing.created_at,
+            updated_at=override_timestamp,
+        )
+        await self._evaluation_repo.upsert(record)
+        await self._append_audit(
+            world_id,
+            {
+                "event": "evaluation_run_override_recorded",
+                "strategy_id": strategy_id,
+                "run_id": run_id,
+                "status": override.get("status"),
+                "actor": override.get("actor"),
+                "timestamp": override_timestamp,
+            },
+        )
         return record.to_dict()
 
     async def get_evaluation_run(
