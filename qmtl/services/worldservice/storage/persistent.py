@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
@@ -15,11 +16,12 @@ from qmtl.foundation.common.hashutils import hash_bytes
 from qmtl.services.worldservice.policy_engine import Policy
 
 from .constants import DEFAULT_EDGE_OVERRIDES
-from .models import AllocationRun, AllocationState, WorldActivation
+from .models import AllocationRun, AllocationState, EvaluationRunRecord, WorldActivation
 from .repositories import (
     PersistentActivationRepository,
     PersistentBindingRepository,
     PersistentPolicyRepository,
+    PersistentEvaluationRunRepository,
     PersistentWorldRepository,
     _REASON_UNSET,
     _normalize_execution_domain,
@@ -125,6 +127,9 @@ class PersistentStorage:
         self._redis = redis_client
         self._world_repo = PersistentWorldRepository(self._driver, self._append_audit)
         self._policy_repo = PersistentPolicyRepository(self._driver, self._append_audit)
+        self._evaluation_repo = PersistentEvaluationRunRepository(
+            self._driver, self._append_audit
+        )
         self._binding_repo = PersistentBindingRepository(self._driver, self._append_audit)
         self._activation_repo = PersistentActivationRepository(
             self._redis, self._append_audit
@@ -301,6 +306,21 @@ class PersistentStorage:
             )
             """
         )
+        await self._driver.execute(
+            """
+            CREATE TABLE IF NOT EXISTS evaluation_runs (
+                world_id TEXT NOT NULL,
+                strategy_id TEXT NOT NULL,
+                run_id TEXT NOT NULL,
+                stage TEXT NOT NULL,
+                risk_tier TEXT NOT NULL,
+                payload JSON NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (world_id, strategy_id, run_id)
+            )
+            """
+        )
 
     # ------------------------------------------------------------------
     # World lifecycle
@@ -335,6 +355,7 @@ class PersistentStorage:
         await self._driver.execute("DELETE FROM validation_cache WHERE world_id = ?", world_id)
         await self._driver.execute("DELETE FROM world_nodes WHERE world_id = ?", world_id)
         await self._driver.execute("DELETE FROM history_metadata WHERE world_id = ?", world_id)
+        await self._driver.execute("DELETE FROM evaluation_runs WHERE world_id = ?", world_id)
         await self._activation_repo.clear(world_id)
 
     # ------------------------------------------------------------------
@@ -751,6 +772,50 @@ class PersistentStorage:
             1 if executed else 0,
             created_at,
         )
+
+    async def record_evaluation_run(
+        self,
+        world_id: str,
+        strategy_id: str,
+        run_id: str,
+        *,
+        stage: str,
+        risk_tier: str,
+        metrics: Mapping[str, Any] | None = None,
+        validation: Mapping[str, Any] | None = None,
+        summary: Mapping[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        now = _utc_now()
+        existing = await self._evaluation_repo.get(world_id, strategy_id, run_id)
+        created_at = existing.created_at if existing else now
+        record = EvaluationRunRecord(
+            run_id=run_id,
+            world_id=world_id,
+            strategy_id=strategy_id,
+            stage=stage,
+            risk_tier=risk_tier,
+            metrics=deepcopy(metrics) if metrics else {},
+            validation=deepcopy(validation) if validation else {},
+            summary=deepcopy(summary) if summary else {},
+            created_at=created_at,
+            updated_at=now,
+        )
+        await self._evaluation_repo.upsert(record)
+        return record.to_dict()
+
+    async def get_evaluation_run(
+        self, world_id: str, strategy_id: str, run_id: str
+    ) -> Optional[Dict[str, Any]]:
+        record = await self._evaluation_repo.get(world_id, strategy_id, run_id)
+        return None if record is None else record.to_dict()
+
+    async def list_evaluation_runs(
+        self, *, world_id: str | None = None, strategy_id: str | None = None
+    ) -> List[Dict[str, Any]]:
+        records = await self._evaluation_repo.list(
+            world_id=world_id, strategy_id=strategy_id
+        )
+        return [record.to_dict() for record in records]
 
     async def get_allocation_run(self, run_id: str) -> Optional[Dict[str, Any]]:
         row = await self._driver.fetchone(

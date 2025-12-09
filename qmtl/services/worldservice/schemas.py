@@ -350,6 +350,91 @@ class AllocationSnapshotResponse(BaseModel):
     allocations: Dict[str, WorldAllocationSnapshot] = Field(default_factory=dict)
 
 
+class ReturnsMetrics(BaseModel):
+    sharpe: float | None = None
+    max_drawdown: float | None = None
+    gain_to_pain_ratio: float | None = None
+    time_under_water_ratio: float | None = None
+
+
+class SampleMetrics(BaseModel):
+    effective_history_years: float | None = None
+    n_trades_total: int | None = None
+    n_trades_per_year: float | None = None
+
+
+class RiskMetrics(BaseModel):
+    adv_utilization_p95: float | None = None
+    participation_rate_p95: float | None = None
+
+
+class RobustnessMetrics(BaseModel):
+    deflated_sharpe_ratio: float | None = None
+    sharpe_first_half: float | None = None
+    sharpe_second_half: float | None = None
+
+
+class ValidationHealth(BaseModel):
+    metric_coverage_ratio: float | None = None
+    rules_executed_ratio: float | None = None
+
+
+class DiagnosticsMetrics(BaseModel):
+    strategy_complexity: float | None = None
+    search_intensity: int | None = None
+    returns_source: str | None = None
+    validation_health: ValidationHealth | None = None
+
+
+class EvaluationMetrics(BaseModel):
+    returns: ReturnsMetrics | None = None
+    sample: SampleMetrics | None = None
+    risk: RiskMetrics | None = None
+    robustness: RobustnessMetrics | None = None
+    diagnostics: DiagnosticsMetrics | None = None
+
+
+class RuleResultModel(BaseModel):
+    status: Literal["pass", "fail", "warn"]
+    severity: Literal["blocking", "soft", "info"] | None = None
+    owner: Literal["quant", "risk", "ops"] | None = None
+    reason_code: str | None = None
+    reason: str | None = None
+    tags: List[str] | None = None
+    details: Dict[str, Any] | None = None
+
+
+class EvaluationValidation(BaseModel):
+    policy_version: str | None = None
+    ruleset_hash: str | None = None
+    profile: str | None = None
+    results: Dict[str, RuleResultModel] | None = None
+
+
+class EvaluationSummary(BaseModel):
+    status: Literal["pass", "warn", "fail"] | None = None
+    recommended_stage: Literal[
+        "backtest_only", "paper_only", "paper_ok_live_candidate"
+    ] | None = None
+    override_status: Literal["none", "approved", "rejected"] | None = None
+    override_reason: str | None = None
+    override_actor: str | None = None
+    override_timestamp: str | None = None
+
+
+class EvaluationRunModel(BaseModel):
+    world_id: str
+    strategy_id: str
+    run_id: str
+    stage: Literal["backtest", "paper", "live"] | str
+    risk_tier: Literal["high", "medium", "low"] | str
+    metrics: EvaluationMetrics | None = None
+    validation: EvaluationValidation | None = None
+    summary: EvaluationSummary | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
 __all__ = [
     'AlphaMetricsEnvelope',
     'ActivationEnvelope',
@@ -387,4 +472,15 @@ __all__ = [
     'SymbolDeltaModel',
     'WorldAllocationSnapshot',
     'AllocationSnapshotResponse',
+    'ReturnsMetrics',
+    'SampleMetrics',
+    'RiskMetrics',
+    'RobustnessMetrics',
+    'DiagnosticsMetrics',
+    'ValidationHealth',
+    'EvaluationMetrics',
+    'RuleResultModel',
+    'EvaluationValidation',
+    'EvaluationSummary',
+    'EvaluationRunModel',
 ]
