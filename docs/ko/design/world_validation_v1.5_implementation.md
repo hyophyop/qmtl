@@ -133,19 +133,18 @@
 - 스토어/보존: EvaluationRun/override 불변 저장, 정책 버전별 히스토리 유지(최소 90일) → API/문서로 스키마 고정 필요(추후 PR).
 
 ## G5 전환 스텝 (SDK→WS)
-- SDK metrics-only 플래그: `QMTL_SDK_METRICS_ONLY=1` 시 ValidationPipeline이 정책 게이팅을 건너뛰고 metrics만 산출, 최종 결정은 WS 평가/오케스트레이션 결과를 신뢰.
-- 전환/롤백: 플래그 기본 off(기존 동작), 단계적 on → 문제 시 환경변수 제거로 즉시 롤백.
-- 추가 TODO: WS 오케스트레이션 기본값 전환 및 SDK 디프리케이션 가이드/테스트는 후속 PR에서 완성.
+- SDK: ValidationPipeline은 **metrics 산출(precheck)** 만 담당하고, 정책/룰 실행·오케스트레이션은 WS `/evaluate` 단일 진입으로 수렴(SSOT).
+- 전환: `Runner.submit` 기본 경로에서 WS 평가 결과를 신뢰하고, 로컬 precheck는 참고 정보로만 노출한다.
+- 롤백/우회(긴급): WS 장애/변경 대응 시 `Runner.submit(..., auto_validate=False)`로 제출/런 생성만 수행하거나, 문제 버전 전 SDK pin으로 복구한다.
 
 ## G5 전환 체크리스트 (추가)
-- [ ] SDK metrics-only를 기본값(on)으로 전환하는 플래그/디폴트 결정 및 배포 계획 수립.
 - [ ] WS 통합 테스트: 룰 실행/오류 처리/오프로드 경로를 WS 단일 진입으로 검증.
-- [ ] SDK 디프리케이션 가이드: precheck/WS SSOT 관계 명시, `QMTL_SDK_METRICS_ONLY` 플래그 사용법, 롤백 절차 포함.
+- [ ] SDK 디프리케이션 가이드: precheck/WS SSOT 관계 명시, 로컬 정책 평가 제거 사실 및 제거 일정/대체 경로 명시.
 - [ ] 모드별(Backtest/Paper/Live) WS 오케스트레이션 플래그 롤아웃 순서 합의 및 알림.
 
 ### 모드별 롤아웃 가이드
 - Backtest → Paper → Live 순으로 단계 적용, 각 단계에서 수집/재시도율/알람을 모니터링 후 다음 단계 진행.
-- 롤백: 특정 스테이지에서 문제 발생 시 `QMTL_SDK_METRICS_ONLY=0`으로 즉시 복구하고 WS 로그/메트릭으로 원인 파악.
+- 롤백: 특정 스테이지에서 문제 발생 시 `auto_validate=False` 우회 또는 SDK 버전 pin으로 즉시 복구하고 WS 로그/메트릭으로 원인 파악.
 - 커뮤니케이션: 롤아웃 전/후 changelog+런북 업데이트, 제출/파이프라인 소유자 대상 공지.
 
 ## 리허설/검증 시나리오 (필수)

@@ -765,12 +765,12 @@ validation:
 **현재 구현:**
 
 ```
-Runner.submit() → ValidationPipeline (SDK 레벨) → policy_engine.evaluate_policy() → WorldService.evaluate()
+Runner.submit() → (SDK metrics precheck) → Gateway /worlds/{world_id}/evaluate → WorldService.evaluate()
 ```
 
-- `ValidationPipeline`은 **SDK/Runtime 레이어**(`qmtl/runtime/sdk/validation_pipeline.py`)에 위치
-- `policy_engine.py`는 **WorldService 하위**에 있지만, 실제로는 SDK에서 직접 import해서 사용
-- 검증 로직이 Runner → WS 사이에 분산되어 있음
+- `ValidationPipeline`은 **SDK/Runtime 레이어**(`qmtl/runtime/sdk/validation_pipeline.py`)에 위치하지만, **metrics-only(precheck)** 로 축소됨
+- `policy_engine.py`는 **WorldService 하위**에서만 사용되며, Runner/SDK에서 직접 import하지 않음
+- 정책/룰 실행·오케스트레이션은 WorldService가 담당(SSOT)
 
 **본 설계 제안:**
 
@@ -780,14 +780,14 @@ Runner.submit() → ValidationPipeline (SDK 레벨) → policy_engine.evaluate_p
 
 **갭:**
 
-- 현재는 **ValidationPipeline이 SDK에서 정책 평가를 직접 수행**하고, WS는 최종 activate/reject 결정만 내림
-- 설계처럼 "WS가 Rule 파이프라인 전체를 오케스트레이션"하려면 **SDK→WS 간 책임 재배치** 필요
+- Runner/SDK에는 여전히 "로컬 precheck" 개념이 남아 있으나, 이는 **참고용(metrics 산출 결과)** 이고 SSOT가 아님
+- 설계처럼 "WS가 Rule 파이프라인 전체를 오케스트레이션"하려면, SDK 출력(메트릭/시계열/컨텍스트)과 WS 입력 스키마/계약을 더 명확히 고정할 필요가 있음
 
 **권장 마이그레이션:**
 
-1. 단기: SDK의 ValidationPipeline이 계산한 RuleResult를 WS에 그대로 전달, WS는 이를 저장/조회만 담당
-2. 중기: WS에 Rule 실행 엔진 추가, SDK는 raw metrics만 전송
-3. 장기: SDK의 ValidationPipeline을 thin client로 전환
+1. 단기: SDK ValidationPipeline을 metrics-only로 유지하고, WS `/evaluate` 계약(입력/출력/저장 메타)을 통합 테스트로 고정
+2. 중기: WS가 Rule 실행·요약 산출·EvaluationRun 저장을 단일 진입으로 일원화(SSOT 강화)
+3. 장기: SDK의 ValidationPipeline(로컬 precheck) 디프리케이션/제거 및 문서/런북 정리
 
 ---
 

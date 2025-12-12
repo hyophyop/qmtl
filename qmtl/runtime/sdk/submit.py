@@ -684,7 +684,6 @@ async def submit_async(
             strategy_id=bootstrap_out.strategy_id or strategy_class_name,
             resolved_world=resolved_world,
             resolved_preset=world_ctx.resolved_preset,
-            validation_policy=world_ctx.validation_policy,
             backtest_returns=backtest_returns,
             mode=mode,
             services=services,
@@ -742,7 +741,6 @@ class WorldContext:
     resolved_preset: str | None
     world_notice: list[str]
     world_description: dict[str, Any] | None
-    validation_policy: Any | None
     data_preset: str | None = None
     world_data_preset_id: str | None = None
 
@@ -863,13 +861,11 @@ async def _build_world_context(
             preset_overrides=overrides,
         )
 
-    validation_policy = _policy_from_payload(policy_payload)
     return WorldContext(
         policy_payload=policy_payload,
         resolved_preset=resolved_preset_out,
         world_notice=world_notice,
         world_description=world_description,
-        validation_policy=validation_policy,
     )
 
 
@@ -1150,7 +1146,6 @@ async def _run_validation_and_ws_eval(
     strategy_id: str,
     resolved_world: str,
     resolved_preset: str | None,
-    validation_policy: Any | None,
     backtest_returns: Sequence[float],
     mode: Mode,
     services: "RunnerServices",
@@ -1159,13 +1154,10 @@ async def _run_validation_and_ws_eval(
 ) -> tuple[Any, WsEvalResult | None]:
     from .validation_pipeline import ValidationPipeline
 
-    metrics_only = _metrics_only_enabled()
-
     validation_pipeline = ValidationPipeline(
         preset=resolved_preset,
-        policy=validation_policy,
         world_id=resolved_world,
-        metrics_only=metrics_only,
+        metrics_only=True,
     )
     validation_result = await validation_pipeline.validate(strategy, returns=backtest_returns)
 
@@ -1359,20 +1351,31 @@ def _ws_rejection_result(
 
 
 def _resolved_status(validation_result: Any, ws_eval: WsEvalResult | None) -> str:
-    if ws_eval:
+    """
+    Resolve the submission status from local validation and WS evaluation.
+
+    WorldService is authoritative (SSOT). If WS evaluation is missing/unavailable,
+    do not report a strategy as validated based on local (metrics-only) validation.
+    """
+    from .validation_pipeline import ValidationStatus
+
+    if ws_eval is not None:
         if ws_eval.active is True:
             return "active"
         if ws_eval.active is False:
             return "rejected"
         if ws_eval.error:
             return "pending"
+        # WS response didn't include an explicit decision; treat as pending.
+        return "pending"
+
     if getattr(validation_result, "activated", False):
         return "active"
-    from .validation_pipeline import ValidationStatus
-    if getattr(validation_result, "status", None) == ValidationStatus.PASSED:
-        return "validated"
+
     if getattr(validation_result, "status", None) == ValidationStatus.FAILED:
         return "rejected"
+
+    # Local PASSED (metrics-only) means metrics computed; WS decision is still pending.
     return "pending"
 
 
@@ -1967,25 +1970,6 @@ async def _fetch_world_description(
             return data if isinstance(data, dict) else None
     except Exception:
         logger.debug("Failed to fetch world description for %s", world_id, exc_info=True)
-        return None
-
-
-def _policy_from_payload(payload: dict[str, Any] | None) -> Any | None:
-    """Extract Policy model from world payload or preset dict."""
-    if payload is None:
-        return None
-    try:
-        from qmtl.services.worldservice.policy_engine import Policy
-    except Exception:
-        return None
-
-    base = payload
-    if isinstance(payload, dict) and "policy" in payload and isinstance(payload["policy"], dict):
-        base = payload["policy"]
-    try:
-        return Policy.model_validate(base)
-    except Exception:
-        logger.debug("Failed to parse policy payload for validation", exc_info=True)
         return None
 
 
