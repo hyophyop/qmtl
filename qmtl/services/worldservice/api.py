@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 import logging
 from contextlib import asynccontextmanager
@@ -156,12 +157,19 @@ def _build_hub_blob_store(
         # Dev: keep everything inline/fakeredis; no persistent/offload store
         return None
     try:
+        client = redis_client
+        if client is not None:
+            setter = getattr(client, "set", None)
+            if asyncio.iscoroutinefunction(setter):
+                # Async Redis clients are not compatible with the sync blob store interface.
+                # Fall back to DSN-based sync client construction.
+                client = None
         return build_blob_store(
             store_type=cfg.blob_store.type,
             base_dir=cfg.blob_store.base_dir,
             bucket=cfg.blob_store.bucket,
             prefix=cfg.blob_store.prefix,
-            redis_client=redis_client,
+            redis_client=client,
             redis_dsn=redis_url,
             redis_prefix=cfg.blob_store.redis_prefix,
             cache_ttl=cfg.blob_store.cache_ttl,
