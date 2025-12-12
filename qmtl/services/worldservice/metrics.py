@@ -6,6 +6,9 @@ from collections.abc import MutableMapping
 from datetime import datetime, timezone
 from typing import Any, Mapping, cast
 
+from prometheus_client import REGISTRY as global_registry
+from prometheus_client import generate_latest
+
 from qmtl.foundation.common.metrics_factory import (
     get_mapping_store,
     get_metric_value,
@@ -220,13 +223,27 @@ def parse_timestamp(value: str | None) -> datetime | None:
 
     if not value:
         return None
+    candidate = str(value).strip()
+    if candidate.endswith("Z"):
+        candidate = f"{candidate[:-1]}+00:00"
     try:
-        ts = datetime.fromisoformat(value)
+        ts = datetime.fromisoformat(candidate)
     except ValueError:
         return None
     if ts.tzinfo is None:
         ts = ts.replace(tzinfo=timezone.utc)
+    else:
+        ts = ts.astimezone(timezone.utc)
     return ts
+
+
+def collect_metrics() -> str:
+    """Return metrics in text exposition format."""
+
+    # Ensure all metric modules have registered their families before we export.
+    from . import live_metrics_risk  # noqa: F401
+
+    return generate_latest(global_registry).decode()
 
 
 def reset_metrics() -> None:
@@ -253,6 +270,7 @@ def reset_metrics() -> None:
 
 
 __all__ = [
+    "collect_metrics",
     "parse_timestamp",
     "record_allocation_snapshot",
     "record_apply_run_completed",

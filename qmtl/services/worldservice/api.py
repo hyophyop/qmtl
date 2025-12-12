@@ -28,6 +28,7 @@ from .routers import (
     create_bindings_router,
     create_evaluation_runs_router,
     create_live_monitoring_router,
+    create_observability_router,
     create_risk_hub_router,
     create_policies_router,
     create_rebalancing_router,
@@ -459,6 +460,7 @@ def create_app(
     app.include_router(create_allocations_router(service))
     app.include_router(create_evaluation_runs_router(service))
     app.include_router(create_live_monitoring_router(service))
+    app.include_router(create_observability_router())
     app.include_router(
         create_risk_hub_router(
             risk_hub,

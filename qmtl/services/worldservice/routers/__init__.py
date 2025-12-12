@@ -8,6 +8,7 @@ from .validations import create_validations_router
 from .worlds import create_worlds_router
 from .risk_hub import create_risk_hub_router
 from .live_monitoring import create_live_monitoring_router
+from .observability import create_observability_router
 
 __all__ = [
     'create_activation_router',
@@ -20,4 +21,5 @@ __all__ = [
     'create_worlds_router',
     'create_risk_hub_router',
     'create_live_monitoring_router',
+    'create_observability_router',
 ]
