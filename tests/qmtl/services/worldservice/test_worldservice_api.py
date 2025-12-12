@@ -7,7 +7,11 @@ import httpx
 import pytest
 
 from qmtl.services.worldservice import api as worldservice_api
-from qmtl.foundation.config import DeploymentProfile
+from qmtl.foundation.config import (
+    DeploymentProfile,
+    RiskHubBlobStoreConfig,
+    RiskHubConfig,
+)
 from qmtl.services.worldservice.api import StorageHandle, create_app
 from qmtl.services.worldservice.controlbus_producer import ControlBusProducer
 from qmtl.services.worldservice.config import WorldServiceServerConfig
@@ -1786,6 +1790,50 @@ async def test_create_app_with_config_object_uses_redis_storage(
         assert app.state.storage._redis is fake_redis
 
     assert calls == [config.redis]
+
+
+def test_build_hub_blob_store_falls_back_to_sync_redis_client(monkeypatch):
+    cfg = RiskHubConfig(blob_store=RiskHubBlobStoreConfig(type="redis"))
+
+    class _AsyncRedisStub:
+        async def set(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+    class _SyncRedisStub:
+        def __init__(self) -> None:
+            self._values: dict[str, str] = {}
+
+        def set(self, key: str, value: str) -> None:
+            self._values[key] = value
+
+        def get(self, key: str) -> str | None:
+            return self._values.get(key)
+
+        def expire(self, key: str, ttl: int) -> None:
+            # ttl bookkeeping is not required for this unit test
+            return None
+
+    sync_stub = _SyncRedisStub()
+
+    import redis as redis_sync
+
+    monkeypatch.setattr(
+        redis_sync,
+        "from_url",
+        lambda *args, **kwargs: sync_stub,
+    )
+
+    store = worldservice_api._build_hub_blob_store(
+        cfg,
+        redis_url="redis://example",
+        redis_client=_AsyncRedisStub(),
+        profile=DeploymentProfile.PROD,
+    )
+    assert store is not None
+    assert getattr(store, "_client") is sync_stub
+
+    ref = store.write("cov", {"a": 1})
+    assert store.read(ref) == {"a": 1}
 
 
 @pytest.mark.asyncio
