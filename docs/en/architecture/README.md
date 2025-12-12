@@ -25,6 +25,7 @@ See also: Architecture Glossary (../architecture/glossary.md) for canonical term
 - [WorldService](worldservice.md): World policy, decisions, activation.
 - [ControlBus](controlbus.md): Internal control bus (opaque to SDK).
 - [Lean Brokerage Model](lean_brokerage_model.md): Brokerage integration details.
+- [Risk Signal Hub](risk_signal_hub.md): Portfolio/risk snapshot SSOT.
 
 ## Architectural Layers at a Glance
 

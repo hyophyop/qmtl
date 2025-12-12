@@ -22,6 +22,7 @@ last_modified: 2025-12-06
 - [WorldService](worldservice.md)
 - [ControlBus](controlbus.md)
 - [Exchange Node Sets](exchange_node_sets.md)
+- Risk Signal Hub: [Risk Signal Hub Architecture](risk_signal_hub.md)
 
 ---
 

@@ -136,3 +136,51 @@ prometheus:
           annotations:
             summary: Surge in Seamless conformance flags over the last 15 minutes
             runbook: docs/operations/seamless_sla_dashboards.html#validation-tooling
+        - alert: RiskHubSnapshotStale
+          expr: max_over_time(risk_hub_snapshot_lag_seconds[5m]) > 600
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Risk hub snapshots are older than 10 minutes
+            runbook: docs/operations/risk_signal_hub_runbook.html
+        - alert: RiskHubSnapshotMissing
+          expr: sum(increase(risk_hub_snapshot_missing_total[5m])) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Failed or missing risk snapshots observed
+            runbook: docs/operations/risk_signal_hub_runbook.html
+        - alert: RiskHubSnapshotDedupeSpike
+          expr: sum(rate(risk_hub_snapshot_dedupe_total[5m])) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Risk hub snapshots dropped due to dedupe keys
+            runbook: docs/operations/risk_signal_hub_runbook.html
+        - alert: RiskHubSnapshotExpiredSpike
+          expr: sum(rate(risk_hub_snapshot_expired_total[5m])) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Risk hub snapshots dropped due to expired TTL
+            runbook: docs/operations/risk_signal_hub_runbook.html
+        - alert: RiskHubSnapshotRetrySpike
+          expr: sum(rate(risk_hub_snapshot_retry_total[5m])) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Risk hub snapshot processing retries observed
+            runbook: docs/operations/risk_signal_hub_runbook.html
+        - alert: RiskHubSnapshotDLQ
+          expr: sum(increase(risk_hub_snapshot_dlq_total[5m])) > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Risk hub snapshots routed to DLQ
+            runbook: docs/operations/risk_signal_hub_runbook.html

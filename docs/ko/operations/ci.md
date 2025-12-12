@@ -63,6 +63,48 @@ def test_long_running_case():
 - 오래 걸리거나 외부 리소스를 사용하는 테스트는 `slow` 로 표시하고 필요하면 프리플라이트에서 `-k 'not slow'` 로 제외합니다.
 - 무제한 네트워크 대기를 피하고, 테스트 클라이언트에 항상 타임아웃을 지정하세요.
 
+## Policy Diff 회귀 잡(CI/크론)
+- 목적: 정책 변경이 “나쁜 전략” 회귀 세트에 미치는 영향 비율을 자동 감시.
+- 명령 예시:
+  ```bash
+  uv run python scripts/policy_diff_batch.py \
+    --old policies/baseline.yml \
+    --new policies/candidate.yml \
+    --runs-dir artifacts/bad_strategies_runs \
+    --runs-pattern '*.json' \
+    --stage backtest \
+    --output policy_diff_report.json \
+    --fail-impact-ratio 0.05
+  ```
+- 아티팩트: `policy_diff_report.json` 을 업로드하고, 임팩트 비율이 임계 초과 시 워크플로를 실패 처리.
+- 스케줄 샘플(GitHub Actions):
+  ```yaml
+  on:
+    schedule:
+      - cron: "0 */6 * * *"  # 6시간마다
+  jobs:
+    policy-diff:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+        - name: Install deps
+          run: uv pip install -e .[dev]
+        - name: Run policy diff batch
+          run: |
+            uv run python scripts/policy_diff_batch.py \
+              --old policies/baseline.yml \
+              --new policies/candidate.yml \
+              --runs-dir artifacts/bad_strategies_runs \
+              --runs-pattern '*.json' \
+              --stage backtest \
+              --output policy_diff_report.json \
+              --fail-impact-ratio 0.05
+        - name: Upload report
+          uses: actions/upload-artifact@v4
+          with:
+            name: policy-diff-report
+            path: policy_diff_report.json
+  ```
 ## 아키텍처 불변 조건(권장 검사)
 
 핵심 불변 조건이 깨지면 즉시 실패하도록 가벼운 검사(단위/통합)를 추가하세요.

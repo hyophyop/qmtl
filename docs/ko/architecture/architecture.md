@@ -22,6 +22,7 @@ last_modified: 2025-12-06
 - [WorldService](worldservice.md)
 - [ControlBus](controlbus.md)
 - [Exchange Node Sets](exchange_node_sets.md)
+- Risk Signal Hub: [Risk Signal Hub 아키텍처](risk_signal_hub.md)
 - Core Loop 계약 테스트: `tests/e2e/core_loop/README.md`
 
 ---

@@ -38,11 +38,17 @@ The following alerts are available for inspiration when extending `alert_rules.y
 - **WorldApplyFailureDetected/RateHigh** – detect apply failures by `world_apply_failure_total` and failure rate via `world_apply_run_total`.
 - **WorldAllocationSnapshotStale** – raises when `world_allocation_snapshot_stale_ratio` exceeds 10% (5‑minute freshness window).
 - **ControlBusApplyAckLatencyHigh** – warns when `controlbus_apply_ack_latency_ms{phase="freeze"}` stays above 5s.
+- **RiskHubSnapshotDedupe/Expired** – watch `risk_hub_snapshot_dedupe_total{world_id,stage}` and `risk_hub_snapshot_expired_total{world_id,stage}` (stage-labeled; runbook: operations/risk_signal_hub_runbook.md).
 
 WorldService emits `world_apply_run_total`/`world_apply_failure_total` per `world_id`/`run_id`, while `world_allocation_snapshot_stale_ratio`
 tracks the fraction of snapshots whose `updated_at` is older than five minutes. Gateway captures freeze/unfreeze ControlBus
 acknowledgements via `controlbus_apply_ack_total` and `controlbus_apply_ack_latency_ms` (milliseconds). Add Grafana panels for
 apply success rate, allocation freshness, and apply ACK latency to give operators real-time visibility into apply health.
+
+Risk Hub stage-aware panels:
+- Stage labels (backtest/paper/live) are exposed on `risk_hub_snapshot_*` metrics for stacking/filtering in Grafana.
+- Example stacked query: `sum by(stage) (rate(risk_hub_snapshot_dedupe_total[5m]))`
+- TTL failures by stage/world: `sum by(world_id,stage) (increase(risk_hub_snapshot_expired_total[30m]))`
 
 ## Grafana Dashboards
 

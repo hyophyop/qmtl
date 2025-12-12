@@ -22,6 +22,12 @@ status: draft
 - 모델 리스크 관리 프레임워크: [design/model_risk_management_framework.md](model_risk_management_framework.md)
 - 과거 SDK auto_returns 설계(보관용): [archive/auto_returns_unified_design.md](../archive/auto_returns_unified_design.md)
 
+> 최근 변경 요약 (risk_signal_hub 연계)
+> - Hub 최소 구현: WS에 `risk_hub` 라우터를 추가하고 dev(in-memory/SQLite+fakeredis 캐시, offload 비활성)·prod(Postgres+Redis+S3/redis)에서 스냅샷 메타를 영속화하도록 바인딩.
+> - 소비자 전환: `ExtendedValidationWorker`가 hub 스냅샷(가중치/공분산) 기반으로 Var/ES 베이스라인을 계산하도록 수정하여 gateway 직접 의존을 제거.
+> - 생산자 연결 준비: gateway/alloc이 리밸런스·체결 이후 스냅샷을 push 할 수 있도록 HTTP 헬퍼(`services/gateway/risk_hub_client.py`)를 추가. ControlBus/큐 이벤트 연동은 후속 단계로 남김.
+> - 환경 설정 일원화: `qmtl.yml` `risk_hub` 블록(dev=inline+fakeredis 캐시만, prod=Postgres+Redis+S3/redis)으로 WS 라우터 토큰/inline offload/blob 스토어와 gateway push 클라이언트를 동시에 구성하도록 연결.
+
 ---
 
 ## 0. 배경 & 문제 정의
