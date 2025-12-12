@@ -19,6 +19,7 @@ nav:
       - Glossary: architecture/glossary.md
       - DAG Manager: architecture/dag-manager.md
       - Gateway: architecture/gateway.md
+      - Risk Signal Hub: architecture/risk_signal_hub.md
       - WorldService: architecture/worldservice.md
       - ControlBus: architecture/controlbus.md
       - Lean Brokerage Model: architecture/lean_brokerage_model.md
@@ -35,6 +36,7 @@ nav:
       - Ergonomic compute_fn patterns: guides/ergonomic_compute_fn_patterns.md
       - Strategy Workflow: guides/strategy_workflow.md
       - Strategy Submission & Gating: guides/strategy_submission_gating.md
+      - SDK Deprecation (ValidationPipeline): guides/sdk_deprecation.md
       - Shadow Execution E2E: guides/shadow_end_to_end.md
       - Multi-Asset Factor Patterns: guides/multi_asset_factor_patterns.md
       - Microstructure Signals: guides/microstructure_signals.md
@@ -83,6 +85,7 @@ nav:
       - Rebalancing Schema Coordination: operations/rebalancing_schema_coordination.md
       - Schema Registry Governance: operations/schema_registry_governance.md
       - Risk Management: operations/risk_management.md
+      - Risk Signal Hub Runbook: operations/risk_signal_hub_runbook.md
       - Timing Controls: operations/timing_controls.md
       - Exchange Calendars: operations/exchange_calendars.md
       - DAG Snapshot: operations/dag_snapshot.md
@@ -93,6 +96,10 @@ nav:
       - Core Loop × World Roadmap: design/core_loop_world_roadmap.md
       - World Validation Architecture: design/world_validation_architecture.md
       - World Validation v1 Implementation Plan: design/world_validation_v1_implementation_plan.md
+      - World Validation v1.5 Implementation: design/world_validation_v1.5_implementation.md
+      - World Strategy Weighting v1.5 Design: design/world_strategy_weighting_v1.5_design.md
+      - Risk Signal Hub Design: design/risk_signal_hub.md
+      - Exit Engine Overview: design/exit_engine_overview.md
       - Model Risk Management Framework: design/model_risk_management_framework.md
       - WorldService Evaluation Runs & Metrics API: design/worldservice_evaluation_runs_and_metrics_api.md
       - YAML-Only Configuration Overhaul: design/yaml_config_overhaul.md

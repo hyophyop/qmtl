@@ -34,6 +34,12 @@ spec_version: v1.2
     `profile: dev`에서는 Redis/ControlBus/Commit‑Log 설정이 비어 있으면 인메모리 대체 구현을 사용합니다. `profile: prod`에서는 `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_brokers`/`controlbus_topics`, `gateway.commitlog_bootstrap`/`commitlog_topic`이 모두 채워져 있지 않으면 Gateway가 기동 전에 실패합니다.
     `profile: dev`에서 커밋 로그 필드를 비우면 게이트웨이는 단순히 커밋 로그 라이터를 비활성화하고 정보 로그를 남깁니다.
 
+!!! note "Risk Signal Hub 연동"
+- 게이트웨이는 리밸런스/체결 이후 포트폴리오 스냅샷(weights, covariance_ref/행렬, as_of)을 hub에 push 하는 생산자 역할만 수행합니다.  
+- 설정: `qmtl.yml` `risk_hub` 블록으로 토큰/inline offload 기준을 주입하고, dev 프로파일에서는 inline+fakeredis만 사용하며 offload(blob/file/S3)는 비활성입니다. prod 프로파일에서만 Redis/S3 offload를 사용합니다.  
+- 소비자 역할(Var/ES 계산, 스트레스 재시뮬레이션)은 WorldService 측에서 hub 이벤트/조회로 수행하며, Gateway는 hub를 직접 읽지 않습니다.  
+- ControlBus/큐 경로는 기존 활성/결정 스트림과 동일하게 유지되며, hub 이벤트는 WS/Exit 엔진이 구독합니다.
+
 > 이 확장판은 기존 문서 대비 약 75% 분량이 늘었으며, 연구 중심의 엄밀한 기술 명세 형식을 채택했습니다. 모든 위협 모델, 공식 API 계약, 지연 분포, CI/CD 의미론을 완전하게 기술합니다.
 > 표기: **Sx** = 섹션, **Rx** = 요구사항, **Ax** = 가정.
 

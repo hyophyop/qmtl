@@ -23,6 +23,12 @@ WorldService는 월드의 단일 진실 소스(SSOT)입니다. 다음을 소유�
 !!! note "배포 프로필"
     `profile: dev`에서는 활성화 캐시 Redis가 비어 있으면 인메모리 저장소를 사용합니다. `profile: prod`에서는 `worldservice.server.redis`가 비어 있으면 프로세스가 기동 전에 실패하며, 인메모리 모드는 지원하지 않습니다.
 
+!!! note "Risk Signal Hub 연동"
+- WS는 `/risk-hub/*` 라우터로 포트폴리오/리스크 스냅샷을 수신·저장하며, ExtendedValidation/스트레스/라이브 워커가 hub 조회/이벤트를 통해 Var/ES·stress 계산을 수행합니다.  
+- dev 프로파일: in-memory/SQLite+fakeredis 캐시만 사용하며 공분산 등은 inline(ref offload 비활성).  
+- prod 프로파일: Postgres `risk_snapshots` + Redis 캐시, 필요 시 S3/Redis blob offload를 hub 설정으로 활성화합니다.  
+- gateway는 hub에 스냅샷을 push만 하고, hub 소비자는 WS(및 exit 엔진)입니다.
+
 !!! warning "안전 기본값"
 - 입력이 모호하거나 부족하면 live로 기본 설정하지 않고 compute-only(backtest)로 강등해야 합니다. `execution_domain`을 비우거나 생략한 WS API 호출이 live로 저장되면 안 됩니다.
 - `allow_live=false`(기본)일 때는 운영자가 요청하더라도 활성/도메인이 live로 전환되지 않습니다. 정책 검증(필수 지표, 히스테리시스, dataset_fingerprint 고정)이 통과될 때에만 승격을 허용하세요.
