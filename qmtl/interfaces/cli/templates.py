@@ -59,4 +59,10 @@ worldservice:
 gateway:
   host: 0.0.0.0
   port: 8000
+
+# Risk hub (optional, dev defaults)
+risk_hub:
+  token: dev-hub-token
+  inline_cov_threshold: 100
+  # dev는 공분산을 inline으로 두고, 필요 시 fakeredis/인메모리 캐시만 사용
 """

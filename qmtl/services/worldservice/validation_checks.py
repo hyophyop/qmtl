@@ -24,8 +24,8 @@ V1_CORE_METRIC_PATHS: tuple[tuple[str, str], ...] = (
     ("robustness", "sharpe_second_half"),
 )
 
-# v1 core rule set: DataCurrency, Sample, Performance, RiskConstraint
-DEFAULT_RULE_COUNT = 4
+# v1 core rule set: DataCurrency, Sample, Performance, RiskConstraint, Robustness
+DEFAULT_RULE_COUNT = 5
 
 
 @dataclass

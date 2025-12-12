@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import logging
@@ -19,12 +20,16 @@ class ControlBusProducer:
         topic: str = "policy",
         producer: KafkaProducerLike | None = None,
         required: bool = False,
+        retries: int = 2,
+        backoff: float = 0.5,
         logger: logging.Logger | None = None,
     ) -> None:
         self.brokers = list(brokers or [])
         self.topic = topic
         self._producer: KafkaProducerLike | None = producer
         self._required = required
+        self._retries = int(retries)
+        self._backoff = float(backoff)
         self._logger = logger or logging.getLogger(__name__)
 
     async def start(self) -> None:
@@ -55,7 +60,18 @@ class ControlBusProducer:
         event = format_event("qmtl.services.worldservice", event_type, payload)
         data = json.dumps(event).encode()
         key = world_id.encode()
-        await producer.send_and_wait(self.topic, data, key=key)
+        last_exc: Exception | None = None
+        for attempt in range(self._retries + 1):
+            try:
+                await producer.send_and_wait(self.topic, data, key=key)
+                return
+            except Exception as exc:  # pragma: no cover - best-effort reliability
+                last_exc = exc
+                if attempt >= self._retries:
+                    break
+                await asyncio.sleep(self._backoff * (attempt + 1))
+        if last_exc:
+            raise last_exc
 
     def _handle_disabled(self, reason: str) -> None:
         if self._required:
@@ -133,6 +149,18 @@ class ControlBusProducer:
         if rebalance_intent is not None:
             payload["rebalance_intent"] = rebalance_intent
         await self._publish("rebalancing_planned", world_id, payload)
+
+    async def publish_risk_snapshot_updated(
+        self,
+        world_id: str,
+        snapshot: Dict[str, Any],
+        *,
+        version: int = 1,
+    ) -> None:
+        payload: Dict[str, Any] = dict(snapshot)
+        payload["world_id"] = world_id
+        payload.setdefault("event_version", version)
+        await self._publish("risk_snapshot_updated", world_id, payload)
 
 
 __all__ = ["ControlBusProducer"]

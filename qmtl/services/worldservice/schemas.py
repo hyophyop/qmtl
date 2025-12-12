@@ -355,24 +355,37 @@ class AllocationSnapshotResponse(BaseModel):
 
 class ReturnsMetrics(BaseModel):
     sharpe: float | None = None
+    sortino_ratio: float | None = None  # v1.5+
     max_drawdown: float | None = None
     gain_to_pain_ratio: float | None = None
+    var_p01: float | None = None  # v1.5+ 1% VaR
+    es_p01: float | None = None  # v1.5+ 1% ES (expected shortfall)
     time_under_water_ratio: float | None = None
+    max_time_under_water_days: int | None = None  # v1.5+
 
 
 class SampleMetrics(BaseModel):
     effective_history_years: float | None = None
     n_trades_total: int | None = None
     n_trades_per_year: float | None = None
+    regime_coverage: Dict[str, float] | None = None  # v1.5+ low_vol/mid_vol/high_vol
 
 
 class RiskMetrics(BaseModel):
+    factor_exposures: Dict[str, float] | None = None  # v1.5+ mkt/value/momentum
+    incremental_var_99: float | None = None  # v1.5+
+    incremental_es_99: float | None = None  # v1.5+
     adv_utilization_p95: float | None = None
     participation_rate_p95: float | None = None
+    capacity_estimate_base: float | None = None  # v1.5+
 
 
 class RobustnessMetrics(BaseModel):
+    probabilistic_sharpe_ratio: float | None = None  # v1.5+
     deflated_sharpe_ratio: float | None = None
+    cv_folds: int | None = None  # v1.5+
+    cv_sharpe_mean: float | None = None  # v1.5+
+    cv_sharpe_std: float | None = None  # v1.5+
     sharpe_first_half: float | None = None
     sharpe_second_half: float | None = None
 
@@ -383,9 +396,12 @@ class ValidationHealth(BaseModel):
 
 
 class DiagnosticsMetrics(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     strategy_complexity: float | None = None
     search_intensity: int | None = None
     returns_source: str | None = None
+    extra_metrics: Dict[str, Any] | None = None
     validation_health: ValidationHealth | None = None
 
 
@@ -412,6 +428,9 @@ class EvaluationValidation(BaseModel):
     ruleset_hash: str | None = None
     profile: str | None = None
     results: Dict[str, RuleResultModel] | None = None
+    extended_revision: int | None = None
+    extended_evaluated_at: str | None = None
+    extended_history: list[Dict[str, Any]] | None = None
 
 
 class EvaluationSummary(BaseModel):
@@ -437,6 +456,27 @@ class EvaluationRunModel(BaseModel):
     summary: EvaluationSummary | None = None
     created_at: str | None = None
     updated_at: str | None = None
+
+
+class EvaluationRunHistoryItem(BaseModel):
+    revision: int
+    recorded_at: str
+    payload: EvaluationRunModel
+
+
+class LiveMonitoringStrategyReport(BaseModel):
+    strategy_id: str
+    run_id: str
+    as_of: str | None = None
+    diagnostics: Dict[str, Any] | None = None
+    live_monitoring: RuleResultModel | None = None
+
+
+class LiveMonitoringReport(BaseModel):
+    world_id: str
+    generated_at: str
+    strategies: List[LiveMonitoringStrategyReport]
+    summary: Dict[str, Any] | None = None
 
 
 __all__ = [
@@ -488,4 +528,7 @@ __all__ = [
     'EvaluationValidation',
     'EvaluationSummary',
     'EvaluationRunModel',
+    'EvaluationRunHistoryItem',
+    'LiveMonitoringStrategyReport',
+    'LiveMonitoringReport',
 ]

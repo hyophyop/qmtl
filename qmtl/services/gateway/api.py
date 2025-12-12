@@ -33,16 +33,90 @@ from .commit_log_consumer import CommitLogConsumer
 from .commit_log import CommitLogWriter
 from .submission import ComputeContextService, SubmissionPipeline
 from .shared_account_policy import SharedAccountPolicyConfig
+from .risk_hub_client import RiskHubClient
+from qmtl.services.worldservice.blob_store import BlobStore, build_blob_store
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
-    from qmtl.foundation.config import DeploymentProfile
+    from qmtl.foundation.config import DeploymentProfile, RiskHubConfig
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 
 
+def _resolve_risk_hub_inline(cfg: RiskHubConfig | None) -> int | None:
+    if cfg is None:
+        return None
+    if cfg.inline_cov_threshold is not None:
+        return cfg.inline_cov_threshold
+    return cfg.blob_store.inline_cov_threshold
+
+
+def _build_risk_hub_blob_store(
+    cfg: RiskHubConfig | None,
+    *,
+    redis_client: Any | None = None,
+    redis_dsn: str | None = None,
+    profile=None,
+) -> BlobStore | None:
+    if cfg is None:
+        return None
+    try:
+        from qmtl.foundation.config import DeploymentProfile
+    except Exception:  # pragma: no cover - defensive
+        DeploymentProfile = None  # type: ignore
+    if DeploymentProfile is not None and profile is not None and profile is not DeploymentProfile.PROD:
+        # Dev: keep inline, no persistent/offload store
+        return None
+    client = redis_client
+    if client is not None:
+        setter = getattr(client, "set", None)
+        if asyncio.iscoroutinefunction(setter):
+            client = None  # async Redis client is not compatible with sync blob store API
+    try:
+        return build_blob_store(
+            store_type=cfg.blob_store.type,
+            base_dir=cfg.blob_store.base_dir,
+            bucket=cfg.blob_store.bucket,
+            prefix=cfg.blob_store.prefix,
+            redis_client=client,
+            redis_dsn=redis_dsn,
+            redis_prefix=cfg.blob_store.redis_prefix,
+            cache_ttl=cfg.blob_store.cache_ttl,
+        )
+    except Exception:  # pragma: no cover - defensive fallback
+        logger.exception("Failed to build risk hub blob store")
+        return None
+
+
+def _build_risk_hub_client(
+    world_client: WorldServiceClient | None,
+    cfg: RiskHubConfig | None,
+    blob_store: BlobStore | None,
+    *,
+    risk_hub_client: RiskHubClient | None = None,
+) -> RiskHubClient | None:
+    if risk_hub_client is not None:
+        return risk_hub_client
+    if world_client is None:
+        return None
+    inline_threshold = _resolve_risk_hub_inline(cfg)
+    token = cfg.token if cfg else None
+    stage = cfg.stage if cfg else None
+    return RiskHubClient(
+        world_client.base_url,
+        timeout=3.0,
+        retries=2,
+        client=world_client.http_client,
+        auth_token=token,
+        blob_store=blob_store,
+        inline_cov_threshold=inline_threshold if inline_threshold is not None else 100,
+        stage=stage,
+    )
+
+
 def create_app(
     redis_client: Optional[redis.Redis] = None,
+    redis_dsn: str | None = None,
     database: Optional[Database] = None,
     dag_client: Optional[DagManagerClient] = None,
     ws_hub: Optional[WebSocketHub] = None,
@@ -74,6 +148,8 @@ def create_app(
     ownership_manager: OwnershipManager | None = None,
     kafka_owner: KafkaOwnership | None = None,
     profile: "DeploymentProfile" | None = None,
+    risk_hub_config: RiskHubConfig | None = None,
+    risk_hub_client: RiskHubClient | None = None,
 ) -> FastAPI:
     from qmtl.foundation.config import DeploymentProfile
 
@@ -93,6 +169,19 @@ def create_app(
         worldservice_timeout,
         worldservice_retries,
         capabilities,
+    )
+    risk_hub_cfg = risk_hub_config
+    risk_hub_blob_store = _build_risk_hub_blob_store(
+        risk_hub_cfg,
+        redis_client=redis_conn,
+        redis_dsn=redis_dsn,
+        profile=profile,
+    )
+    risk_hub_client_local = _build_risk_hub_client(
+        world_client_local,
+        risk_hub_cfg,
+        risk_hub_blob_store,
+        risk_hub_client=risk_hub_client,
     )
     degradation = DegradationManager(redis_conn, database_obj, dagmanager, world_client_local)
 
@@ -165,6 +254,7 @@ def create_app(
     app.state.ownership_manager = ownership_manager
     app.state.kafka_owner = kafka_owner
     app.state.ownership_config = ownership_cfg
+    app.state.risk_hub_client = risk_hub_client_local
 
     @app.middleware("http")
     async def _degrade_middleware(request: Request, call_next):

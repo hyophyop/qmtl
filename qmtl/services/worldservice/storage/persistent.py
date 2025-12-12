@@ -27,6 +27,7 @@ from .repositories import (
     _normalize_execution_domain,
     _normalize_world_node_status,
 )
+from .repositories.risk_snapshots import RiskSnapshotRepository
 
 
 def _utc_now() -> str:
@@ -134,6 +135,7 @@ class PersistentStorage:
         self._activation_repo = PersistentActivationRepository(
             self._redis, self._append_audit
         )
+        self._risk_snapshot_repo = RiskSnapshotRepository(self._driver)
         self.apply_runs: Dict[str, Dict[str, Any]] = {}
 
     # ------------------------------------------------------------------
@@ -285,6 +287,21 @@ class PersistentStorage:
         )
         await self._driver.execute(
             """
+            CREATE TABLE IF NOT EXISTS risk_snapshots (
+                world_id TEXT NOT NULL,
+                as_of TEXT NOT NULL,
+                version TEXT NOT NULL,
+                payload JSON NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (world_id, version)
+            )
+            """
+        )
+        await self._driver.execute(
+            "CREATE INDEX IF NOT EXISTS idx_risk_snapshots_world_asof ON risk_snapshots(world_id, as_of)"
+        )
+        await self._driver.execute(
+            """
             CREATE TABLE IF NOT EXISTS world_allocations (
                 world_id TEXT PRIMARY KEY,
                 allocation REAL NOT NULL,
@@ -318,6 +335,19 @@ class PersistentStorage:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY (world_id, strategy_id, run_id)
+            )
+            """
+        )
+        await self._driver.execute(
+            """
+            CREATE TABLE IF NOT EXISTS evaluation_run_history (
+                world_id TEXT NOT NULL,
+                strategy_id TEXT NOT NULL,
+                run_id TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                payload JSON NOT NULL,
+                recorded_at TEXT NOT NULL,
+                PRIMARY KEY (world_id, strategy_id, run_id, revision)
             )
             """
         )
@@ -355,7 +385,9 @@ class PersistentStorage:
         await self._driver.execute("DELETE FROM validation_cache WHERE world_id = ?", world_id)
         await self._driver.execute("DELETE FROM world_nodes WHERE world_id = ?", world_id)
         await self._driver.execute("DELETE FROM history_metadata WHERE world_id = ?", world_id)
+        await self._driver.execute("DELETE FROM risk_snapshots WHERE world_id = ?", world_id)
         await self._driver.execute("DELETE FROM evaluation_runs WHERE world_id = ?", world_id)
+        await self._driver.execute("DELETE FROM evaluation_run_history WHERE world_id = ?", world_id)
         await self._activation_repo.clear(world_id)
 
     # ------------------------------------------------------------------
@@ -730,6 +762,22 @@ class PersistentStorage:
             return None
         return json.loads(row[0])
 
+    # ------------------------------------------------------------------
+    # Risk snapshots
+    # ------------------------------------------------------------------
+    @property
+    def risk_snapshots(self) -> RiskSnapshotRepository:
+        return self._risk_snapshot_repo
+
+    async def upsert_risk_snapshot(self, world_id: str, payload: Dict[str, Any]) -> None:
+        await self._risk_snapshot_repo.upsert(world_id, payload)
+
+    async def latest_risk_snapshot(self, world_id: str) -> Optional[Dict[str, Any]]:
+        return await self._risk_snapshot_repo.latest(world_id)
+
+    async def list_risk_snapshots(self, world_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+        return await self._risk_snapshot_repo.list(world_id, limit=limit)
+
     async def record_rebalance_plan(self, payload: Dict[str, Any]) -> None:
         """Record a rebalancing plan into audit logs per world (best-effort)."""
         per_world = dict(payload.get("per_world", {}))
@@ -867,6 +915,35 @@ class PersistentStorage:
             world_id=world_id, strategy_id=strategy_id
         )
         return [record.to_dict() for record in records]
+
+    async def list_evaluation_run_history(
+        self, world_id: str, strategy_id: str, run_id: str
+    ) -> List[Dict[str, Any]]:
+        rows = await self._driver.fetchall(
+            """
+            SELECT revision, payload, recorded_at
+            FROM evaluation_run_history
+            WHERE world_id = ? AND strategy_id = ? AND run_id = ?
+            ORDER BY revision
+            """,
+            world_id,
+            strategy_id,
+            run_id,
+        )
+        history: List[Dict[str, Any]] = []
+        for revision, payload, recorded_at in rows:
+            try:
+                rev_int = int(revision)
+            except Exception:
+                rev_int = 0
+            history.append(
+                {
+                    "revision": rev_int,
+                    "recorded_at": recorded_at,
+                    "payload": json.loads(payload),
+                }
+            )
+        return history
 
     async def get_allocation_run(self, run_id: str) -> Optional[Dict[str, Any]]:
         row = await self._driver.fetchone(

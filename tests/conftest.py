@@ -17,6 +17,20 @@ def _reset_event_loop_policy():
     """Ensure a fresh default event loop policy each test to avoid stale state."""
 
     asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+
+    # Swallow noisy invalid-fd teardown errors from BaseEventLoop.__del__ (Py3.11 bug).
+    if not getattr(asyncio.BaseEventLoop.__del__, "_qmtl_patched", False):  # type: ignore[attr-defined]
+        orig_del = asyncio.BaseEventLoop.__del__  # type: ignore[attr-defined]
+
+        def _safe_del(self):  # type: ignore[override]
+            try:
+                orig_del(self)
+            except ValueError:
+                # Selector already torn down; ignore noisy stderr spew.
+                pass
+
+        _safe_del._qmtl_patched = True  # type: ignore[attr-defined]
+        asyncio.BaseEventLoop.__del__ = _safe_del  # type: ignore[assignment]
     yield
 
 
@@ -25,6 +39,10 @@ def _close_loops(loops: List[asyncio.AbstractEventLoop]) -> None:
         if loop.is_closed():
             continue
         try:
+            try:
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            except Exception:
+                pass
             loop.close()
         except Exception:
             pass

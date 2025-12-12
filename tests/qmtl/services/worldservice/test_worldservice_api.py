@@ -11,9 +11,12 @@ from qmtl.foundation.config import DeploymentProfile
 from qmtl.services.worldservice.api import StorageHandle, create_app
 from qmtl.services.worldservice.controlbus_producer import ControlBusProducer
 from qmtl.services.worldservice.config import WorldServiceServerConfig
-from qmtl.services.worldservice.schemas import AllocationUpsertRequest
+from qmtl.services.worldservice.schemas import AllocationUpsertRequest, EvaluateRequest
 from qmtl.services.worldservice.services import WorldService
 from qmtl.services.worldservice.storage import PersistentStorage, Storage
+from qmtl.services.worldservice.policy_engine import ValidationConfig, Policy
+from qmtl.services.worldservice.decision import DecisionEvaluator
+from qmtl.services.worldservice.risk_hub import PortfolioSnapshot
 
 
 class _PersistentStoreStub:
@@ -102,6 +105,17 @@ class DummyBus(ControlBusProducer):
             payload["rebalance_intent"] = rebalance_intent
         self.events.append(("rebalancing_planned", world_id, payload))
 
+    async def publish_risk_snapshot_updated(  # type: ignore[override]
+        self,
+        world_id: str,
+        snapshot: dict,
+        *,
+        version: int = 1,
+    ) -> None:
+        payload = dict(snapshot)
+        payload.setdefault("event_version", version)
+        self.events.append(("risk_snapshot_updated", world_id, payload))
+
 
 class DummyExecutor:
     def __init__(self) -> None:
@@ -110,8 +124,6 @@ class DummyExecutor:
     async def execute(self, payload: dict) -> dict:
         self.calls.append(dict(payload))
         return {"ok": True}
-
-
 class _StubProducer:
     async def start(self) -> None:  # pragma: no cover - trivial stub
         return None
@@ -206,10 +218,16 @@ async def test_evaluation_run_creation_and_fetch():
     async with httpx.ASGITransport(app=app) as asgi:
         async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
             await client.post("/worlds", json={"id": "weval", "name": "Eval"})
+            policy_resp = await client.post(
+                "/worlds/weval/policies",
+                json={"policy": {"thresholds": {"sharpe": {"metric": "sharpe", "min": 0.0}}}},
+            )
+            assert policy_resp.status_code == 200
+            default_resp = await client.post("/worlds/weval/set-default", json={"version": 1})
+            assert default_resp.status_code == 200
             payload = {
                 "strategy_id": "s-eval",
                 "metrics": {"s-eval": {"sharpe": 1.5}},
-                "policy": {},
                 "run_id": "run-eval-1",
                 "stage": "backtest",
                 "risk_tier": "medium",
@@ -229,7 +247,10 @@ async def test_evaluation_run_creation_and_fetch():
             assert record["model_card_version"] == "v1.0"
             assert record["metrics"]["returns"]["sharpe"] == 1.5
             assert record["summary"]["status"] == "pass"
+            assert record["summary"]["recommended_stage"] == "backtest_only"
             assert record["validation"]["results"]
+            assert record["validation"]["policy_version"] == "1"
+            assert record["validation"]["ruleset_hash"].startswith("blake3:")
             assert set(record["validation"]["results"].keys()) >= {
                 "data_currency",
                 "sample",
@@ -282,6 +303,424 @@ async def test_evaluation_run_override_flow():
             latest = reject_resp.json()["summary"]
             assert latest["override_status"] == "rejected"
             assert latest["override_reason"] == "policy change"
+
+
+@pytest.mark.asyncio
+async def test_evaluation_run_history_endpoint_records_revisions():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "whist", "name": "History World"})
+            payload = {
+                "strategy_id": "s-hist",
+                "metrics": {"s-hist": {"sharpe": 1.2}},
+                "policy": {},
+                "run_id": "hist-1",
+                "stage": "paper",
+                "risk_tier": "high",
+            }
+            resp = await client.post("/worlds/whist/evaluate", json=payload)
+            assert resp.status_code == 200
+
+            await client.post(
+                "/worlds/whist/strategies/s-hist/runs/hist-1/override",
+                json={"status": "approved", "reason": "manual", "actor": "risk_team"},
+            )
+
+            history_resp = await client.get(
+                "/worlds/whist/strategies/s-hist/runs/hist-1/history"
+            )
+            assert history_resp.status_code == 200
+            items = history_resp.json()
+            assert len(items) == 2
+            assert items[0]["revision"] == 1
+            assert items[1]["revision"] == 2
+            assert items[1]["payload"]["summary"]["override_status"] == "approved"
+
+
+@pytest.mark.asyncio
+async def test_live_monitoring_report_endpoint_lists_latest_live_runs():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wliverep", "name": "Live Report World"})
+            policy = {"live_monitoring": {"sharpe_min": 0.0, "dd_max": 10.0, "severity": "soft"}}
+            await client.post("/worlds/wliverep/policies", json={"policy": policy})
+            await client.post("/worlds/wliverep/set-default", json={"version": 1})
+
+            eval_payload = {
+                "strategy_id": "s-live",
+                "metrics": {
+                    "s-live": {
+                        "returns": {"sharpe": 1.0},
+                        "diagnostics": {"live_returns": [0.01, -0.005, 0.02]},
+                    }
+                },
+                "run_id": "run-live-1",
+                "stage": "live",
+                "risk_tier": "medium",
+            }
+            resp = await client.post("/worlds/wliverep/evaluate", json=eval_payload)
+            assert resp.status_code == 200
+
+            report_resp = await client.get("/worlds/wliverep/live-monitoring/report")
+            assert report_resp.status_code == 200
+            report = report_resp.json()
+            assert report["world_id"] == "wliverep"
+            assert report["summary"]["total"] == 1
+            item = report["strategies"][0]
+            assert item["strategy_id"] == "s-live"
+            assert item["run_id"] == "run-live-1"
+            assert item["live_monitoring"]["status"] in {"pass", "warn", "fail"}
+
+
+@pytest.mark.asyncio
+async def test_extended_validation_layers_are_persisted():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wcohort", "name": "Cohort World"})
+            policy = {
+                "cohort": {"top_k": 1, "sharpe_median_min": 0.9, "severity": "soft"},
+                "portfolio": {"max_incremental_var_99": 0.5, "severity": "soft"},
+                "stress": {"scenarios": {"crash": {"dd_max": 0.3}}},
+                "live_monitoring": {"sharpe_min": 0.7, "dd_max": 0.3, "severity": "soft"},
+            }
+            await client.post("/worlds/wcohort/policies", json={"policy": policy})
+            await client.post("/worlds/wcohort/set-default", json={"version": 1})
+
+            payload1 = {
+                "strategy_id": "s1",
+                "metrics": {
+                    "s1": {
+                        "sharpe": 1.2,
+                        "incremental_var_99": 0.3,
+                        "stress.crash.max_drawdown": 0.2,
+                        "live_sharpe": 1.0,
+                        "live_max_drawdown": 0.1,
+                    }
+                },
+                "run_id": "run-1",
+                "stage": "backtest",
+                "risk_tier": "medium",
+            }
+            payload2 = {
+                "strategy_id": "s2",
+                "metrics": {
+                    "s2": {
+                        "sharpe": 0.7,
+                        "incremental_var_99": 0.6,
+                        "stress.crash.max_drawdown": 0.4,
+                        "live_sharpe": 0.5,
+                        "live_max_drawdown": 0.35,
+                    }
+                },
+                "run_id": "run-2",
+                "stage": "backtest",
+                "risk_tier": "medium",
+            }
+
+            await client.post("/worlds/wcohort/evaluate", json=payload1)
+            await client.post("/worlds/wcohort/evaluate", json=payload2)
+
+            run_resp = await client.get("/worlds/wcohort/strategies/s2/runs/run-2")
+            record = run_resp.json()
+            results = record["validation"]["results"]
+
+            assert "cohort" in results
+            assert "portfolio" in results
+            assert "stress" in results
+            assert "live_monitoring" in results
+            assert results["cohort"]["reason_code"] in {"cohort_top_k_exceeded", "cohort_median_sharpe_below_min"}
+            assert results["portfolio"]["reason_code"] in {"incremental_var_exceeds_max", "portfolio_ok", "incremental_var_missing"}
+            assert results["stress"]["reason_code"] in {"crash_dd_exceeds_max", "stress_ok", "crash_dd_missing"}
+            assert results["live_monitoring"]["reason_code"] in {"live_decay_missing", "live_sharpe_below_min", "live_monitoring_ok", "live_sharpe_missing"}
+
+
+@pytest.mark.asyncio
+async def test_evaluation_run_preserves_extra_metrics():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wextra"})
+            await client.post("/worlds/wextra/policies", json={"policy": {}})
+            await client.post("/worlds/wextra/set-default", json={"version": 1})
+
+            payload = {
+                "strategy_id": "s-extra",
+                "run_id": "run-extra",
+                "metrics": {
+                    "s-extra": {
+                        "returns": {"sharpe": 1.1},
+                        "diagnostics": {"extra_metrics": {"foo": 1.23, "bar": -0.1}},
+                    }
+                },
+                "stage": "backtest",
+                "risk_tier": "low",
+            }
+
+            resp = await client.post("/worlds/wextra/evaluate", json=payload)
+            assert resp.status_code == 200
+
+            run_resp = await client.get("/worlds/wextra/strategies/s-extra/runs/run-extra")
+            assert run_resp.status_code == 200
+            body = run_resp.json()
+            diagnostics = body["metrics"]["diagnostics"]
+            assert diagnostics["extra_metrics"]["foo"] == pytest.approx(1.23)
+            assert diagnostics["extra_metrics"]["bar"] == pytest.approx(-0.1)
+
+
+@pytest.mark.asyncio
+async def test_policy_enforced_via_ws_single_entry():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wssot"})
+            policy = {"thresholds": {"sharpe": {"metric": "sharpe", "min": 1.0}}}
+            await client.post("/worlds/wssot/policies", json={"policy": policy})
+            await client.post("/worlds/wssot/set-default", json={"version": 1})
+
+            payload = {
+                "strategy_id": "s-weak",
+                "run_id": "run-ssot",
+                "metrics": {"s-weak": {"sharpe": 0.5}},
+                "stage": "backtest",
+                "risk_tier": "low",
+            }
+            resp = await client.post("/worlds/wssot/evaluate", json=payload)
+            assert resp.status_code == 200
+            eval_url = resp.json().get("evaluation_run_url")
+            run_resp = await client.get(eval_url)
+            assert run_resp.status_code == 200
+            run = run_resp.json()
+            assert run["summary"]["status"] != "pass"
+
+
+@pytest.mark.asyncio
+async def test_live_and_portfolio_metrics_are_derived():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wlive"})
+            await client.post("/worlds/wlive/policies", json={"policy": {}})
+            await client.post("/worlds/wlive/set-default", json={"version": 1})
+
+            # 40 days of small positive/negative returns
+            live_returns = [0.01 if i % 5 else -0.02 for i in range(40)]
+            payload = {
+                "strategy_id": "s-live",
+                "run_id": "run-live",
+                "metrics": {
+                    "s-live": {
+                        "returns": {"sharpe": 1.0, "max_drawdown": -0.15},
+                        "diagnostics": {
+                            "live_returns": live_returns,
+                            "extra_metrics": {"portfolio_baseline_sharpe": 0.4},
+                        },
+                    }
+                },
+                "stage": "backtest",
+                "risk_tier": "medium",
+            }
+
+            resp = await client.post("/worlds/wlive/evaluate", json=payload)
+            assert resp.status_code == 200
+
+            run_resp = await client.get("/worlds/wlive/strategies/s-live/runs/run-live")
+            assert run_resp.status_code == 200
+            body = run_resp.json()
+            diagnostics = body["metrics"]["diagnostics"]
+            assert diagnostics["live_sharpe_p30"] is not None
+            assert diagnostics["live_max_drawdown_p30"] is not None
+            assert diagnostics["live_vs_backtest_sharpe_ratio"] is not None
+
+            risk = body["metrics"]["risk"]
+            assert risk["incremental_var_99"] == pytest.approx(abs(-0.15))
+            assert risk["incremental_es_99"] == pytest.approx(abs(-0.15) * 1.2)
+
+            uplift = diagnostics["extra_metrics"]["portfolio_sharpe_uplift"]
+            assert uplift == pytest.approx(1.0 - 0.4)
+
+
+@pytest.mark.asyncio
+async def test_policy_missing_metrics_is_flagged():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wmissing"})
+            policy = {"thresholds": {"sharpe": {"metric": "sharpe", "min": 1.0}}}
+            await client.post("/worlds/wmissing/policies", json={"policy": policy})
+            await client.post("/worlds/wmissing/set-default", json={"version": 1})
+
+            payload = {
+                "strategy_id": "s-miss",
+                "run_id": "run-miss",
+                "metrics": {"s-miss": {"max_drawdown": -0.1}},  # sharpe missing
+                "stage": "backtest",
+                "risk_tier": "low",
+            }
+            resp = await client.post("/worlds/wmissing/evaluate", json=payload)
+            assert resp.status_code == 200
+            eval_url = resp.json().get("evaluation_run_url")
+            run_resp = await client.get(eval_url)
+            assert run_resp.status_code == 200
+            run = run_resp.json()
+            assert run["summary"]["status"] != "pass"
+
+
+@pytest.mark.asyncio
+async def test_risk_hub_rejects_missing_actor_header():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            snap = {
+                "as_of": "2025-01-01T00:00:00Z",
+                "version": "v1",
+                "weights": {"s1": 1.0},
+            }
+            resp = await client.post("/risk-hub/worlds/wfail/snapshots", json=snap)
+            assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_fail_closed_enforced_for_high_risk_world():
+    storage = Storage()
+    await storage.create_world({"id": "whigh", "risk_profile": {"tier": "high", "client_critical": True}})
+    policy = Policy(validation=ValidationConfig(on_error="warn", on_missing_metric="warn"))
+    version = await storage.add_policy("whigh", policy)
+    await storage.set_default_policy("whigh", version=version)
+
+    evaluator = DecisionEvaluator(storage)
+    resolved, _ = await evaluator._resolve_policy("whigh", EvaluateRequest())  # type: ignore[arg-type]
+
+    assert resolved.validation.on_error == "fail"
+    assert resolved.validation.on_missing_metric == "fail"
+
+
+@pytest.mark.asyncio
+async def test_extended_validation_scheduler_invoked():
+    scheduled: list[Any] = []
+
+    def scheduler(coro):
+        scheduled.append(coro)
+
+    app = create_app(storage=Storage(), extended_validation_scheduler=scheduler)
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wsched"})
+            await client.post("/worlds/wsched/policies", json={"policy": {"cohort": {"top_k": 1}}})
+            await client.post("/worlds/wsched/set-default", json={"version": 1})
+
+            payload = {
+                "strategy_id": "s1",
+                "run_id": "run-1",
+                "metrics": {"s1": {"sharpe": 1.0, "max_drawdown": 0.1}},
+                "stage": "backtest",
+                "risk_tier": "low",
+            }
+            resp = await client.post("/worlds/wsched/evaluate", json=payload)
+            assert resp.status_code == 200
+
+    assert scheduled, "scheduler should be invoked"
+    # run the queued coroutine to avoid warnings and ensure it succeeds
+    coro = scheduled.pop()
+    result = await coro
+    assert result >= 0
+
+
+@pytest.mark.asyncio
+async def test_risk_hub_snapshot_consumed_by_extended_worker():
+    storage = Storage()
+    bus = DummyBus()
+    app = create_app(storage=storage, bus=bus, risk_hub_token="t0k")
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            # write snapshot
+            snap = {
+                "as_of": "2025-01-01T00:00:00Z",
+                "version": "v1",
+                "weights": {"s1": 0.6, "s2": 0.4},
+                "covariance": {"s1,s1": 0.01, "s2,s2": 0.04, "s1,s2": 0.015},
+            }
+            resp = await client.post(
+                "/risk-hub/worlds/whub/snapshots",
+                json=snap,
+                headers={"Authorization": "Bearer t0k", "X-Actor": "test-suite", "X-Stage": "paper"},
+            )
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["provenance"].get("actor") == "test-suite"
+            assert body["provenance"].get("stage") == "paper"
+
+            await client.post("/worlds", json={"id": "whub"})
+            await client.post("/worlds/whub/policies", json={"policy": {"cohort": {"top_k": 1}}})
+            await client.post("/worlds/whub/set-default", json={"version": 1})
+
+            payload = {
+                "strategy_id": "s1",
+                "run_id": "run-hub",
+                "metrics": {"s1": {"sharpe": 1.0}},
+                "stage": "backtest",
+                "risk_tier": "low",
+            }
+            resp_eval = await client.post("/worlds/whub/evaluate", json=payload)
+            assert resp_eval.status_code == 200
+
+            run_resp = await client.get("/worlds/whub/strategies/s1/runs/run-hub")
+            body = run_resp.json()
+            diagnostics = body["metrics"]["diagnostics"]
+            extra = diagnostics.get("extra_metrics", {})
+            # hub 기반 포트폴리오 변동성 파생치가 계산되었는지 확인
+            assert extra.get("portfolio_var_99_with_candidate") is not None or extra.get("portfolio_es_99_with_candidate") is not None
+            assert any(evt[0] == "risk_snapshot_updated" for evt in bus.events)
+
+
+@pytest.mark.asyncio
+async def test_risk_hub_persists_snapshots_with_persistent_storage(tmp_path, fake_redis):
+    db_path = tmp_path / "risk_hub.db"
+
+    def _factory_builder():
+        async def _factory() -> StorageHandle:
+            storage = await PersistentStorage.create(
+                db_dsn=str(db_path),
+                redis_client=fake_redis,
+            )
+
+            async def _shutdown() -> None:
+                await storage.close()
+
+            return StorageHandle(storage=storage, shutdown=_shutdown)
+
+        return _factory
+
+    app = create_app(storage_factory=_factory_builder())
+    async with app.router.lifespan_context(app):
+        async with httpx.ASGITransport(app=app) as asgi:
+            async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+                snap = {
+                    "as_of": "2025-01-01T00:00:00Z",
+                    "version": "v1",
+                    "weights": {"s1": 1.0},
+                    "covariance": {"s1,s1": 0.02},
+                }
+                resp = await client.post(
+                    "/risk-hub/worlds/persist-hub/snapshots",
+                    json=snap,
+                    headers={"X-Actor": "test-suite"},
+                )
+                assert resp.status_code == 200
+
+    storage_inspect = await PersistentStorage.create(
+        db_dsn=str(db_path),
+        redis_client=fake_redis,
+    )
+    try:
+        latest = await storage_inspect.latest_risk_snapshot("persist-hub")
+        assert latest is not None
+        assert latest["version"] == "v1"
+        assert latest["weights"] == {"s1": 1.0}
+    finally:
+        await storage_inspect.close()
 
 
 @pytest.mark.asyncio

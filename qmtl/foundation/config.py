@@ -264,6 +264,28 @@ class ProjectConfig:
     )
 
 
+@dataclass
+class RiskHubBlobStoreConfig:
+    """Blob store configuration for risk hub large payload refs."""
+
+    type: str = "file"  # file|s3|redis
+    base_dir: str = ".risk_blobs"
+    bucket: str | None = None
+    prefix: str | None = None
+    inline_cov_threshold: int | None = 100
+    cache_ttl: int | None = None
+    redis_prefix: str | None = "risk-blobs:"
+
+
+@dataclass
+class RiskHubConfig:
+    """Risk hub integration settings (gateway/WS shared)."""
+
+    token: str | None = None
+    inline_cov_threshold: int | None = 100
+    stage: str | None = None  # optional default stage for producers
+    blob_store: RiskHubBlobStoreConfig = field(default_factory=RiskHubBlobStoreConfig)
+
 CONFIG_SECTION_NAMES: tuple[str, ...] = (
     "worldservice",
     "gateway",
@@ -275,6 +297,7 @@ CONFIG_SECTION_NAMES: tuple[str, ...] = (
     "runtime",
     "test",
     "project",
+    "risk_hub",
 )
 
 
@@ -381,6 +404,7 @@ class UnifiedConfig:
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     test: TestConfig = field(default_factory=TestConfig)
     project: ProjectConfig = field(default_factory=ProjectConfig)
+    risk_hub: RiskHubConfig = field(default_factory=RiskHubConfig)
     present_sections: FrozenSet[str] = field(default_factory=frozenset)
 
 
@@ -535,6 +559,7 @@ def load_config(path: str) -> UnifiedConfig:
     runtime_data = sections["runtime"]
     test_data = sections["test"]
     project_data = sections["project"]
+    risk_hub_data = sections.get("risk_hub", {})
 
     gateway_cfg = GatewayConfig.from_mapping(gateway_data)
     dagmanager_cfg = DagManagerConfig(**dagmanager_data)
@@ -549,6 +574,7 @@ def load_config(path: str) -> UnifiedConfig:
     runtime_cfg = RuntimeConfig(**runtime_data)
     test_cfg = TestConfig(**test_data)
     project_cfg = ProjectConfig(**project_data)
+    risk_hub_cfg = RiskHubConfig(**risk_hub_data)
 
     _mirror_worldservice_to_gateway(world_data, worldservice_cfg, gateway_cfg)
 
@@ -564,5 +590,6 @@ def load_config(path: str) -> UnifiedConfig:
         runtime=runtime_cfg,
         test=test_cfg,
         project=project_cfg,
+        risk_hub=risk_hub_cfg,
         present_sections=present_sections,
     )

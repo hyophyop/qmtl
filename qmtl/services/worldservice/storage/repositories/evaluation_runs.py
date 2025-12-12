@@ -3,10 +3,20 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from ..models import EvaluationRunRecord
 from .base import AuditLogger, DatabaseDriver
+
+
+def _utc_now() -> str:
+    return (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 class PersistentEvaluationRunRepository:
@@ -18,6 +28,38 @@ class PersistentEvaluationRunRepository:
 
     async def upsert(self, record: EvaluationRunRecord) -> None:
         payload = record.to_dict()
+        # Append an immutable history entry for every upsert.
+        revision_row = await self._driver.fetchone(
+            "SELECT MAX(revision) FROM evaluation_run_history WHERE world_id = ? AND strategy_id = ? AND run_id = ?",
+            record.world_id,
+            record.strategy_id,
+            record.run_id,
+        )
+        try:
+            previous_revision = int(revision_row[0]) if revision_row and revision_row[0] is not None else 0
+        except Exception:
+            previous_revision = 0
+        revision = previous_revision + 1
+        recorded_at = record.updated_at or record.created_at or _utc_now()
+        await self._driver.execute(
+            """
+            INSERT INTO evaluation_run_history(
+                world_id,
+                strategy_id,
+                run_id,
+                revision,
+                payload,
+                recorded_at
+            )
+            VALUES(?, ?, ?, ?, ?, ?)
+            """,
+            record.world_id,
+            record.strategy_id,
+            record.run_id,
+            revision,
+            json.dumps(payload),
+            recorded_at,
+        )
         await self._driver.execute(
             """
             INSERT INTO evaluation_runs(

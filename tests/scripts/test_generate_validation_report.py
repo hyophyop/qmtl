@@ -19,6 +19,8 @@ def _sample_evaluation_run() -> dict:
         "validation": {
             "policy_version": "v1",
             "ruleset_hash": "abc123",
+            "extended_revision": 2,
+            "extended_evaluated_at": "2025-12-10T00:00:00Z",
             "profile": "backtest",
             "results": {
                 "performance.sharpe_min": {
@@ -29,18 +31,26 @@ def _sample_evaluation_run() -> dict:
                     "reason": "Sharpe above target",
                 },
                 "robustness.dsr_min": {
-                    "status": "fail",
-                    "severity": "soft",
-                    "owner": "risk",
-                    "reason_code": "dsr_low",
-                    "reason": "DSR below target",
-                    "tags": ["robustness"],
-                },
+                "status": "fail",
+                "severity": "soft",
+                "owner": "risk",
+                "reason_code": "dsr_low",
+                "reason": "DSR below target",
+                "tags": ["robustness"],
+            },
+            "cohort": {
+                "status": "warn",
+                "severity": "soft",
+                "owner": "risk",
+                "reason_code": "cohort_median_sharpe_below_min",
+                "reason": "Median Sharpe below cohort min",
+                "tags": ["cohort"],
             },
         },
-        "metrics": {
-            "returns": {"sharpe": 1.2, "max_drawdown": 0.1},
-            "sample": {"n_trades_total": 120},
+    },
+    "metrics": {
+        "returns": {"sharpe": 1.2, "max_drawdown": 0.1},
+        "sample": {"n_trades_total": 120},
         },
     }
 
@@ -65,10 +75,13 @@ def test_generate_markdown_report_includes_core_fields() -> None:
     assert "- Run ID: eval-123" in report
     assert "- Stage: backtest" in report
     assert "- Recommended stage: paper_only" in report
+    assert "- Extended revision: 2" in report
+    assert "- Extended evaluated_at: 2025-12-10T00:00:00Z" in report
     assert "| robustness.dsr_min | FAIL" in report
     assert "| performance.sharpe_min | PASS" in report
     assert "returns.sharpe" in report
     assert report.index("robustness.dsr_min") < report.index("performance.sharpe_min")
+    assert "Extended validation" in report
 
 
 def test_cli_writes_report_file(tmp_path: Path, monkeypatch, capsys) -> None:
@@ -99,3 +112,4 @@ def test_cli_writes_report_file(tmp_path: Path, monkeypatch, capsys) -> None:
     captured = capsys.readouterr()
     assert "Validation Report — strat-a @ world-demo" in report
     assert "written to" in captured.out
+    assert "Extended validation" in report

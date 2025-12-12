@@ -46,6 +46,9 @@ class Storage:
         self._world_allocations: Dict[str, AllocationState] = {}
         self._allocation_runs: Dict[str, AllocationRun] = {}
         self._evaluation_runs: Dict[tuple[str, str, str], EvaluationRunRecord] = {}
+        self._evaluation_run_history: Dict[
+            tuple[str, str, str], List[Dict[str, Any]]
+        ] = {}
         self._history_metadata: Dict[str, Dict[str, Dict[str, Any]]] = {}
 
     async def create_world(self, world: Dict[str, Any]) -> None:
@@ -73,6 +76,9 @@ class Storage:
         self._validation_cache.clear(world_id)
         self._edge_overrides.clear(world_id)
         self._history_metadata.pop(world_id, None)
+        for key in list(self._evaluation_run_history.keys()):
+            if key[0] == world_id:
+                self._evaluation_run_history.pop(key, None)
 
     async def add_policy(self, world_id: str, policy: Policy) -> int:
         record = self._policies.add(world_id, policy)
@@ -350,6 +356,16 @@ class Storage:
             updated_at=now,
         )
         self._evaluation_runs[(world_id, strategy_id, run_id)] = record
+        history_key = (world_id, strategy_id, run_id)
+        history = self._evaluation_run_history.setdefault(history_key, [])
+        revision = len(history) + 1
+        history.append(
+            {
+                "revision": revision,
+                "recorded_at": now,
+                "payload": record.to_dict(),
+            }
+        )
         self._audit.append(
             world_id,
             {
@@ -403,6 +419,16 @@ class Storage:
             updated_at=override_timestamp,
         )
         self._evaluation_runs[(world_id, strategy_id, run_id)] = updated
+        history_key = (world_id, strategy_id, run_id)
+        history = self._evaluation_run_history.setdefault(history_key, [])
+        revision = len(history) + 1
+        history.append(
+            {
+                "revision": revision,
+                "recorded_at": override_timestamp,
+                "payload": updated.to_dict(),
+            }
+        )
         self._audit.append(
             world_id,
             {
@@ -428,6 +454,12 @@ class Storage:
             runs.append(record.to_dict())
         runs.sort(key=lambda entry: entry.get("created_at") or "")
         return runs
+
+    async def list_evaluation_run_history(
+        self, world_id: str, strategy_id: str, run_id: str
+    ) -> List[Dict[str, Any]]:
+        history = self._evaluation_run_history.get((world_id, strategy_id, run_id), [])
+        return deepcopy(history)
 
     async def mark_allocation_run_executed(self, run_id: str) -> None:
         record = self._allocation_runs.get(run_id)

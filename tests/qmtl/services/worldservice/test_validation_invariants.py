@@ -119,3 +119,421 @@ def test_check_invariants_enforces_fail_closed_and_collects_overrides():
     assert any(item["run_id"] == "override-run" for item in report.approved_overrides)
     assert any(gap["run_id"] == "override-run" for gap in report.validation_health_gaps)
     assert not any(gap["run_id"] == "healthy-run" for gap in report.validation_health_gaps)
+
+
+# =============================================================================
+# Phase 1: Enhanced Invariant Tests (§12 of world_validation_architecture.md)
+# =============================================================================
+
+
+class TestInvariant1LiveStatusConsistency:
+    """Invariant 1 — live 단계 정합성 (§12.1)
+
+    stage=live 또는 effective_mode=live인 전략은:
+    - 최신 EvaluationRun의 summary.status가 반드시 "pass"여야 한다.
+    - 최신 EvaluationRun의 validation.policy_version이 WorldPolicy 버전과 호환되어야 한다.
+    """
+
+    def test_live_strategy_with_pass_status_is_ok(self):
+        world = {"id": "world-prod"}
+        runs = [
+            {
+                "world_id": "world-prod",
+                "strategy_id": "strat-live",
+                "run_id": "run-1",
+                "stage": "live",
+                "summary": {"status": "pass"},
+                "metrics": ensure_validation_health(_full_metrics(), {"performance": {"status": "pass"}}),
+                "validation": {"results": {"performance": {"status": "pass"}}},
+                "created_at": "2025-01-01T00:00:00+00:00",
+            }
+        ]
+
+        report = check_validation_invariants(world, runs)
+
+        assert report.ok
+        assert len(report.live_status_failures) == 0
+
+    def test_live_strategy_with_fail_status_is_flagged(self):
+        world = {"id": "world-prod"}
+        runs = [
+            {
+                "world_id": "world-prod",
+                "strategy_id": "strat-failing",
+                "run_id": "run-fail",
+                "stage": "live",
+                "summary": {"status": "fail"},
+                "metrics": _full_metrics(),
+                "validation": {"results": {"performance": {"status": "fail"}}},
+                "created_at": "2025-01-01T00:00:00+00:00",
+            }
+        ]
+
+        report = check_validation_invariants(world, runs)
+
+        assert not report.ok
+        assert len(report.live_status_failures) == 1
+        failure = report.live_status_failures[0]
+        assert failure["strategy_id"] == "strat-failing"
+        assert failure["status"] == "fail"
+
+    def test_live_strategy_with_warn_status_is_flagged(self):
+        world = {"id": "world-prod"}
+        runs = [
+            {
+                "world_id": "world-prod",
+                "strategy_id": "strat-warning",
+                "run_id": "run-warn",
+                "stage": "live",
+                "summary": {"status": "warn"},
+                "metrics": _full_metrics(),
+                "validation": {"results": {}},
+                "created_at": "2025-01-01T00:00:00+00:00",
+            }
+        ]
+
+        report = check_validation_invariants(world, runs)
+
+        assert not report.ok
+        assert len(report.live_status_failures) == 1
+
+    def test_multiple_live_strategies_only_latest_per_strategy_checked(self):
+        """각 전략별 최신 run만 검사한다."""
+        world = {"id": "world-prod"}
+        runs = [
+            {
+                "world_id": "world-prod",
+                "strategy_id": "strat-a",
+                "run_id": "old-fail",
+                "stage": "live",
+                "summary": {"status": "fail"},  # 이전 실패
+                "metrics": _full_metrics(),
+                "validation": {"results": {}},
+                "created_at": "2025-01-01T00:00:00+00:00",
+            },
+            {
+                "world_id": "world-prod",
+                "strategy_id": "strat-a",
+                "run_id": "new-pass",
+                "stage": "live",
+                "summary": {"status": "pass"},  # 최신 성공
+                "metrics": ensure_validation_health(_full_metrics(), {"performance": {"status": "pass"}}),
+                "validation": {"results": {"performance": {"status": "pass"}}},
+                "created_at": "2025-02-01T00:00:00+00:00",
+            },
+        ]
+
+        report = check_validation_invariants(world, runs)
+
+        # 최신 run이 pass이므로 ok
+        assert len(report.live_status_failures) == 0
+
+    def test_backtest_and_paper_stages_not_flagged_for_live_invariant(self):
+        """live가 아닌 stage는 Invariant 1 대상이 아니다."""
+        world = {"id": "world-dev"}
+        runs = [
+            {
+                "world_id": "world-dev",
+                "strategy_id": "strat-dev",
+                "run_id": "run-backtest-fail",
+                "stage": "backtest",
+                "summary": {"status": "fail"},
+                "metrics": _full_metrics(),
+                "validation": {"results": {}},
+                "created_at": "2025-01-01T00:00:00+00:00",
+            },
+            {
+                "world_id": "world-dev",
+                "strategy_id": "strat-dev",
+                "run_id": "run-paper-warn",
+                "stage": "paper",
+                "summary": {"status": "warn"},
+                "metrics": _full_metrics(),
+                "validation": {"results": {}},
+                "created_at": "2025-01-02T00:00:00+00:00",
+            },
+        ]
+
+        report = check_validation_invariants(world, runs)
+
+        # live 전략이 없으므로 live_status_failures는 비어있어야 함
+        assert len(report.live_status_failures) == 0
+
+
+class TestInvariant2FailClosedPolicy:
+    """Invariant 2 — high‑tier World의 fail‑closed 정책 (§12.2)
+
+    risk_profile.tier=high 및 client_critical=true인 World에서는:
+    - validation.on_error와 validation.on_missing_metric은 항상 "fail"이어야 한다.
+    """
+
+    def test_high_tier_critical_world_with_fail_closed_is_ok(self):
+        world = {
+            "id": "world-high-critical",
+            "risk_profile": {"tier": "high", "client_critical": True},
+            "validation": {"on_error": "fail", "on_missing_metric": "fail"},
+        }
+
+        report = check_validation_invariants(world, [])
+
+        assert len(report.fail_closed_violations) == 0
+
+    def test_high_tier_critical_world_with_warn_on_error_is_violation(self):
+        world = {
+            "id": "world-high-critical",
+            "risk_profile": {"tier": "high", "client_critical": True},
+            "validation": {"on_error": "warn", "on_missing_metric": "fail"},
+        }
+
+        report = check_validation_invariants(world, [])
+
+        assert len(report.fail_closed_violations) == 1
+        violation = report.fail_closed_violations[0]
+        assert violation["on_error"] == "warn"
+
+    def test_high_tier_critical_world_with_ignore_on_missing_is_violation(self):
+        world = {
+            "id": "world-high-critical",
+            "risk_profile": {"tier": "high", "client_critical": True},
+            "validation": {"on_error": "fail", "on_missing_metric": "ignore"},
+        }
+
+        report = check_validation_invariants(world, [])
+
+        assert len(report.fail_closed_violations) == 1
+        violation = report.fail_closed_violations[0]
+        assert violation["on_missing_metric"] == "ignore"
+
+    def test_high_tier_non_critical_world_not_enforced(self):
+        """client_critical=false이면 fail-closed 강제 대상이 아니다."""
+        world = {
+            "id": "world-high-internal",
+            "risk_profile": {"tier": "high", "client_critical": False},
+            "validation": {"on_error": "warn", "on_missing_metric": "warn"},
+        }
+
+        report = check_validation_invariants(world, [])
+
+        assert len(report.fail_closed_violations) == 0
+
+    def test_medium_tier_critical_world_not_enforced(self):
+        """tier=medium이면 fail-closed 강제 대상이 아니다."""
+        world = {
+            "id": "world-medium-critical",
+            "risk_profile": {"tier": "medium", "client_critical": True},
+            "validation": {"on_error": "warn", "on_missing_metric": "warn"},
+        }
+
+        report = check_validation_invariants(world, [])
+
+        assert len(report.fail_closed_violations) == 0
+
+    def test_low_tier_world_not_enforced(self):
+        """tier=low이면 fail-closed 강제 대상이 아니다."""
+        world = {
+            "id": "world-low",
+            "risk_profile": {"tier": "low"},
+            "validation": {"on_error": "warn"},
+        }
+
+        report = check_validation_invariants(world, [])
+
+        assert len(report.fail_closed_violations) == 0
+
+    def test_missing_validation_block_in_high_tier_critical_is_violation(self):
+        """validation 블록 없이 on_error/on_missing_metric이 없으면 violation."""
+        world = {
+            "id": "world-high-no-validation",
+            "risk_profile": {"tier": "high", "client_critical": True},
+        }
+
+        report = check_validation_invariants(world, [])
+
+        assert len(report.fail_closed_violations) == 1
+
+
+class TestInvariant3OverrideManagement:
+    """Invariant 3 — override 관리 (§12.3)
+
+    override_status=approved인 EvaluationRun은:
+    - 별도 목록으로 집계되어야 하며,
+    - override_reason, override_actor, override_timestamp는 필수 기록 필드다.
+    """
+
+    def test_approved_override_is_collected(self):
+        world = {"id": "world-override"}
+        runs = [
+            {
+                "world_id": "world-override",
+                "strategy_id": "strat-override",
+                "run_id": "run-override",
+                "stage": "paper",
+                "summary": {
+                    "status": "warn",
+                    "override_status": "approved",
+                    "override_reason": "Risk committee approved exception",
+                    "override_actor": "risk-manager@example.com",
+                    "override_timestamp": "2025-01-15T10:00:00Z",
+                },
+                "metrics": _full_metrics(),
+                "validation": {"results": {}},
+                "created_at": "2025-01-10T00:00:00+00:00",
+            }
+        ]
+
+        report = check_validation_invariants(world, runs)
+
+        assert len(report.approved_overrides) == 1
+        override = report.approved_overrides[0]
+        assert override["run_id"] == "run-override"
+        assert override["override_reason"] == "Risk committee approved exception"
+
+    def test_rejected_override_not_collected(self):
+        world = {"id": "world-override"}
+        runs = [
+            {
+                "world_id": "world-override",
+                "strategy_id": "strat-rejected",
+                "run_id": "run-rejected",
+                "stage": "paper",
+                "summary": {
+                    "status": "fail",
+                    "override_status": "rejected",
+                    "override_reason": "Insufficient justification",
+                },
+                "metrics": _full_metrics(),
+                "validation": {"results": {}},
+                "created_at": "2025-01-10T00:00:00+00:00",
+            }
+        ]
+
+        report = check_validation_invariants(world, runs)
+
+        assert len(report.approved_overrides) == 0
+
+    def test_no_override_status_not_collected(self):
+        world = {"id": "world-normal"}
+        runs = [
+            {
+                "world_id": "world-normal",
+                "strategy_id": "strat-normal",
+                "run_id": "run-normal",
+                "stage": "backtest",
+                "summary": {"status": "pass"},
+                "metrics": ensure_validation_health(_full_metrics(), {"performance": {"status": "pass"}}),
+                "validation": {"results": {"performance": {"status": "pass"}}},
+                "created_at": "2025-01-10T00:00:00+00:00",
+            }
+        ]
+
+        report = check_validation_invariants(world, runs)
+
+        assert len(report.approved_overrides) == 0
+
+    def test_multiple_approved_overrides_all_collected(self):
+        world = {"id": "world-multi-override"}
+        runs = [
+            {
+                "world_id": "world-multi-override",
+                "strategy_id": "strat-a",
+                "run_id": "run-a",
+                "stage": "paper",
+                "summary": {"status": "warn", "override_status": "approved"},
+                "metrics": _full_metrics(),
+                "validation": {"results": {}},
+                "created_at": "2025-01-10T00:00:00+00:00",
+            },
+            {
+                "world_id": "world-multi-override",
+                "strategy_id": "strat-b",
+                "run_id": "run-b",
+                "stage": "live",
+                "summary": {"status": "warn", "override_status": "approved"},
+                "metrics": _full_metrics(),
+                "validation": {"results": {}},
+                "created_at": "2025-01-12T00:00:00+00:00",
+            },
+        ]
+
+        report = check_validation_invariants(world, runs)
+
+        assert len(report.approved_overrides) == 2
+        run_ids = {o["run_id"] for o in report.approved_overrides}
+        assert run_ids == {"run-a", "run-b"}
+
+
+class TestValidationHealthGaps:
+    """validation_health 지표 불일치 감지 테스트."""
+
+    def test_metrics_without_validation_health_flagged(self):
+        world = {"id": "world-health"}
+        runs = [
+            {
+                "world_id": "world-health",
+                "strategy_id": "strat-no-health",
+                "run_id": "run-no-health",
+                "stage": "backtest",
+                "summary": {"status": "pass"},
+                "metrics": _full_metrics(),  # validation_health 없음
+                "validation": {"results": {"performance": {"status": "pass"}}},
+                "created_at": "2025-01-10T00:00:00+00:00",
+            }
+        ]
+
+        report = check_validation_invariants(world, runs)
+
+        # validation_health가 없으면 gap으로 처리됨
+        assert len(report.validation_health_gaps) > 0
+
+    def test_metrics_with_correct_validation_health_not_flagged(self):
+        world = {"id": "world-health"}
+        rule_results = {"performance": {"status": "pass"}, "sample": {"status": "pass"}}
+        runs = [
+            {
+                "world_id": "world-health",
+                "strategy_id": "strat-healthy",
+                "run_id": "run-healthy",
+                "stage": "backtest",
+                "summary": {"status": "pass"},
+                "metrics": ensure_validation_health(_full_metrics(), rule_results),
+                "validation": {"results": rule_results},
+                "created_at": "2025-01-10T00:00:00+00:00",
+            }
+        ]
+
+        report = check_validation_invariants(world, runs)
+
+        # ensure_validation_health로 올바르게 계산된 경우
+        health_gaps_for_run = [g for g in report.validation_health_gaps if g["run_id"] == "run-healthy"]
+        assert len(health_gaps_for_run) == 0
+
+
+class TestInvariantReportOkProperty:
+    """InvariantReport.ok 속성 동작 검증."""
+
+    def test_empty_report_is_ok(self):
+        world = {"id": "world-clean"}
+        runs = []
+
+        report = check_validation_invariants(world, runs)
+
+        assert report.ok
+
+    def test_any_failure_makes_report_not_ok(self):
+        world = {"id": "world-failure"}
+        runs = [
+            {
+                "world_id": "world-failure",
+                "strategy_id": "strat-live-fail",
+                "run_id": "run-live-fail",
+                "stage": "live",
+                "summary": {"status": "fail"},
+                "metrics": _full_metrics(),
+                "validation": {"results": {}},
+                "created_at": "2025-01-10T00:00:00+00:00",
+            }
+        ]
+
+        report = check_validation_invariants(world, runs)
+
+        assert not report.ok

@@ -15,6 +15,21 @@ class KafkaProducerLike(Protocol):
         ...
 
 
+@runtime_checkable
+class KafkaConsumerLike(Protocol):
+    async def start(self) -> None:  # pragma: no cover - interface
+        ...
+
+    async def stop(self) -> None:  # pragma: no cover - interface
+        ...
+
+    async def subscribe(self, topics: Iterable[str]) -> None:  # pragma: no cover - interface
+        ...
+
+    def __aiter__(self):  # pragma: no cover - interface
+        ...
+
+
 def create_kafka_producer(brokers: Iterable[str]) -> KafkaProducerLike | None:
     """Create an ``AIOKafkaProducer`` when available.
 
@@ -29,4 +44,25 @@ def create_kafka_producer(brokers: Iterable[str]) -> KafkaProducerLike | None:
     return AIOKafkaProducer(bootstrap_servers=list(brokers))
 
 
-__all__ = ["KafkaProducerLike", "create_kafka_producer"]
+def create_kafka_consumer(
+    brokers: Iterable[str],
+    *,
+    group_id: str,
+    auto_offset_reset: str = "latest",
+    enable_auto_commit: bool = True,
+) -> KafkaConsumerLike | None:
+    """Create an ``AIOKafkaConsumer`` when available."""
+
+    try:  # pragma: no cover - optional dependency
+        from aiokafka import AIOKafkaConsumer
+    except Exception:
+        return None
+    return AIOKafkaConsumer(
+        bootstrap_servers=list(brokers),
+        group_id=group_id,
+        auto_offset_reset=auto_offset_reset,
+        enable_auto_commit=bool(enable_auto_commit),
+    )
+
+
+__all__ = ["KafkaProducerLike", "KafkaConsumerLike", "create_kafka_producer", "create_kafka_consumer"]

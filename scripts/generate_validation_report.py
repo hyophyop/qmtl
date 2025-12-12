@@ -22,6 +22,7 @@ class RuleResultSummary:
     reason_code: str | None
     reason: str | None
     tags: list[str]
+    details: dict[str, Any] | None = None
 
 
 def _now_iso() -> str:
@@ -72,6 +73,8 @@ def _extract_rule_results(validation: Mapping[str, Any] | None) -> list[RuleResu
     for name, payload in container.items():
         if not isinstance(payload, Mapping):
             continue
+        raw_details = payload.get("details")
+        details = dict(raw_details) if isinstance(raw_details, Mapping) else None
         results.append(
             RuleResultSummary(
                 name=str(name),
@@ -81,6 +84,7 @@ def _extract_rule_results(validation: Mapping[str, Any] | None) -> list[RuleResu
                 reason_code=_coerce_str(payload.get("reason_code")) or None,
                 reason=_coerce_str(payload.get("reason")) or None,
                 tags=_string_list(payload.get("tags")),
+                details=details,
             )
         )
     status_order = {"fail": 0, "warn": 1, "pass": 2}
@@ -128,6 +132,80 @@ def _render_metric_rows(rows: list[tuple[str, str]]) -> str:
     return "\n".join(lines)
 
 
+def _extract_benchmark_metrics(metrics: Mapping[str, Any]) -> dict[str, dict[str, float | None]]:
+    """Extract benchmark comparison metrics if available.
+
+    Looks for benchmark-related keys in metrics.diagnostics or metrics.benchmark.
+    Returns a dict with strategy vs benchmark values.
+    """
+    result: dict[str, dict[str, float | None]] = {}
+
+    # Check for benchmark block in metrics
+    benchmark = metrics.get("benchmark")
+    if isinstance(benchmark, Mapping):
+        result["benchmark"] = {
+            "sharpe": benchmark.get("sharpe"),
+            "max_drawdown": benchmark.get("max_drawdown"),
+            "volatility": benchmark.get("volatility"),
+        }
+
+    # Extract strategy metrics for comparison
+    returns = metrics.get("returns")
+    if isinstance(returns, Mapping):
+        result["strategy"] = {
+            "sharpe": returns.get("sharpe"),
+            "max_drawdown": returns.get("max_drawdown"),
+        }
+
+    # Check for portfolio-level comparison
+    diagnostics = metrics.get("diagnostics")
+    if isinstance(diagnostics, Mapping):
+        extra = diagnostics.get("extra_metrics")
+        if isinstance(extra, Mapping):
+            for key in ["benchmark_sharpe", "portfolio_sharpe_uplift", "vs_benchmark_sharpe"]:
+                if key in extra:
+                    result.setdefault("comparison", {})[key] = extra[key]
+
+    return result if len(result) > 1 or "comparison" in result else {}
+
+
+def _render_benchmark_comparison(benchmark_metrics: dict[str, dict[str, float | None]]) -> str:
+    """Render benchmark comparison as a markdown table."""
+    if not benchmark_metrics:
+        return "_No benchmark data available._"
+
+    lines = ["| Metric | Strategy | Benchmark | Diff |"]
+    lines.append("| --- | --- | --- | --- |")
+
+    strategy = benchmark_metrics.get("strategy", {})
+    benchmark = benchmark_metrics.get("benchmark", {})
+    comparison = benchmark_metrics.get("comparison", {})
+
+    # Core metrics comparison
+    for metric in ["sharpe", "max_drawdown", "volatility"]:
+        strat_val = strategy.get(metric)
+        bench_val = benchmark.get(metric)
+        if strat_val is not None or bench_val is not None:
+            strat_str = f"{strat_val:g}" if strat_val is not None else "n/a"
+            bench_str = f"{bench_val:g}" if bench_val is not None else "n/a"
+            if strat_val is not None and bench_val is not None:
+                diff = strat_val - bench_val
+                diff_str = f"{diff:+.4f}"
+            else:
+                diff_str = "n/a"
+            lines.append(f"| {metric} | {strat_str} | {bench_str} | {diff_str} |")
+
+    # Additional comparison metrics
+    if comparison:
+        lines.append("")
+        lines.append("**Additional comparison metrics:**")
+        for key, value in comparison.items():
+            if value is not None:
+                lines.append(f"- {key}: {value:g}")
+
+    return "\n".join(lines)
+
+
 def _model_card_value(card: Mapping[str, Any], *keys: str) -> str:
     for key in keys:
         if key in card:
@@ -160,8 +238,17 @@ def generate_markdown_report(evaluation_run: Mapping[str, Any], model_card: Mapp
     policy_version = _coerce_str(validation.get("policy_version"), "")
     ruleset_hash = _coerce_str(validation.get("ruleset_hash"), "")
     profile = _coerce_str(validation.get("profile"), "")
+    extended_revision = _coerce_str(validation.get("extended_revision"), "")
+    extended_evaluated_at = _coerce_str(validation.get("extended_evaluated_at"), "")
 
     rule_results = _extract_rule_results(validation if isinstance(validation, Mapping) else {})
+    extended_rules = [
+        r
+        for r in rule_results
+        if r.name in {"cohort", "portfolio", "stress", "live_monitoring"}
+        or (r.tags and set(r.tags) & {"cohort", "portfolio", "stress", "live_monitoring"})
+    ]
+    core_rules = [r for r in rule_results if r not in extended_rules]
 
     metrics_section = evaluation_run.get("metrics") if isinstance(evaluation_run, Mapping) else {}
     metric_rows = _flatten_metrics(metrics_section if isinstance(metrics_section, Mapping) else {})
@@ -189,6 +276,10 @@ def generate_markdown_report(evaluation_run: Mapping[str, Any], model_card: Mapp
     lines.append(_summary_line("Validation profile", profile or "(not provided)"))
     lines.append(_summary_line("Policy version", policy_version or "(not provided)"))
     lines.append(_summary_line("Ruleset hash", ruleset_hash or "(not provided)"))
+    if extended_revision:
+        lines.append(_summary_line("Extended revision", extended_revision))
+    if extended_evaluated_at:
+        lines.append(_summary_line("Extended evaluated_at", extended_evaluated_at))
     lines.append(_summary_line("Evaluation created_at", created_at or "(not provided)"))
     lines.append(_summary_line("Updated_at", updated_at or "(not provided)"))
     lines.append(_summary_line("Report generated_at", _now_iso()))
@@ -224,20 +315,62 @@ def generate_markdown_report(evaluation_run: Mapping[str, Any], model_card: Mapp
 
     lines.append("")
     lines.append("## 4. Results (Rule outcomes)")
-    lines.append(_render_rule_results(rule_results))
+    lines.append(_render_rule_results(core_rules))
+
+    if extended_rules:
+        lines.append("")
+        lines.append("## 4-1. Extended validation (Cohort/Portfolio/Stress/Live)")
+        lines.append(_render_rule_results(extended_rules))
 
     lines.append("")
     lines.append("## 5. Metrics snapshot")
     lines.append(_render_metric_rows(metric_rows))
 
+    # Section 6: Override information
+    override_status = _coerce_str(summary.get("override_status"), "")
+    override_reason = _coerce_str(summary.get("override_reason"), "")
+    override_actor = _coerce_str(summary.get("override_actor"), "")
+    override_timestamp = _coerce_str(summary.get("override_timestamp"), "")
+
+    if override_status and override_status.lower() != "none":
+        lines.append("")
+        lines.append("## 6. Override information")
+        lines.append(_summary_line("Override status", override_status.upper()))
+        lines.append(_summary_line("Override reason", override_reason or "(not provided)"))
+        lines.append(_summary_line("Override actor", override_actor or "(not provided)"))
+        lines.append(_summary_line("Override timestamp", override_timestamp or "(not provided)"))
+        lines.append("")
+        lines.append("> **Note**: This evaluation run has an active override. ")
+        lines.append("> Overrides require periodic re-review per Invariant 3 (§12.3).")
+
+    # Section 7: Benchmark comparison (if available)
+    benchmark_metrics = _extract_benchmark_metrics(metrics_section if isinstance(metrics_section, Mapping) else {})
+    if benchmark_metrics:
+        lines.append("")
+        lines.append("## 7. Benchmark comparison")
+        lines.append(_render_benchmark_comparison(benchmark_metrics))
+
+    # Section 8: Limitations & recommendations
     lines.append("")
-    lines.append("## 6. Limitations & recommendations")
+    lines.append("## 8. Limitations & recommendations")
     recommendation = recommended_stage or "N/A"
     lines.append(f"- Recommended stage: {recommendation}")
     if limitations:
         lines.append(f"- Known limitations: {', '.join(limitations)}")
     else:
         lines.append("- Known limitations: n/a")
+
+    # Add extended layer details if available
+    if extended_rules:
+        lines.append("")
+        lines.append("### Extended validation details")
+        for rule in extended_rules:
+            if rule.details:
+                lines.append(f"")
+                lines.append(f"**{rule.name}** ({rule.status.upper()})")
+                for key, value in rule.details.items():
+                    if value is not None:
+                        lines.append(f"  - {key}: {value}")
 
     return "\n".join(lines).strip() + "\n"
 

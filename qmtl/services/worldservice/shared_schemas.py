@@ -45,7 +45,7 @@ class DecisionEnvelope(BaseModel):
 
 
 class EvaluateRequest(BaseModel):
-    metrics: Dict[str, Dict[str, float]] = Field(default_factory=dict)
+    metrics: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     previous: List[str] | None = None
     correlations: Dict[tuple[str, str], float] | None = None
     policy: Policy | Dict[str, Any] | None = None

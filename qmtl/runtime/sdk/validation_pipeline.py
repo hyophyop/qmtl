@@ -546,6 +546,7 @@ class ValidationPipeline:
         existing_strategies: Dict[str, Dict[str, float]] | None = None,
         existing_returns: Dict[str, Sequence[float]] | None = None,
         world_sharpe: float = 1.0,
+        metrics_only: bool = False,
     ):
         """Initialize validation pipeline.
 
@@ -571,6 +572,7 @@ class ValidationPipeline:
         self.existing_strategies = existing_strategies or {}
         self.existing_returns = existing_returns or {}
         self.world_sharpe = world_sharpe
+        self.metrics_only = metrics_only
 
     def _get_effective_policy(self) -> PresetPolicy | Policy:
         """Get the effective policy for validation."""
@@ -604,6 +606,14 @@ class ValidationPipeline:
         try:
             returns = self._resolve_returns(strategy, returns)
             metrics = self._calculate_metrics(returns, risk_free_rate, transaction_cost)
+
+            if self.metrics_only:
+                return ValidationResult(
+                    status=ValidationStatus.PASSED,
+                    metrics=metrics,
+                    strategy_id=strategy_id,
+                    world_id=self.world_id,
+                )
 
             policy = self._get_effective_policy()
             policy_obj = policy if isinstance(policy, Policy) else _policy_from_preset(policy)
