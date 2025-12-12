@@ -437,6 +437,51 @@ class TestSubmitResult:
         assert result.precheck is not None
         assert result.precheck.status == ValidationStatus.FAILED.value
 
+    def test_offline_submission_stays_pending_without_ws_decision(self):
+        class DummyMetrics:
+            sharpe = 1.0
+            max_drawdown = 0.1
+            win_ratio = 0.6
+            profit_factor = 1.2
+            car_mdd = 0.0
+            rar_mdd = 0.0
+            total_return = 0.05
+            num_trades = 10
+            correlation_avg = 0.3
+
+        class DummyValidation:
+            def __init__(self):
+                self.status = ValidationStatus.PASSED
+                self.weight = 0.11
+                self.rank = 7
+                self.contribution = 0.02
+                self.activated = False
+                self.metrics = DummyMetrics()
+                self.violations = []
+                self.improvement_hints = []
+                self.correlation_avg = 0.3
+
+        validation = DummyValidation()
+        strategy = SimpleStrategy()
+
+        result = _build_submit_result_from_validation(
+            strategy=strategy,
+            strategy_class_name="SimpleStrategy",
+            strategy_id="sid-offline",
+            resolved_world="world-offline",
+            mode=Mode.BACKTEST,
+            world_notice=[],
+            validation_result=validation,
+            ws_eval=None,
+            gateway_available=False,
+        )
+
+        assert result.status == "pending"
+        assert result.decision is None
+        assert result.activation is None
+        assert result.precheck is not None
+        assert result.precheck.status == ValidationStatus.PASSED.value
+
     def test_submit_result_to_dict_includes_ws_and_precheck(self):
         precheck = PrecheckResult(
             status="passed",
