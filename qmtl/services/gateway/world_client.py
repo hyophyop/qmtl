@@ -74,6 +74,14 @@ class WorldServiceClient:
         self._rebalance_schema_version = max(1, rebalance_schema_version or 1)
         self._alpha_metrics_capable = bool(alpha_metrics_capable)
 
+    @property
+    def base_url(self) -> str:
+        return self._base
+
+    @property
+    def http_client(self) -> httpx.AsyncClient:
+        return self._client
+
     def _on_breaker_open(self) -> None:
         gw_metrics.worlds_breaker_state.set(1)
         gw_metrics.worlds_breaker_open_total.inc()

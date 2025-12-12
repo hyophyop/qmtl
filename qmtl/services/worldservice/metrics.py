@@ -11,6 +11,7 @@ from qmtl.foundation.common.metrics_factory import (
     get_metric_value,
     get_or_create_counter,
     get_or_create_gauge,
+    get_or_create_histogram,
     reset_metrics as reset_registered_metrics,
 )
 
@@ -29,6 +30,12 @@ def _counter(name: str, documentation: str, labelnames: tuple[str, ...] | None =
 
 def _gauge(name: str, documentation: str, labelnames: tuple[str, ...] | None = None):
     metric = get_or_create_gauge(name, documentation, labelnames)
+    _REGISTERED_METRICS.add(getattr(metric, "_name", name))
+    return metric
+
+
+def _histogram(name: str, documentation: str, labelnames: tuple[str, ...] | None = None):
+    metric = get_or_create_histogram(name, documentation, labelnames)
     _REGISTERED_METRICS.add(getattr(metric, "_name", name))
     return metric
 
@@ -61,6 +68,48 @@ world_allocation_snapshot_stale_ratio = _gauge(
     "world_allocation_snapshot_stale_ratio",
     "Ratio of stale allocation snapshots over total",
     ("world_id",),
+)
+
+risk_hub_snapshot_dedupe_total = _counter(
+    "risk_hub_snapshot_dedupe_total",
+    "Risk hub snapshots dropped due to dedupe key collisions",
+    ("world_id", "stage"),
+)
+
+risk_hub_snapshot_expired_total = _counter(
+    "risk_hub_snapshot_expired_total",
+    "Risk hub snapshots dropped because ttl_sec was exceeded",
+    ("world_id", "stage"),
+)
+
+risk_hub_snapshot_processed_total = _counter(
+    "risk_hub_snapshot_processed_total",
+    "Risk hub snapshots successfully applied from ControlBus",
+    ("world_id", "stage"),
+)
+
+risk_hub_snapshot_failed_total = _counter(
+    "risk_hub_snapshot_failed_total",
+    "Risk hub snapshots that failed to process from ControlBus",
+    ("world_id", "stage"),
+)
+
+risk_hub_snapshot_retry_total = _counter(
+    "risk_hub_snapshot_retry_total",
+    "Risk hub snapshot processing retries from ControlBus",
+    ("world_id", "stage"),
+)
+
+risk_hub_snapshot_dlq_total = _counter(
+    "risk_hub_snapshot_dlq_total",
+    "Risk hub snapshots routed to DLQ after retries",
+    ("world_id", "stage"),
+)
+
+risk_hub_snapshot_processing_latency_seconds = _histogram(
+    "risk_hub_snapshot_processing_latency_seconds",
+    "Time between snapshot creation and WS processing",
+    ("world_id", "stage"),
 )
 
 
@@ -105,6 +154,67 @@ def record_allocation_snapshot(world_id: str, *, stale: bool) -> None:
     _update_snapshot_ratio(world_id)
 
 
+def record_risk_snapshot_dedupe(world_id: str, *, stage: str | None = None) -> None:
+    """Record when an incoming risk snapshot was skipped due to dedupe."""
+
+    risk_hub_snapshot_dedupe_total.labels(
+        world_id=world_id,
+        stage=stage or "unknown",
+    ).inc()
+
+
+def record_risk_snapshot_expired(world_id: str, *, stage: str | None = None) -> None:
+    """Record when an incoming risk snapshot was skipped because it expired."""
+
+    risk_hub_snapshot_expired_total.labels(
+        world_id=world_id,
+        stage=stage or "unknown",
+    ).inc()
+
+
+def record_risk_snapshot_processed(
+    world_id: str,
+    *,
+    stage: str | None = None,
+    latency_seconds: float | None = None,
+) -> None:
+    """Record successful processing of a risk snapshot."""
+
+    stage_label = stage or "unknown"
+    risk_hub_snapshot_processed_total.labels(world_id=world_id, stage=stage_label).inc()
+    if latency_seconds is not None:
+        risk_hub_snapshot_processing_latency_seconds.labels(
+            world_id=world_id, stage=stage_label
+        ).observe(float(latency_seconds))
+
+
+def record_risk_snapshot_failed(world_id: str, *, stage: str | None = None) -> None:
+    """Record failed processing of a risk snapshot."""
+
+    risk_hub_snapshot_failed_total.labels(
+        world_id=world_id,
+        stage=stage or "unknown",
+    ).inc()
+
+
+def record_risk_snapshot_retry(world_id: str, *, stage: str | None = None) -> None:
+    """Record a retry attempt while processing a risk snapshot."""
+
+    risk_hub_snapshot_retry_total.labels(
+        world_id=world_id,
+        stage=stage or "unknown",
+    ).inc()
+
+
+def record_risk_snapshot_dlq(world_id: str, *, stage: str | None = None) -> None:
+    """Record when a risk snapshot is routed to DLQ after failures."""
+
+    risk_hub_snapshot_dlq_total.labels(
+        world_id=world_id,
+        stage=stage or "unknown",
+    ).inc()
+
+
 def parse_timestamp(value: str | None) -> datetime | None:
     """Parse ISO8601 timestamps, normalizing to UTC."""
 
@@ -129,6 +239,13 @@ def reset_metrics() -> None:
         world_allocation_snapshot_stale_ratio,
         world_apply_run_total,
         world_apply_failure_total,
+        risk_hub_snapshot_dedupe_total,
+        risk_hub_snapshot_expired_total,
+        risk_hub_snapshot_processed_total,
+        risk_hub_snapshot_failed_total,
+        risk_hub_snapshot_retry_total,
+        risk_hub_snapshot_dlq_total,
+        risk_hub_snapshot_processing_latency_seconds,
     ):
         if hasattr(metric, "_metrics"):
             cast(Any, metric)._metrics.clear()
@@ -141,7 +258,20 @@ __all__ = [
     "record_apply_run_completed",
     "record_apply_run_failed",
     "record_apply_run_started",
+    "record_risk_snapshot_dedupe",
+    "record_risk_snapshot_expired",
+    "record_risk_snapshot_processed",
+    "record_risk_snapshot_failed",
+    "record_risk_snapshot_retry",
+    "record_risk_snapshot_dlq",
     "reset_metrics",
+    "risk_hub_snapshot_dedupe_total",
+    "risk_hub_snapshot_expired_total",
+    "risk_hub_snapshot_processed_total",
+    "risk_hub_snapshot_failed_total",
+    "risk_hub_snapshot_retry_total",
+    "risk_hub_snapshot_dlq_total",
+    "risk_hub_snapshot_processing_latency_seconds",
     "world_allocation_snapshot_stale_ratio",
     "world_allocation_snapshot_total",
     "world_allocation_snapshot_stale_total",

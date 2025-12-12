@@ -13,7 +13,12 @@ from .api import create_app
 from .config import GatewayConfig
 from .ws import WebSocketHub
 from qmtl.foundation.common.tracing import setup_tracing
-from qmtl.foundation.config import DeploymentProfile, find_config_file, load_config
+from qmtl.foundation.config import (
+    DeploymentProfile,
+    RiskHubConfig,
+    find_config_file,
+    load_config,
+)
 from qmtl.foundation.config_validation import validate_gateway_config
 from qmtl.services.dagmanager.topic import set_topic_namespace_enabled
 from .controlbus_consumer import ControlBusConsumer
@@ -60,7 +65,15 @@ async def _main(argv: list[str] | None = None) -> None:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
-    cfg_path, config, telemetry_enabled, telemetry_endpoint, namespace_toggle, profile = _load_gateway_config(
+    (
+        cfg_path,
+        config,
+        telemetry_enabled,
+        telemetry_endpoint,
+        namespace_toggle,
+        profile,
+        risk_hub_cfg,
+    ) = _load_gateway_config(
         parser, args.config
     )
     setup_tracing("gateway", exporter_endpoint=telemetry_endpoint, config_path=cfg_path)
@@ -94,6 +107,7 @@ async def _main(argv: list[str] | None = None) -> None:
 
     app = create_app(
         redis_client=redis_client,
+        redis_dsn=config.redis_dsn,
         database_backend=config.database_backend,
         database_dsn=config.database_dsn,
         insert_sentinel=insert_sentinel,
@@ -115,6 +129,7 @@ async def _main(argv: list[str] | None = None) -> None:
         health_capabilities=config.build_health_capabilities(),
         ownership_config=config.ownership,
         profile=profile,
+        risk_hub_config=risk_hub_cfg,
     )
 
     db = app.state.database
@@ -169,7 +184,13 @@ def _build_parser() -> argparse.ArgumentParser:
 def _load_gateway_config(
     parser: argparse.ArgumentParser, cli_path: str | None
 ) -> tuple[
-    str | None, GatewayConfig, bool | None, str | None, bool | None, DeploymentProfile
+    str | None,
+    GatewayConfig,
+    bool | None,
+    str | None,
+    bool | None,
+    DeploymentProfile,
+    RiskHubConfig,
 ]:
     cfg_path = cli_path or find_config_file()
     _log_config_source(cfg_path, cli_override=cli_path)
@@ -178,6 +199,7 @@ def _load_gateway_config(
     telemetry_enabled: bool | None = None
     telemetry_endpoint: str | None = None
     namespace_toggle: bool | None = None
+    risk_hub_cfg = RiskHubConfig()
     if cfg_path:
         unified = load_config(cfg_path)
         if "gateway" not in unified.present_sections:
@@ -191,6 +213,7 @@ def _load_gateway_config(
         telemetry_endpoint = unified.telemetry.otel_exporter_endpoint
         namespace_toggle = unified.dagmanager.enable_topic_namespace
         profile = unified.profile
+        risk_hub_cfg = unified.risk_hub
     return (
         cfg_path,
         config,
@@ -198,6 +221,7 @@ def _load_gateway_config(
         telemetry_endpoint,
         namespace_toggle,
         profile,
+        risk_hub_cfg,
     )
 
 

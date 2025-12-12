@@ -67,6 +67,29 @@ async def test_publish_activation_update_cloud_event():
 
 
 @pytest.mark.asyncio
+async def test_publish_risk_snapshot_updated_preserves_snapshot_version():
+    dummy = DummyProducer()
+    producer = ControlBusProducer(producer=dummy, topic="risk_snapshot_updated")
+    await producer.publish_risk_snapshot_updated(
+        "w1",
+        {
+            "as_of": "2025-01-01T00:00:00Z",
+            "version": "snap-v1",
+            "weights": {"a": 1.0},
+        },
+        version=2,
+    )
+    topic, data, key = dummy.sent[0]
+    evt = json.loads(data.decode())
+    assert evt["type"] == "risk_snapshot_updated"
+    assert evt["data"]["world_id"] == "w1"
+    assert evt["data"]["version"] == "snap-v1"
+    assert evt["data"]["event_version"] == 2
+    assert topic == "risk_snapshot_updated"
+    assert key == b"w1"
+
+
+@pytest.mark.asyncio
 async def test_start_warns_when_optional_controlbus_missing(caplog):
     producer = ControlBusProducer(brokers=[], required=False)
 

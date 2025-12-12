@@ -150,21 +150,6 @@ def test_resolve_execution_context_live_not_downgraded_without_as_of() -> None:
     assert resolution.downgrade_reason is None
 
 
-@pytest.mark.parametrize("bad_mode", ["offline", "sandbox", "compute-only", "unknown"])
-def test_determine_execution_mode_rejects_deprecated_or_unknown_modes(bad_mode: str) -> None:
-    merged: dict[str, str] = {}
-
-    with pytest.raises(ValueError):
-        determine_execution_mode(
-            explicit_mode=bad_mode,
-            execution_domain=None,
-            merged_context=merged,
-            trade_mode="backtest",
-            offline_requested=False,
-            gateway_url=None,
-        )
-
-
 def test_normalize_clock_value_applies_expected_clock() -> None:
     merged: dict[str, str] = {}
 

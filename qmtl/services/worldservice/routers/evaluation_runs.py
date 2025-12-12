@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from ..schemas import EvaluationOverride, EvaluationRunModel
+from ..schemas import EvaluationOverride, EvaluationRunModel, EvaluationRunHistoryItem
 from ..services import WorldService
 
 
@@ -26,6 +26,30 @@ def create_evaluation_runs_router(service: WorldService) -> APIRouter:
         if record is None:
             raise HTTPException(status_code=404, detail="evaluation run not found")
         return EvaluationRunModel(**record)
+
+    @router.get(
+        "/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/history",
+        response_model=list[EvaluationRunHistoryItem],
+    )
+    async def list_evaluation_run_history(
+        world_id: str, strategy_id: str, run_id: str
+    ) -> list[EvaluationRunHistoryItem]:
+        history = await service.store.list_evaluation_run_history(
+            world_id, strategy_id, run_id
+        )
+        items: list[EvaluationRunHistoryItem] = []
+        for entry in history:
+            payload = entry.get("payload")
+            if not isinstance(payload, dict):
+                continue
+            items.append(
+                EvaluationRunHistoryItem(
+                    revision=int(entry.get("revision") or 0),
+                    recorded_at=str(entry.get("recorded_at") or ""),
+                    payload=EvaluationRunModel(**payload),
+                )
+            )
+        return items
 
     @router.post(
         "/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/override",

@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import logging
 from contextlib import asynccontextmanager
+import contextlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Awaitable, Callable, cast
@@ -10,15 +11,23 @@ from typing import Any, Awaitable, Callable, cast
 import redis.asyncio as redis
 from fastapi import FastAPI
 
-from qmtl.foundation.config import DeploymentProfile, find_config_file, load_config
+from qmtl.foundation.config import (
+    DeploymentProfile,
+    RiskHubConfig,
+    find_config_file,
+    load_config,
+)
 
 from .controlbus_producer import ControlBusProducer
+from .controlbus_consumer import RiskHubControlBusConsumer
 from .config import WorldServiceServerConfig
 from .routers import (
     create_activation_router,
     create_allocations_router,
     create_bindings_router,
     create_evaluation_runs_router,
+    create_live_monitoring_router,
+    create_risk_hub_router,
     create_policies_router,
     create_rebalancing_router,
     create_validations_router,
@@ -35,6 +44,8 @@ from .schemas import (
 )
 from .services import WorldService
 from .storage import PersistentStorage, Storage
+from .risk_hub import RiskSignalHub
+from .blob_store import build_blob_store
 
 
 logger = logging.getLogger(__name__)
@@ -57,6 +68,21 @@ def _coerce_storage_handle(result: Storage | StorageHandle) -> StorageHandle:
 async def _maybe_await(value: Any) -> None:
     if inspect.isawaitable(value):
         await value
+
+
+def _bind_risk_hub_backend(
+    hub: RiskSignalHub | None, storage: Any, *, cache_ttl: int | None = None
+) -> None:
+    if hub is None:
+        return
+    try:
+        if isinstance(storage, PersistentStorage):
+            hub.bind_repository(storage.risk_snapshots)
+            redis_client = getattr(storage, "_redis", None)
+            if redis_client is not None:
+                hub.bind_cache(redis_client, ttl=cache_ttl)
+    except Exception:  # pragma: no cover - defensive binding
+        logger.exception("Failed to bind risk hub repository")
 
 
 def _config_storage_factory(config: WorldServiceServerConfig) -> Callable[[], Awaitable[StorageHandle]]:
@@ -109,13 +135,49 @@ def _coerce_profile(value: DeploymentProfile | str | None) -> DeploymentProfile 
     return DeploymentProfile(value.lower())
 
 
+def _resolve_inline_threshold(cfg: RiskHubConfig | None) -> int | None:
+    if cfg is None:
+        return None
+    if cfg.inline_cov_threshold is not None:
+        return cfg.inline_cov_threshold
+    return cfg.blob_store.inline_cov_threshold
+
+
+def _build_hub_blob_store(
+    cfg: RiskHubConfig | None,
+    *,
+    redis_url: str | None = None,
+    redis_client: Any | None = None,
+    profile: DeploymentProfile | None = None,
+) -> Any | None:
+    if cfg is None:
+        return None
+    if profile is not None and profile is not DeploymentProfile.PROD:
+        # Dev: keep everything inline/fakeredis; no persistent/offload store
+        return None
+    try:
+        return build_blob_store(
+            store_type=cfg.blob_store.type,
+            base_dir=cfg.blob_store.base_dir,
+            bucket=cfg.blob_store.bucket,
+            prefix=cfg.blob_store.prefix,
+            redis_client=redis_client,
+            redis_dsn=redis_url,
+            redis_prefix=cfg.blob_store.redis_prefix,
+            cache_ttl=cfg.blob_store.cache_ttl,
+        )
+    except Exception:  # pragma: no cover - defensive fallback
+        logger.exception("Failed to build risk hub blob store from config")
+        return None
+
+
 def _load_server_config(
     config: WorldServiceServerConfig | None,
     *,
     config_path: str | Path | None = None,
-) -> tuple[WorldServiceServerConfig, DeploymentProfile]:
+) -> tuple[WorldServiceServerConfig, DeploymentProfile, RiskHubConfig | None]:
     if config is not None:
-        return config, DeploymentProfile.DEV
+        return config, DeploymentProfile.DEV, None
 
     resolved_path: str | None
     if config_path is not None:
@@ -138,12 +200,14 @@ def _load_server_config(
         raise RuntimeError(
             "WorldService configuration missing 'worldservice' server settings (dsn, redis, bind, auth)."
         )
-    return server_config, unified.profile
+    return server_config, unified.profile, unified.risk_hub
 
 
 def create_app(
     *,
     bus: ControlBusProducer | None = None,
+    bus_consumer: RiskHubControlBusConsumer | None = None,
+    risk_hub_token: str | None = None,
     storage: Storage | None = None,
     storage_factory: Callable[[], Awaitable[Storage | StorageHandle]] | None = None,
     config: WorldServiceServerConfig | None = None,
@@ -151,12 +215,16 @@ def create_app(
     rebalance_executor: Any | None = None,
     compat_rebalance_v2: bool | None = None,
     alpha_metrics_required: bool | None = None,
+    extended_validation_scheduler: Callable[[Awaitable[int]], Any] | None = None,
     profile: DeploymentProfile | str | None = None,
+    risk_hub: RiskSignalHub | None = None,
+    risk_hub_config: RiskHubConfig | None = None,
 ) -> FastAPI:
     if storage is not None and storage_factory is not None:
         raise ValueError("Provide either storage or storage_factory, not both")
 
     resolved_config: WorldServiceServerConfig | None = config
+    resolved_risk_hub_config: RiskHubConfig | None = risk_hub_config
     resolved_profile = _coerce_profile(profile)
     factory: Callable[[], Awaitable[Storage | StorageHandle]] | None = storage_factory
 
@@ -168,7 +236,7 @@ def create_app(
         )
     )
     if should_load_config:
-        resolved_config, config_profile = _load_server_config(
+        resolved_config, config_profile, resolved_risk_hub_config = _load_server_config(
             config, config_path=config_path
         )
         if resolved_profile is None:
@@ -206,6 +274,32 @@ def create_app(
             return handle
 
         factory = _guarded_factory
+    inline_cov_threshold = _resolve_inline_threshold(resolved_risk_hub_config)
+    cache_ttl_override = (
+        resolved_risk_hub_config.blob_store.cache_ttl
+        if resolved_risk_hub_config is not None
+        else None
+    )
+    blob_store = _build_hub_blob_store(
+        resolved_risk_hub_config,
+        redis_url=resolved_config.redis if resolved_config else None,
+        profile=resolved_profile,
+    )
+    risk_hub_token = risk_hub_token or (
+        resolved_risk_hub_config.token if resolved_risk_hub_config else None
+    )
+
+    if risk_hub is None:
+        risk_hub = RiskSignalHub(
+            cache=None,
+            blob_store=blob_store,
+            inline_cov_threshold=inline_cov_threshold
+            if inline_cov_threshold is not None
+            else 100,
+        )
+    elif blob_store is not None:
+        risk_hub.bind_blob_store(blob_store)
+
     bus_instance: ControlBusProducer | None = bus
     if bus_instance is None and resolved_config is not None:
         brokers = resolved_config.controlbus_brokers
@@ -239,16 +333,22 @@ def create_app(
     ):
         bus_instance._required = True
 
+    _bind_risk_hub_backend(risk_hub, store, cache_ttl=cache_ttl_override)
     service = WorldService(
-        store=store, bus=bus_instance, rebalance_executor=rebalance_executor
+        store=store,
+        bus=bus_instance,
+        rebalance_executor=rebalance_executor,
+        extended_validation_scheduler=extended_validation_scheduler,
+        risk_hub=risk_hub,
     )
     storage_handle: StorageHandle | None = None
     compat_flag = compat_rebalance_v2
     alpha_flag = alpha_metrics_required
+    bus_consumer_instance = bus_consumer
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        nonlocal storage_handle, resolved_config, bus_instance
+        nonlocal storage_handle, resolved_config, bus_instance, bus_consumer_instance
         try:
             if bus_instance is not None:
                 try:
@@ -262,12 +362,40 @@ def create_app(
                     )
                     service.bus = None
                     bus_instance = None
+            if resolved_config and bus_consumer_instance is None:
+                brokers = resolved_config.controlbus_brokers
+                topic = resolved_config.controlbus_topic
+                if brokers and topic:
+                    bus_consumer_instance = RiskHubControlBusConsumer(
+                        hub=risk_hub,
+                        on_snapshot=lambda snap: service._apply_extended_validation(  # type: ignore[attr-defined]
+                            world_id=snap.world_id,
+                            stage=None,
+                            policy_payload=None,
+                        ),
+                        dedupe_cache=getattr(risk_hub, "_cache", None),
+                        brokers=brokers,
+                        topic=topic,
+                    )
+            if bus_consumer_instance is not None:
+                try:
+                    await bus_consumer_instance.start()
+                except Exception:
+                    logger.exception("Failed to start risk hub consumer")
             if factory is not None:
                 storage_handle = _coerce_storage_handle(await factory())
                 service.store = storage_handle.storage
+                _bind_risk_hub_backend(
+                    risk_hub,
+                    storage_handle.storage,
+                    cache_ttl=cache_ttl_override,
+                )
                 app.state.storage = storage_handle.storage
             yield
         finally:
+            if bus_consumer_instance is not None:
+                with contextlib.suppress(Exception):  # pragma: no cover - defensive shutdown
+                    await bus_consumer_instance.stop()
             if bus_instance is not None:
                 try:
                     await bus_instance.stop()
@@ -311,6 +439,7 @@ def create_app(
     app.state.storage = store
     app.state.world_service = service
     app.state.worldservice_config = resolved_config
+    app.state.risk_hub_consumer = bus_consumer
     app.state.rebalance_capabilities = {
         "compat_rebalance_v2": compat_flag,
         "alpha_metrics_required": alpha_flag,
@@ -321,6 +450,19 @@ def create_app(
     app.include_router(create_activation_router(service))
     app.include_router(create_allocations_router(service))
     app.include_router(create_evaluation_runs_router(service))
+    app.include_router(create_live_monitoring_router(service))
+    app.include_router(
+        create_risk_hub_router(
+            risk_hub,
+            bus=bus_instance,
+            expected_token=risk_hub_token,
+            schedule_extended_validation=lambda world_id: service._apply_extended_validation(  # type: ignore[attr-defined]
+                world_id=world_id,
+                stage=None,
+                policy_payload=None,
+            ),
+        )
+    )
     app.include_router(
         create_rebalancing_router(
             service,

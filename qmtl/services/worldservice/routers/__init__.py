@@ -6,6 +6,8 @@ from .policies import create_policies_router
 from .rebalancing import create_rebalancing_router
 from .validations import create_validations_router
 from .worlds import create_worlds_router
+from .risk_hub import create_risk_hub_router
+from .live_monitoring import create_live_monitoring_router
 
 __all__ = [
     'create_activation_router',
@@ -16,4 +18,6 @@ __all__ = [
     'create_rebalancing_router',
     'create_validations_router',
     'create_worlds_router',
+    'create_risk_hub_router',
+    'create_live_monitoring_router',
 ]

@@ -15,6 +15,7 @@ from qmtl.runtime.sdk.submit import (
     WsEvalResult,
     _build_submit_result_from_validation,
     _derive_returns_with_auto,
+    _metrics_only_enabled,
     submit,
     submit_async,
 )
@@ -126,6 +127,16 @@ class TestAutoReturns:
 
         assert derived == pytest.approx([0.015, 0.014778325123152707])
         assert hints == []
+
+
+def test_metrics_only_flag_default_true(monkeypatch):
+    monkeypatch.delenv("QMTL_SDK_METRICS_ONLY", raising=False)
+    assert _metrics_only_enabled() is True
+
+
+def test_metrics_only_flag_can_disable(monkeypatch):
+    monkeypatch.setenv("QMTL_SDK_METRICS_ONLY", "0")
+    assert _metrics_only_enabled() is False
 
 
 class TestMode:

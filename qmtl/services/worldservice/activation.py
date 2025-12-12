@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any, Dict, Sequence
 
 from qmtl.foundation.common.hashutils import hash_bytes
@@ -10,14 +11,22 @@ from qmtl.foundation.common.hashutils import hash_bytes
 from .controlbus_producer import ControlBusProducer
 from .run_state import ApplyRunState
 from .storage import Storage
+from .risk_hub import PortfolioSnapshot, RiskSignalHub
 
 
 class ActivationEventPublisher:
     """Publish activation mutations to storage and the control bus."""
 
-    def __init__(self, store: Storage, bus: ControlBusProducer | None) -> None:
+    def __init__(
+        self,
+        store: Storage,
+        bus: ControlBusProducer | None,
+        *,
+        risk_hub: RiskSignalHub | None = None,
+    ) -> None:
         self.store = store
         self.bus = bus
+        self.risk_hub = risk_hub
 
     async def upsert_activation(
         self, world_id: str, payload: Dict[str, Any]
@@ -48,6 +57,7 @@ class ActivationEventPublisher:
                 payload=event_payload,
                 version=version,
             )
+        await self._publish_snapshot(world_id, version_hint=str(data.get("ts") or version))
         return data
 
     async def update_activation_state(
@@ -85,6 +95,7 @@ class ActivationEventPublisher:
                 requires_ack=requires_ack,
                 sequence=sequence,
             )
+        await self._publish_snapshot(world_id, version_hint=str(data.get("ts") or version))
         return data
 
     async def freeze_world(
@@ -170,6 +181,47 @@ class ActivationEventPublisher:
                     requires_ack=True,
                     sequence=sequence,
                 )
+
+    async def _publish_snapshot(self, world_id: str, version_hint: str | None = None) -> None:
+        if self.risk_hub is None:
+            return
+        try:
+            decisions = await self.store.get_decisions(world_id)
+        except Exception:
+            decisions = []
+        if not decisions:
+            return
+        try:
+            snapshot = await self.store.snapshot_activation(world_id)
+        except Exception:
+            return
+        weights: Dict[str, float] = {}
+        for sid, sides in (snapshot.state or {}).items():
+            for entry in sides.values():
+                if entry.get("active"):
+                    weights[sid] = weights.get(sid, 0.0) + float(entry.get("weight", 1.0))
+        total = sum(weights.values())
+        if total <= 0:
+            return
+        normalized = {sid: val / total for sid, val in weights.items()}
+        ts = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        snap = PortfolioSnapshot(
+            world_id=world_id,
+            as_of=ts,
+            version=str(version_hint or ts),
+            weights=normalized,
+            provenance={
+                "source": "worldservice",
+                "reason": "activation_update",
+                "stage": "live",
+            },
+        )
+        await self.risk_hub.upsert_snapshot(snap)
+        if self.bus:
+            try:
+                await self.bus.publish_risk_snapshot_updated(world_id, snap.to_dict())
+            except Exception:
+                pass
 
 
 __all__ = ["ActivationEventPublisher"]

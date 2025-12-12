@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Dict, List, Mapping
 
 from fastapi import HTTPException
 
@@ -19,6 +19,7 @@ from .alpha_metrics import (
     equity_curve_to_returns,
 )
 from .storage import Storage
+from .validation_checks import _world_is_high_tier_and_critical
 
 
 def augment_metrics_with_linearity(
@@ -136,16 +137,20 @@ class DecisionEvaluator:
         if isinstance(payload, ApplyRequest) and payload.plan:
             return await self._apply_plan(world_id, payload)
 
-        policy = await self._resolve_policy(world_id, payload)
+        policy, policy_version = await self._resolve_policy(world_id, payload)
         prev = await self._resolve_previous(world_id, payload)
         metrics = self._augment_metrics(payload)
-        return evaluate_policy(
+        result = evaluate_policy(
             metrics,
             policy,
             prev,
             payload.correlations,
             stage=getattr(payload, "stage", None),
+            policy_version=policy_version,
         )
+        if result.policy_version is None and policy_version is not None:
+            result.policy_version = policy_version
+        return result
 
     async def _apply_plan(self, world_id: str, payload: ApplyRequest) -> PolicyEvaluationResult:
         prev = payload.previous or await self.store.get_decisions(world_id)
@@ -156,17 +161,49 @@ class DecisionEvaluator:
 
     async def _resolve_policy(
         self, world_id: str, payload: ApplyRequest | EvaluateRequest
-    ) -> Policy:
+    ) -> tuple[Policy, str | None]:
+        policy_version: str | None = None
+        if payload.policy is None:
+            try:
+                default_version = await self.store.default_policy_version(world_id)
+                if default_version:
+                    policy_version = str(default_version)
+            except Exception:
+                policy_version = None
+        elif isinstance(payload.policy, Mapping):
+            raw_version = payload.policy.get("policy_version") or payload.policy.get("version")
+            if raw_version is not None:
+                policy_version = str(raw_version)
+
         policy_payload = payload.policy if payload.policy is not None else await self.store.get_default_policy(world_id)
         policy = policy_payload
         if isinstance(policy, Policy):
-            return policy
+            policy = await self._enforce_fail_closed(world_id, policy)
+            return policy, policy_version
         try:
             if isinstance(policy_payload, dict) and "policy" in policy_payload:
-                return Policy.model_validate(policy_payload["policy"])
-            return Policy.model_validate(policy_payload)
+                policy = Policy.model_validate(policy_payload["policy"])
+            else:
+                policy = Policy.model_validate(policy_payload)
+            policy = await self._enforce_fail_closed(world_id, policy)
+            return policy, policy_version
         except Exception as exc:
             raise HTTPException(status_code=422, detail=f"invalid policy: {exc}") from exc
+
+    async def _enforce_fail_closed(self, world_id: str, policy: Policy) -> Policy:
+        """Force fail-closed validation for high-tier client-critical worlds."""
+
+        try:
+            world = await self.store.get_world(world_id)
+        except Exception:
+            world = None
+        if world and _world_is_high_tier_and_critical(world):
+            if policy.validation is None:
+                from .policy_engine import ValidationConfig
+                policy.validation = ValidationConfig()
+            policy.validation.on_error = "fail"
+            policy.validation.on_missing_metric = "fail"
+        return policy
 
     async def _resolve_previous(
         self, world_id: str, payload: ApplyRequest | EvaluateRequest

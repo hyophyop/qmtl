@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from copy import deepcopy
-import asyncio
 import json
 import logging
+import asyncio
+from dataclasses import dataclass
+from copy import deepcopy
 from contextlib import AsyncExitStack, asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, Mapping, Optional
+from typing import Any, Awaitable, Callable, Dict, Iterable, Mapping, Optional
 
 from fastapi import HTTPException
 
@@ -22,7 +22,9 @@ from .apply_flow import ApplyCoordinator
 from .controlbus_producer import ControlBusProducer
 from .decision import DecisionEvaluator, augment_metrics_with_linearity
 from .policy import GatingPolicy
-from .policy_engine import PolicyEvaluationResult
+from .policy_engine import PolicyEvaluationResult, recommended_stage
+from .extended_validation_worker import ExtendedValidationWorker
+from .validation_metrics import augment_live_metrics, augment_portfolio_metrics, augment_stress_metrics
 from .rebalancing import MultiWorldProportionalRebalancer, MultiWorldRebalanceContext, PositionSlice, SymbolDelta
 from .rebalancing.overlay import OverlayConfigError, OverlayPlanner
 from .run_state import ApplyRunRegistry, ApplyRunState, ApplyStage
@@ -82,13 +84,15 @@ class WorldService:
         bus: ControlBusProducer | None = None,
         rebalance_executor: Any | None = None,
         model_cards: ModelCardRegistry | None = None,
+        extended_validation_scheduler: Callable[[Awaitable[int]], Any] | None = None,
+        risk_hub: Any | None = None,
     ) -> None:
         self.bus = bus
         self.rebalance_executor = rebalance_executor
         self._runs = ApplyRunRegistry()
         self.apply_runs = self._runs.runs
         self.apply_locks = self._runs.locks
-        self._activation = ActivationEventPublisher(store, bus)
+        self._activation = ActivationEventPublisher(store, bus, risk_hub=risk_hub)
         self._evaluator = DecisionEvaluator(store)
         self._model_cards = model_cards or ModelCardRegistry()
         self._coordinator = ApplyCoordinator(
@@ -102,6 +106,8 @@ class WorldService:
         self._allocation_locks: Dict[str, asyncio.Lock] = {}
         self._multi_rebalancer = MultiWorldProportionalRebalancer()
         self._decisions: Dict[str, _DecisionState] = {}
+        self._extended_validation_scheduler = extended_validation_scheduler
+        self._risk_hub = risk_hub
 
     @property
     def store(self) -> Storage:
@@ -354,6 +360,14 @@ class WorldService:
         risk_tier = (payload.risk_tier or "unknown").lower()
         metrics = self._extract_metrics(payload, strategy_id)
         validation_payload = self._extract_validation_payload(payload)
+        if evaluation:
+            validation_payload = validation_payload or {}
+            if evaluation.policy_version:
+                validation_payload.setdefault("policy_version", str(evaluation.policy_version))
+            if evaluation.ruleset_hash:
+                validation_payload.setdefault("ruleset_hash", evaluation.ruleset_hash)
+            if evaluation.profile:
+                validation_payload.setdefault("profile", evaluation.profile)
         rule_results = evaluation.for_strategy(strategy_id) if evaluation else {}
         if rule_results:
             validation_payload = validation_payload or {}
@@ -361,15 +375,21 @@ class WorldService:
                 name: result.model_dump() for name, result in rule_results.items()
             }
         metrics = ensure_validation_health(metrics, rule_results)
-        if evaluation and evaluation.profile:
-            validation_payload = validation_payload or {}
-            validation_payload.setdefault("profile", evaluation.profile)
+        metrics = augment_live_metrics(metrics)
+        metrics = augment_stress_metrics(metrics, policy_payload=payload.policy)
+        metrics = augment_portfolio_metrics(metrics)
+        profile_hint = validation_payload.get("profile") if isinstance(validation_payload, Mapping) else None
         active_flag = strategy_id in (evaluation.selected if evaluation else [])
+        recommended_stage_value = (
+            evaluation.recommended_stage if evaluation else None
+        ) or recommended_stage(profile_hint, stage)
         summary = {
             "status": "pass" if active_flag else "fail",
             "active": active_flag,
             "active_set": list(evaluation.selected if evaluation else []),
         }
+        if recommended_stage_value:
+            summary["recommended_stage"] = recommended_stage_value
         override = getattr(payload, "override", None)
         if override:
             summary.update(
@@ -395,6 +415,11 @@ class WorldService:
                 metrics=metrics,
                 validation=validation_payload,
                 summary=summary,
+            )
+            await self._apply_extended_validation(
+                world_id=world_id,
+                stage=stage,
+                policy_payload=payload.policy,
             )
         except Exception:  # pragma: no cover - defensive best-effort
             logger.exception("Failed to record evaluation run for %s/%s", world_id, strategy_id)
@@ -440,6 +465,30 @@ class WorldService:
             .isoformat()
             .replace("+00:00", "Z")
         )
+
+    async def _apply_extended_validation(
+        self,
+        *,
+        world_id: str,
+        stage: str | None,
+        policy_payload: Any | None,
+    ) -> None:
+        """Apply cohort/portfolio/stress/live layers via the extended validation worker."""
+
+        worker = ExtendedValidationWorker(self.store)
+        if hasattr(self, "_risk_hub"):
+            worker.risk_hub = getattr(self, "_risk_hub")
+        coro = worker.run(world_id=world_id, stage=stage, policy_payload=policy_payload)
+        if self._extended_validation_scheduler:
+            try:
+                self._extended_validation_scheduler(coro)
+            except Exception:  # pragma: no cover - defensive best-effort
+                logger.exception("Failed to enqueue extended validation for %s", world_id)
+        else:
+            try:
+                await coro
+            except Exception:  # pragma: no cover - defensive best-effort
+                logger.exception("Failed to apply extended validation layers for %s", world_id)
 
     @staticmethod
     def _resolve_strategy_id(payload: EvaluateRequest) -> str | None:
@@ -559,6 +608,23 @@ class WorldService:
         series: Dict[str, StrategySeries] | None,
     ) -> Dict[str, Dict[str, float]]:
         return augment_metrics_with_linearity(metrics, series)
+
+    def _default_scheduler(self) -> Callable[[Awaitable[int]], Any]:
+        """Fire-and-forget scheduler for extended validation tasks."""
+
+        def schedule(coro: Awaitable[int]) -> asyncio.Task[int]:
+            task = asyncio.create_task(coro)
+
+            def _log_result(t: asyncio.Task[int]) -> None:
+                try:
+                    t.result()
+                except Exception:  # pragma: no cover - defensive logging
+                    logger.exception("Extended validation task failed")
+
+            task.add_done_callback(_log_result)
+            return task
+
+        return schedule
 
     def _normalize_metadata(
         self, metadata: Optional[Dict[str, Any]]

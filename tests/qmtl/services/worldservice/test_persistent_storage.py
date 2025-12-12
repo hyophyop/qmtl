@@ -350,6 +350,28 @@ async def test_persistent_storage_evaluation_runs(persistent_storage):
     assert len(listed) == 1
     assert listed[0]["run_id"] == run_id
 
+    # History should record immutable revisions on every upsert.
+    await persistent_storage.record_evaluation_run(
+        world_id,
+        strategy_id,
+        run_id,
+        stage="paper",
+        risk_tier="high",
+        metrics={"returns": {"sharpe": 2.0}},
+        validation=validation,
+        summary=summary,
+    )
+    rows = await persistent_storage._driver.fetchall(
+        "SELECT revision, payload FROM evaluation_run_history WHERE world_id = ? AND strategy_id = ? AND run_id = ? ORDER BY revision",
+        world_id,
+        strategy_id,
+        run_id,
+    )
+    assert len(rows) == 2
+    assert rows[0][0] == 1
+    assert rows[1][0] == 2
+    assert json.loads(rows[1][1])["metrics"]["returns"]["sharpe"] == 2.0
+
 
 @pytest.mark.asyncio
 async def test_persistent_storage_evaluation_override(persistent_storage):

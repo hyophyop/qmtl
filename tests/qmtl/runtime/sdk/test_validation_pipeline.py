@@ -374,6 +374,18 @@ class TestValidationPipeline:
         assert len(result.improvement_hints) > 0
 
     @pytest.mark.asyncio
+    async def test_validate_metrics_only_skips_policy(self):
+        """Metrics-only mode returns metrics without policy gating."""
+        pipeline = ValidationPipeline(preset=PolicyPreset.CONSERVATIVE, metrics_only=True)
+        strategy = MockStrategy("BadStrategy", BAD_RETURNS)
+
+        result = await pipeline.validate(strategy, returns=BAD_RETURNS)
+
+        assert result.status == ValidationStatus.PASSED
+        assert result.metrics.sharpe is not None
+        assert result.violations == []
+
+    @pytest.mark.asyncio
     async def test_validate_extracts_returns_from_strategy(self):
         """Pipeline should extract returns from strategy if not provided."""
         pipeline = ValidationPipeline(preset=PolicyPreset.SANDBOX)

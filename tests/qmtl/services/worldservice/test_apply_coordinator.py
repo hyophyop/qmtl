@@ -174,3 +174,29 @@ async def test_apply_coordinator_rolls_back_and_clears_state() -> None:
     ack = await coordinator.apply("world", _make_request("run-ok"), None)
     assert ack.phase == "completed"
     assert runs.get("world").stage is ApplyStage.COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_apply_coordinator_blocks_parallel_run_and_ack_existing() -> None:
+    store = _StubStore()
+    runs = ApplyRunRegistry()
+    coordinator = ApplyCoordinator(
+        store=store,
+        bus=_StubBus(),
+        evaluator=DecisionEvaluator(store),
+        activation=_StubActivationPublisher(),
+        runs=runs,
+    )
+
+    # Simulate an in-flight apply
+    runs.start("world", "run-1", ["alpha"])
+
+    # Same run id returns the existing state instead of starting work again.
+    ack_same = await coordinator.apply("world", _make_request("run-1"), None)
+    assert ack_same.run_id == "run-1"
+    assert ack_same.phase in {"requested", "freeze"}
+    assert ack_same.active == ["alpha"]
+
+    # A different run id is rejected while the first is still in progress.
+    with pytest.raises(HTTPException, match="apply in progress"):
+        await coordinator.apply("world", _make_request("run-2"), None)

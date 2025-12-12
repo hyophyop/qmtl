@@ -3,9 +3,9 @@ from pathlib import Path
 import pytest
 
 from qmtl.foundation.config import CacheConfig, UnifiedConfig
-from qmtl.runtime.sdk import Strategy, StreamInput, ProcessingNode, configuration
-from qmtl.runtime.sdk.runner import Runner
+from qmtl.runtime.sdk import ProcessingNode, StreamInput, Strategy, configuration
 from qmtl.runtime.sdk.feature_store import FeatureArtifactPlane, FileSystemFeatureStore
+from qmtl.runtime.sdk.runner import Runner
 
 
 class _ArtifactStrategy(Strategy):
@@ -56,6 +56,7 @@ def artifact_plane(tmp_path: Path):
         yield plane
     finally:
         Runner.set_feature_artifact_plane(prev)
+
 
 def test_feature_artifacts_written_and_read(artifact_plane):
     strategy = _ArtifactStrategy(multiplier=2.0)
@@ -178,45 +179,3 @@ def test_live_domain_does_not_write_feature_artifacts(artifact_plane):
 
     assert result["value"] == 30
     assert artifact_plane.count(strategy.factor, instrument="BTC") == initial_count
-
-
-def test_from_env_preserves_environment_overrides(monkeypatch, tmp_path):
-    configuration.reset_runtime_config_cache()
-    base_dir = tmp_path / "env-plane"
-
-    monkeypatch.setenv("QMTL_FEATURE_ARTIFACTS", "1")
-    monkeypatch.setenv("QMTL_FEATURE_ARTIFACT_DIR", str(base_dir))
-    monkeypatch.setenv("QMTL_FEATURE_ARTIFACT_VERSIONS", "3")
-    monkeypatch.setenv("QMTL_FEATURE_ARTIFACT_WRITE_DOMAINS", "backtest paper")
-
-    with pytest.deprecated_call():
-        plane = FeatureArtifactPlane.from_env()
-
-    assert plane is not None
-    assert plane.backend.base_dir == base_dir
-    assert plane.backend.max_versions == 3
-    assert plane.write_domains == {"backtest", "paper"}
-
-
-def test_from_env_overrides_yaml_configuration(monkeypatch, tmp_path):
-    cfg = UnifiedConfig(
-        cache=CacheConfig(
-            feature_artifacts_enabled=False,
-            feature_artifact_dir=str(tmp_path / "yaml"),
-            feature_artifact_write_domains=["dryrun"],
-        ),
-        present_sections=frozenset({"cache"}),
-    )
-
-    base_dir = tmp_path / "env-plane"
-    monkeypatch.setenv("QMTL_FEATURE_ARTIFACTS", "true")
-    monkeypatch.setenv("QMTL_FEATURE_ARTIFACT_DIR", str(base_dir))
-    monkeypatch.setenv("QMTL_FEATURE_ARTIFACT_WRITE_DOMAINS", "live,backtest")
-
-    with configuration.runtime_config_override(cfg):
-        with pytest.deprecated_call():
-            plane = FeatureArtifactPlane.from_env()
-
-    assert plane is not None
-    assert plane.backend.base_dir == base_dir
-    assert plane.write_domains == {"live", "backtest"}

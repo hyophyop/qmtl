@@ -352,6 +352,11 @@ def _build_evaluation_run_id(strategy_id: str, world_id: str) -> str:
     return f"{safe_world}-{safe_strategy}-{suffix}"
 
 
+def _metrics_only_enabled() -> bool:
+    raw = os.getenv("QMTL_SDK_METRICS_ONLY", "1")
+    return str(raw).strip().lower() not in {"0", "false", "no"}
+
+
 def _build_evaluation_run_url(gateway_url: str, world_id: str, strategy_id: str, run_id: str) -> str:
     base = gateway_url.rstrip("/")
     return f"{base}/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}"
@@ -1154,10 +1159,13 @@ async def _run_validation_and_ws_eval(
 ) -> tuple[Any, WsEvalResult | None]:
     from .validation_pipeline import ValidationPipeline
 
+    metrics_only = _metrics_only_enabled()
+
     validation_pipeline = ValidationPipeline(
         preset=resolved_preset,
         policy=validation_policy,
         world_id=resolved_world,
+        metrics_only=metrics_only,
     )
     validation_result = await validation_pipeline.validate(strategy, returns=backtest_returns)
 

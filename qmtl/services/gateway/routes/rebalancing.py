@@ -30,12 +30,15 @@ from ..shared_account_policy import SharedAccountPolicy
 from ..strategy_manager import StrategyManager
 from ..world_client import WorldServiceClient
 from ..compute_context import resolve_execution_domain
+from ..risk_hub_client import RiskHubClient
 from qmtl.services.worldservice.rebalancing import (
     PositionSlice,
     RebalancePlan,
     SymbolDelta,
     allocate_strategy_deltas,
 )
+from qmtl.services.worldservice.rebalancing.multi import MultiWorldRebalanceContext
+from qmtl.services.worldservice.rebalancing.calculators import StrategyAllocationCalculator
 from qmtl.services.worldservice.schemas import MultiWorldRebalanceRequest
 
 logger = logging.getLogger(__name__)
@@ -239,6 +242,17 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
                 shared_account=shared_account,
             )
             result["submitted"] = submitted
+            if submitted:
+                try:
+                    stage = _resolve_stage(request)
+                    await _publish_risk_snapshots(
+                        _resolve_risk_hub_client(request, world_client, stage=stage),
+                        payload,
+                        schema_version=negotiated_schema_version,
+                        stage=stage,
+                    )
+                except Exception:  # pragma: no cover - best-effort
+                    logger.exception("Failed to publish risk snapshot to hub")
         else:
             result["submitted"] = False
         alpha_metrics_available = bool(plan_resp.get("alpha_metrics"))
@@ -311,6 +325,110 @@ def _resolve_venue_policies(request: Request) -> Mapping[str, VenuePolicy]:
                 default_time_in_force=value.get("default_time_in_force"),
             )
     return policies
+
+
+def _resolve_stage(request: Request) -> str | None:
+    return request.headers.get("X-Stage") or request.headers.get("X-Validation-Stage")
+
+
+def _resolve_risk_hub_client(
+    request: Request,
+    world_client: WorldServiceClient,
+    *,
+    stage: str | None = None,
+) -> RiskHubClient | None:
+    existing = getattr(request.app.state, "risk_hub_client", None)
+    if isinstance(existing, RiskHubClient):
+        if stage and getattr(existing, "stage", None) is None:
+            existing.stage = stage
+        return existing
+    try:
+        return RiskHubClient(
+            world_client.base_url,
+            timeout=3.0,
+            client=world_client.http_client,
+            stage=stage,
+        )
+    except Exception:
+        return None
+
+
+def _build_snapshot_weights(payload: MultiWorldRebalanceRequest) -> Mapping[str, Mapping[str, float]]:
+    positions = [
+        PositionSlice(
+            world_id=pos.world_id,
+            symbol=pos.symbol,
+            qty=pos.qty,
+            mark=pos.mark,
+            strategy_id=pos.strategy_id,
+            venue=pos.venue,
+        )
+        for pos in payload.positions
+    ]
+    ctx = MultiWorldRebalanceContext(
+        total_equity=payload.total_equity,
+        world_alloc_before=payload.world_alloc_before,
+        world_alloc_after=payload.world_alloc_after,
+        strategy_alloc_before_total=payload.strategy_alloc_before_total,
+        strategy_alloc_after_total=payload.strategy_alloc_after_total,
+        positions=positions,
+        min_trade_notional=payload.min_trade_notional or 0.0,
+        lot_size_by_symbol=payload.lot_size_by_symbol,
+    )
+    calc = StrategyAllocationCalculator(ctx)
+    positions_by_world: dict[str, list[PositionSlice]] = {}
+    for pos in positions:
+        positions_by_world.setdefault(pos.world_id, []).append(pos)
+
+    weights: dict[str, dict[str, float]] = {}
+    for wid, bucket in positions_by_world.items():
+        targets = calc.derive(wid, bucket)
+        after = dict(targets.after)
+        denom = payload.world_alloc_after.get(wid, 0.0) or sum(after.values())
+        if denom <= 0:
+            continue
+        weights[wid] = {sid: (val / denom) for sid, val in after.items() if val is not None}
+    return weights
+
+
+async def _publish_risk_snapshots(
+    client: RiskHubClient | None,
+    payload: MultiWorldRebalanceRequest,
+    *,
+    schema_version: int,
+    as_of: str | None = None,
+    stage: str | None = None,
+) -> bool:
+    if client is None:
+        return False
+    if stage and getattr(client, "stage", None) is None:
+        client.stage = stage
+    weights_by_world = _build_snapshot_weights(payload)
+    if not weights_by_world:
+        return False
+    ts = as_of or datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    for wid, weights in weights_by_world.items():
+        if not weights:
+            continue
+        snapshot: dict[str, Any] = {
+            "as_of": ts,
+            "version": f"rebalance-{ts}",
+            "weights": weights,
+            "provenance": {
+                "source": "gateway",
+                "reason": "rebalance_execute",
+                "schema_version": schema_version,
+            },
+        }
+        if stage:
+            provenance = snapshot.setdefault("provenance", {})
+            if isinstance(provenance, dict):
+                provenance["stage"] = stage
+        try:
+            await client.publish_snapshot(wid, snapshot)
+        except Exception:  # pragma: no cover - best-effort
+            logger.exception("Failed to publish snapshot for world %s", wid)
+    return True
 
 
 async def _submit_rebalance_orders(
