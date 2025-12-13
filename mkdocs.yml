@@ -79,6 +79,7 @@ nav:
       - Seamless SLA Dashboards: operations/seamless_sla_dashboards.md
       - Seamless Stack Templates: operations/seamless_stack.md
       - WS Load & Endurance: operations/ws_load_testing.md
+      - Evaluation Store: operations/evaluation_store.md
       - World Activation Runbook: operations/activation.md
       - Determinism Runbook: operations/determinism.md
       - Rebalancing Execution: operations/rebalancing_execution.md
