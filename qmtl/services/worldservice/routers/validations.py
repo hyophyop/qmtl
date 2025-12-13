@@ -8,9 +8,11 @@ from ..schemas import (
     ValidationCacheLookupRequest,
     ValidationCacheResponse,
     ValidationCacheStoreRequest,
+    ValidationInvariantsReport,
 )
 from ..services import WorldService
 from ..storage import ValidationCacheEntry
+from ..validation_checks import check_validation_invariants
 
 
 def create_validations_router(service: WorldService) -> APIRouter:
@@ -79,5 +81,25 @@ def create_validations_router(service: WorldService) -> APIRouter:
         except ValueError as exc:
             _translate_domain_error(exc)
         return Response(status_code=204)
+
+    @router.get(
+        "/worlds/{world_id}/validations/invariants",
+        response_model=ValidationInvariantsReport,
+    )
+    async def get_validation_invariants(
+        world_id: str, strategy_id: str | None = None
+    ) -> ValidationInvariantsReport:
+        world = await service.store.get_world(world_id) or {"id": world_id}
+        runs = await service.store.list_evaluation_runs(
+            world_id=world_id, strategy_id=strategy_id
+        )
+        report = check_validation_invariants(world, runs)
+        return ValidationInvariantsReport(
+            ok=report.ok,
+            live_status_failures=report.live_status_failures,
+            fail_closed_violations=report.fail_closed_violations,
+            approved_overrides=report.approved_overrides,
+            validation_health_gaps=report.validation_health_gaps,
+        )
 
     return router

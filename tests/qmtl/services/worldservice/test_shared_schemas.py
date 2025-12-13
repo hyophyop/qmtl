@@ -1,3 +1,5 @@
+import pytest
+
 from qmtl.services.worldservice import schemas, shared_schemas
 
 
@@ -18,3 +20,16 @@ def test_evaluate_request_and_series_shared():
     assert schemas.StrategySeries is shared_schemas.StrategySeries
     payload = shared_schemas.EvaluateRequest()
     assert payload.metrics == {}
+
+
+def test_override_schema_requires_metadata_for_approved():
+    with pytest.raises(ValueError):
+        shared_schemas.EvaluationOverride(status="approved", reason="ok", actor="risk", timestamp=None)
+
+    payload = shared_schemas.EvaluationOverride(
+        status="approved",
+        reason="ok",
+        actor="risk",
+        timestamp="2025-01-01T00:00:00Z",
+    )
+    assert payload.status == "approved"

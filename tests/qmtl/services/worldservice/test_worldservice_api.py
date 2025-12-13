@@ -264,6 +264,30 @@ async def test_evaluation_run_creation_and_fetch():
 
 
 @pytest.mark.asyncio
+async def test_validation_invariants_endpoint_reports_live_failures():
+    store = Storage()
+    app = create_app(storage=store)
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "winv", "name": "Invariant World"})
+            await store.record_evaluation_run(
+                "winv",
+                "s-live",
+                "run-live-fail",
+                stage="live",
+                risk_tier="low",
+                metrics={"returns": {"sharpe": 0.1}},
+                summary={"status": "fail"},
+            )
+
+            inv_resp = await client.get("/worlds/winv/validations/invariants")
+            assert inv_resp.status_code == 200
+            body = inv_resp.json()
+            assert body["ok"] is False
+            assert body["live_status_failures"]
+
+
+@pytest.mark.asyncio
 async def test_evaluation_run_override_flow():
     app = create_app(storage=Storage())
     async with httpx.ASGITransport(app=app) as asgi:
@@ -284,6 +308,7 @@ async def test_evaluation_run_override_flow():
                 "status": "approved",
                 "reason": "risk sign-off",
                 "actor": "risk_team",
+                "timestamp": "2025-01-01T00:00:00Z",
             }
             override_resp = await client.post(
                 "/worlds/wover/strategies/s-eval/runs/override-1/override",
@@ -310,6 +335,30 @@ async def test_evaluation_run_override_flow():
 
 
 @pytest.mark.asyncio
+async def test_override_approved_requires_timestamp():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wover2", "name": "Override World 2"})
+            payload = {
+                "strategy_id": "s-eval",
+                "metrics": {"s-eval": {"sharpe": 1.2}},
+                "policy": {},
+                "run_id": "override-2",
+                "stage": "paper",
+                "risk_tier": "high",
+            }
+            resp = await client.post("/worlds/wover2/evaluate", json=payload)
+            assert resp.status_code == 200
+
+            override_resp = await client.post(
+                "/worlds/wover2/strategies/s-eval/runs/override-2/override",
+                json={"status": "approved", "reason": "risk", "actor": "risk_team"},
+            )
+            assert override_resp.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_evaluation_run_history_endpoint_records_revisions():
     app = create_app(storage=Storage())
     async with httpx.ASGITransport(app=app) as asgi:
@@ -328,7 +377,12 @@ async def test_evaluation_run_history_endpoint_records_revisions():
 
             await client.post(
                 "/worlds/whist/strategies/s-hist/runs/hist-1/override",
-                json={"status": "approved", "reason": "manual", "actor": "risk_team"},
+                json={
+                    "status": "approved",
+                    "reason": "manual",
+                    "actor": "risk_team",
+                    "timestamp": "2025-01-01T00:00:00Z",
+                },
             )
 
             history_resp = await client.get(

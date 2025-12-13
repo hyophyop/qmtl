@@ -216,6 +216,14 @@ class ValidationCacheResponse(BaseModel):
     timestamp: str | None = None
 
 
+class ValidationInvariantsReport(BaseModel):
+    ok: bool
+    live_status_failures: List[Dict[str, Any]] = Field(default_factory=list)
+    fail_closed_violations: List[Dict[str, Any]] = Field(default_factory=list)
+    approved_overrides: List[Dict[str, Any]] = Field(default_factory=list)
+    validation_health_gaps: List[Dict[str, Any]] = Field(default_factory=list)
+
+
 class SeamlessHistoryRequest(BaseModel):
     strategy_id: str
     node_id: str
@@ -504,6 +512,7 @@ __all__ = [
     'ValidationCacheLookupRequest',
     'ValidationCacheResponse',
     'ValidationCacheStoreRequest',
+    'ValidationInvariantsReport',
     'SeamlessArtifactPayload',
     'SeamlessHistoryRequest',
     'World',
