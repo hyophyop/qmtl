@@ -24,6 +24,7 @@ WorldService의 Evaluation Store는 `EvaluationRun`과 그 변경 이력을 **�
 - 단건: `GET /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}`
 - 이력: `GET /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/history`
 - 오버라이드: `POST /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/override`
+- ex-post 실패 기록: `POST /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/ex-post-failures`
 - 인바리언트 리포트: `GET /worlds/{world_id}/validations/invariants`
 
 호환성 원칙:

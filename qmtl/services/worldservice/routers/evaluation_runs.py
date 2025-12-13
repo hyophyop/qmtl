@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from ..schemas import EvaluationOverride, EvaluationRunModel, EvaluationRunHistoryItem
+from ..schemas import ExPostFailureRecord, EvaluationOverride, EvaluationRunHistoryItem, EvaluationRunModel
 from ..services import WorldService
 
 
@@ -59,6 +59,19 @@ def create_evaluation_runs_router(service: WorldService) -> APIRouter:
         world_id: str, strategy_id: str, run_id: str, payload: EvaluationOverride
     ) -> EvaluationRunModel:
         record = await service.record_evaluation_override(world_id, strategy_id, run_id, payload)
+        return EvaluationRunModel(**record)
+
+    @router.post(
+        "/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/ex-post-failures",
+        response_model=EvaluationRunModel,
+    )
+    async def post_ex_post_failure(
+        world_id: str,
+        strategy_id: str,
+        run_id: str,
+        payload: ExPostFailureRecord,
+    ) -> EvaluationRunModel:
+        record = await service.record_ex_post_failure(world_id, strategy_id, run_id, payload)
         return EvaluationRunModel(**record)
 
     return router

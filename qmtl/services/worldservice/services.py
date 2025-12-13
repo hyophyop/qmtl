@@ -47,6 +47,7 @@ from .schemas import (
     CohortEvaluateResponse,
     DecisionEnvelope,
     EvaluateRequest,
+    ExPostFailureRecord,
     EvaluationOverride,
     MultiWorldRebalanceRequest,
     PositionSliceModel,
@@ -796,6 +797,59 @@ class WorldService:
         except Exception as exc:  # pragma: no cover - defensive best-effort
             logger.exception("Failed to record evaluation override for %s/%s", world_id, strategy_id)
             raise HTTPException(status_code=500, detail="failed to record evaluation override") from exc
+
+    async def record_ex_post_failure(
+        self,
+        world_id: str,
+        strategy_id: str,
+        run_id: str,
+        failure: ExPostFailureRecord,
+    ) -> Dict[str, Any]:
+        try:
+            record = await self.store.record_ex_post_failure(
+                world_id,
+                strategy_id,
+                run_id,
+                failure=failure.model_dump(),
+            )
+            if self.bus is not None:
+                try:
+                    summary = record.get("summary") if isinstance(record, Mapping) else {}
+                    revision = None
+                    if isinstance(record, Mapping):
+                        rev = record.get("revision")
+                        if isinstance(rev, int):
+                            revision = rev
+                        elif isinstance(rev, str):
+                            try:
+                                revision = int(rev)
+                            except Exception:
+                                revision = None
+                    await self.bus.publish_evaluation_run_updated(
+                        world_id,
+                        strategy_id=strategy_id,
+                        run_id=run_id,
+                        stage=str(record.get("stage") or ""),
+                        risk_tier=str(record.get("risk_tier") or "") or None,
+                        status=summary.get("status") if isinstance(summary, Mapping) else None,
+                        recommended_stage=(
+                            summary.get("recommended_stage") if isinstance(summary, Mapping) else None
+                        ),
+                        change_type="ex_post_failure",
+                        version=revision or 1,
+                    )
+                except Exception:  # pragma: no cover - best-effort observability
+                    logger.exception(
+                        "Failed to publish evaluation run updated event for %s/%s",
+                        world_id,
+                        strategy_id,
+                    )
+            return record
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="evaluation run not found") from exc
+        except Exception as exc:  # pragma: no cover - defensive best-effort
+            logger.exception("Failed to record ex-post failure for %s/%s", world_id, strategy_id)
+            raise HTTPException(status_code=500, detail="failed to record ex-post failure") from exc
 
     def _resolve_model_card_version(self, strategy_id: str, provided: str | None) -> str | None:
         if provided:

@@ -346,6 +346,21 @@ async def test_evaluation_and_overrides_emit_controlbus_events():
             )
             assert override_resp_2.status_code == 200
 
+            ex_post_resp = await client.post(
+                "/worlds/w-events/strategies/s1/runs/run-1/ex-post-failures",
+                json={
+                    "status": "confirmed",
+                    "category": "risk_breach",
+                    "reason_code": "live_drawdown_breach",
+                    "severity": "high",
+                    "actor": "risk_team",
+                    "recorded_at": "2025-01-03T00:00:00Z",
+                    "evidence_url": "https://example.com/evidence",
+                    "source": "manual",
+                },
+            )
+            assert ex_post_resp.status_code == 200
+
     types = [evt.get("type") for _, evt, _ in producer.sent]
     assert "validation_profile_changed" in types
     assert "evaluation_run_created" in types
@@ -359,6 +374,13 @@ async def test_evaluation_and_overrides_emit_controlbus_events():
     assert len(override_updates) == 2
     idempotency_keys = [entry.get("idempotency_key") for entry in override_updates]
     assert len(set(idempotency_keys)) == 2
+
+    ex_post_updates = [
+        evt.get("data", {})
+        for _, evt, _ in producer.sent
+        if evt.get("type") == "evaluation_run_updated" and evt.get("data", {}).get("change_type") == "ex_post_failure"
+    ]
+    assert len(ex_post_updates) == 1
 
 
 @pytest.mark.asyncio
@@ -487,6 +509,73 @@ async def test_evaluation_run_override_flow():
             latest = reject_resp.json()["summary"]
             assert latest["override_status"] == "rejected"
             assert latest["override_reason"] == "policy change"
+
+
+@pytest.mark.asyncio
+async def test_ex_post_failure_record_flow_appends_history():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wexp", "name": "Ex-post Failure World"})
+            payload = {
+                "strategy_id": "s-eval",
+                "metrics": {"s-eval": {"sharpe": 1.2}},
+                "policy": {},
+                "run_id": "exp-1",
+                "stage": "live",
+                "risk_tier": "high",
+            }
+            resp = await client.post("/worlds/wexp/evaluate", json=payload)
+            assert resp.status_code == 200
+
+            candidate_resp = await client.post(
+                "/worlds/wexp/strategies/s-eval/runs/exp-1/ex-post-failures",
+                json={
+                    "status": "candidate",
+                    "category": "risk_breach",
+                    "reason_code": "live_drawdown_breach",
+                    "severity": "high",
+                    "actor": "system",
+                    "recorded_at": "2025-01-02T00:00:00Z",
+                    "source": "auto",
+                },
+            )
+            assert candidate_resp.status_code == 200
+            candidate_body = candidate_resp.json()
+            failures = candidate_body["summary"]["ex_post_failures"]
+            assert len(failures) == 1
+            case_id = failures[0]["case_id"]
+            assert case_id
+            assert candidate_body["updated_at"] == "2025-01-02T00:00:00Z"
+
+            confirm_resp = await client.post(
+                "/worlds/wexp/strategies/s-eval/runs/exp-1/ex-post-failures",
+                json={
+                    "case_id": case_id,
+                    "status": "confirmed",
+                    "category": "risk_breach",
+                    "reason_code": "live_drawdown_breach",
+                    "severity": "high",
+                    "actor": "risk_team",
+                    "recorded_at": "2025-01-03T00:00:00Z",
+                    "evidence_url": "https://example.com/evidence",
+                    "source": "manual",
+                },
+            )
+            assert confirm_resp.status_code == 200
+            confirm_body = confirm_resp.json()
+            failures = confirm_body["summary"]["ex_post_failures"]
+            assert len(failures) == 2
+            assert failures[-1]["status"] == "confirmed"
+            assert confirm_body["updated_at"] == "2025-01-03T00:00:00Z"
+
+            history_resp = await client.get(
+                "/worlds/wexp/strategies/s-eval/runs/exp-1/history"
+            )
+            assert history_resp.status_code == 200
+            items = history_resp.json()
+            assert len(items) == 3
+            assert items[-1]["payload"]["summary"]["ex_post_failures"][-1]["status"] == "confirmed"
 
 
 @pytest.mark.asyncio

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
@@ -910,6 +911,86 @@ class PersistentStorage:
                 "status": override.get("status"),
                 "actor": override.get("actor"),
                 "timestamp": override_timestamp,
+            },
+        )
+        revision_row = await self._driver.fetchone(
+            "SELECT MAX(revision) FROM evaluation_run_history WHERE world_id = ? AND strategy_id = ? AND run_id = ?",
+            world_id,
+            strategy_id,
+            run_id,
+        )
+        try:
+            revision = int(revision_row[0]) if revision_row and revision_row[0] is not None else 0
+        except Exception:
+            revision = 0
+        payload = record.to_dict()
+        payload["revision"] = revision
+        return payload
+
+    async def record_ex_post_failure(
+        self,
+        world_id: str,
+        strategy_id: str,
+        run_id: str,
+        failure: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        existing = await self._evaluation_repo.get(world_id, strategy_id, run_id)
+        if existing is None:
+            raise KeyError("evaluation run not found")
+
+        recorded_at = str(failure.get("recorded_at") or _utc_now())
+        case_id = str(failure.get("case_id") or uuid.uuid4())
+        event = {
+            "case_id": case_id,
+            "status": failure.get("status") or "confirmed",
+            "category": failure.get("category"),
+            "reason_code": failure.get("reason_code"),
+            "severity": failure.get("severity"),
+            "evidence_url": failure.get("evidence_url"),
+            "actor": failure.get("actor"),
+            "recorded_at": recorded_at,
+            "source": failure.get("source") or "manual",
+            "notes": failure.get("notes"),
+        }
+
+        summary = dict(existing.summary or {})
+        raw_log = summary.get("ex_post_failures")
+        log: list[dict[str, Any]]
+        if isinstance(raw_log, list):
+            log = [dict(item) for item in raw_log if isinstance(item, dict)]
+        else:
+            log = []
+        log.append(event)
+        summary["ex_post_failures"] = log
+
+        record = EvaluationRunRecord(
+            run_id=existing.run_id,
+            world_id=existing.world_id,
+            strategy_id=existing.strategy_id,
+            stage=existing.stage,
+            risk_tier=existing.risk_tier,
+            model_card_version=existing.model_card_version,
+            metrics=deepcopy(existing.metrics),
+            validation=deepcopy(existing.validation),
+            summary=summary,
+            created_at=existing.created_at,
+            updated_at=recorded_at,
+        )
+        await self._evaluation_repo.upsert(record)
+        await self._append_audit(
+            world_id,
+            {
+                "event": "evaluation_run_ex_post_failure_recorded",
+                "strategy_id": strategy_id,
+                "run_id": run_id,
+                "case_id": case_id,
+                "status": event.get("status"),
+                "category": event.get("category"),
+                "reason_code": event.get("reason_code"),
+                "severity": event.get("severity"),
+                "actor": event.get("actor"),
+                "timestamp": recorded_at,
+                "source": event.get("source"),
             },
         )
         revision_row = await self._driver.fetchone(

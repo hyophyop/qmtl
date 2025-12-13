@@ -47,6 +47,25 @@ class EvaluationOverride(BaseModel):
         return self
 
 
+class ExPostFailureRecord(BaseModel):
+    case_id: str | None = None
+    status: Literal["candidate", "confirmed"] = "confirmed"
+    category: str = Field(min_length=1)
+    reason_code: str = Field(min_length=1)
+    severity: Literal["critical", "high", "medium", "low"] | None = None
+    evidence_url: str | None = None
+    actor: str = Field(min_length=1)
+    recorded_at: str | None = None
+    source: Literal["manual", "auto"] = "manual"
+    notes: str | None = None
+
+    @model_validator(mode="after")
+    def _normalize(self) -> "ExPostFailureRecord":
+        if self.case_id is not None and not str(self.case_id).strip():
+            self.case_id = None
+        return self
+
+
 class DecisionEnvelope(BaseModel):
     world_id: str
     policy_version: int
@@ -99,6 +118,7 @@ class ActivationEnvelope(BaseModel):
 __all__ = [
     "ActivationEnvelope",
     "DecisionEnvelope",
+    "ExPostFailureRecord",
     "EvaluationOverride",
     "EvaluateRequest",
     "SeamlessArtifactPayload",
