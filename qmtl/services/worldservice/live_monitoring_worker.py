@@ -110,7 +110,7 @@ class LiveMonitoringWorker:
             if backtest_sharpe is not None:
                 metrics["returns"]["sharpe"] = backtest_sharpe
 
-            metrics = augment_live_metrics(metrics)
+            metrics = augment_live_metrics(metrics, windows=self.windows)
 
             run_id = _safe_run_id("live", world_id, sid, as_of)
             try:
@@ -136,7 +136,9 @@ class LiveMonitoringWorker:
 
         if updated and self.risk_hub is not None:
             try:
-                worker = ExtendedValidationWorker(self.store, risk_hub=self.risk_hub)
+                worker = ExtendedValidationWorker(
+                    self.store, risk_hub=self.risk_hub, windows=self.windows
+                )
                 await worker.run(world_id, stage="live", policy_payload=None)
             except Exception:
                 logger.exception("Failed to apply extended validation for live runs in %s", world_id)

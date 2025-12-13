@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
 from typing import Any, Dict
 
@@ -19,7 +19,9 @@ def _coerce_returns(source: Any) -> list[float] | None:
     return None
 
 
-def augment_live_metrics(metrics: Mapping[str, Any] | None) -> dict[str, Any]:
+def augment_live_metrics(
+    metrics: Mapping[str, Any] | None, *, windows: Iterable[int] = (30, 60, 90)
+) -> dict[str, Any]:
     """Attach live monitoring aggregates if realized returns are present."""
 
     if not metrics:
@@ -44,6 +46,7 @@ def augment_live_metrics(metrics: Mapping[str, Any] | None) -> dict[str, Any]:
 
     aggregates = aggregate_live_metrics(
         [float(r) for r in live_returns],
+        windows=windows,
         backtest_sharpe=backtest_sharpe,
     )
     diagnostics.update(aggregates)

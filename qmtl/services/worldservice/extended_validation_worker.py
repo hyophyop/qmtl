@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 import logging
@@ -29,9 +29,16 @@ logger = logging.getLogger(__name__)
 class ExtendedValidationWorker:
     """Orchestrates evaluation of extended validation layers over stored runs."""
 
-    def __init__(self, store: Storage, risk_hub: Any | None = None) -> None:
+    def __init__(
+        self,
+        store: Storage,
+        risk_hub: Any | None = None,
+        *,
+        windows: Iterable[int] = (30, 60, 90),
+    ) -> None:
         self.store = store
         self.risk_hub = risk_hub
+        self.windows = tuple(int(w) for w in windows)
 
     async def run(
         self,
@@ -102,7 +109,7 @@ class ExtendedValidationWorker:
         for run in filtered:
             raw_metrics = run.get("metrics") if isinstance(run.get("metrics"), Mapping) else None
             if raw_metrics is not None:
-                derived = augment_live_metrics(raw_metrics)
+                derived = augment_live_metrics(raw_metrics, windows=self.windows)
                 derived = augment_stress_metrics(derived, policy_payload=policy_payload)
                 run["metrics"] = derived
 
@@ -129,7 +136,7 @@ class ExtendedValidationWorker:
                 if baseline.get("es_99") is not None:
                     risk_block.setdefault("incremental_es_99", baseline["es_99"])
                 metrics["risk"] = risk_block
-            metrics = augment_live_metrics(metrics)
+            metrics = augment_live_metrics(metrics, windows=self.windows)
             metrics = augment_stress_metrics(metrics, policy_payload=policy_payload)
             metrics = augment_portfolio_metrics(
                 metrics,
