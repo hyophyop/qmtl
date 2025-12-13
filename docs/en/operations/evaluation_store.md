@@ -57,7 +57,7 @@ Purge guidance:
 
 - Regression / audit:
   - Inspect revision-by-revision changes via the `/history` endpoint
-  - Pin policy impact analysis via `scripts/policy_diff_batch.py`
+  - Evidence policy impact via (A) static-set `scripts/policy_diff_batch.py` + (B) store-history `scripts/policy_diff_store_history.py`
 - Overrides:
   - Approved overrides must include reason/actor/timestamp, and
     keep the run’s `/history` for later review.

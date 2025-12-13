@@ -57,7 +57,7 @@ WorldService의 Evaluation Store는 `EvaluationRun`과 그 변경 이력을 **�
 
 - 회귀/감사:
   - 특정 run의 변경 경로는 `/history`로 revision 단위 조회
-  - 정책 변경 영향 평가는 `scripts/policy_diff_batch.py` 기반 배치 리포트로 고정
+  - 정책 변경 영향 평가는 (A) 샘플 세트 기반 `scripts/policy_diff_batch.py` + (B) 스토어 히스토리 기반 `scripts/policy_diff_store_history.py`로 증빙
 - 오버라이드:
   - 승인(approved)은 사유/승인자/타임스탬프를 포함해야 하며,
     추후 재검토를 위해 관련 run의 `/history`를 함께 보관합니다.

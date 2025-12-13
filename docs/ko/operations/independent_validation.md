@@ -67,6 +67,15 @@
 - bad: `fail_ratio>=0.5`, `unknown_ratio=0.0`
 - known_bad: `pass_ratio<=0.05`(즉, `fail|warn>=95%`), `unknown_ratio=0.0`
 
+## 스토어 히스토리 회귀 리포트(N개월)
+
+샘플 세트 외에도, 실제 Evaluation Store에 저장된 최근 N개월(예: 12개월) EvaluationRun을 대상으로 **old vs new 정책 diff 리포트**를 생성할 수 있습니다.
+
+- 스크립트: `scripts/policy_diff_store_history.py` (env: `WORLDS_DB_DSN`, `WORLDS_REDIS_DSN`)
+- 출력: JSON + Markdown (`--output`, `--output-md`)
+- 임계(예시): `--fail-impact-ratio 0.05` (world별 impact ratio 기준)
+- GitHub Actions(스케줄/수동): `.github/workflows/policy-diff-history-report.yml` (secrets 미설정 시 skip)
+
 ## 변경 로그(최소 포맷)
 
 검증 룰/정책 변경 PR에는 아래를 PR 본문에 포함하는 것을 권장합니다.
