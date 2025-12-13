@@ -54,6 +54,17 @@ def test_build_v1_evaluation_metrics_no_nan_or_inf():
             assert _is_finite_number(value)
 
 
+def test_build_v1_evaluation_metrics_includes_risk_metrics_when_provided():
+    metrics = build_v1_evaluation_metrics(
+        GOOD_RETURNS,
+        risk_metrics={"adv_utilization_p95": 0.2, "participation_rate_p95": 0.15},
+    )
+    risk = metrics.get("risk")
+    assert isinstance(risk, dict)
+    assert risk["adv_utilization_p95"] == 0.2
+    assert risk["participation_rate_p95"] == 0.15
+
+
 class CapturingGatewayClient:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
@@ -100,7 +111,13 @@ async def test_ws_evaluate_payload_includes_v1_core_metrics():
         gateway_url="http://gw",
         world_id="world-1",
         strategy_id="strategy-1",
-        metrics=StrategyMetrics(sharpe=1.0, max_drawdown=-0.1, win_rate=0.5),
+        metrics=StrategyMetrics(
+            sharpe=1.0,
+            max_drawdown=-0.1,
+            win_rate=0.5,
+            adv_utilization_p95=0.2,
+            participation_rate_p95=0.15,
+        ),
         returns=GOOD_RETURNS,
         preset=None,
         client=client,
@@ -131,3 +148,5 @@ async def test_ws_evaluate_payload_includes_v1_core_metrics():
     assert _path_value("robustness", "sharpe_first_half") is not None
     assert _path_value("robustness", "sharpe_second_half") is not None
 
+    assert _path_value("risk", "adv_utilization_p95") == 0.2
+    assert _path_value("risk", "participation_rate_p95") == 0.15

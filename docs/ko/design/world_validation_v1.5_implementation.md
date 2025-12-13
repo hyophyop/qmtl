@@ -23,7 +23,7 @@
 | 설계 섹션 | 요구(요약) | 상태 | 구현 근거(대표) | 남은 갭 / 후속(G*) |
 | --- | --- | --- | --- | --- |
 | §1 원칙 | WS가 검증 SSOT, 레이어드 검증 | 충족 | `qmtl/services/worldservice/services.py`, `qmtl/services/worldservice/policy_engine.py` | - |
-| §2 Metrics 블록 | returns/sample/risk/robustness/diagnostics + 확장 슬롯 | 부분 | `qmtl/runtime/sdk/world_validation_metrics.py`, `qmtl/services/worldservice/schemas.py` | v1 코어 risk 메트릭 일부(예: `adv_utilization_p95`) 산출 경로 보강 (G4) |
+| §2 Metrics 블록 | returns/sample/risk/robustness/diagnostics + 확장 슬롯 | 충족 | `qmtl/runtime/sdk/world_validation_metrics.py`, `qmtl/services/worldservice/schemas.py` | - |
 | §3 Rule 모듈성 | RuleResult(status/severity/owner/reason/details) | 충족 | `qmtl/services/worldservice/policy_engine.py` | - |
 | §4 DSL 구조 | validation vs selection, profiles, recommended_stage | 충족 | `qmtl/services/worldservice/policy_engine.py` | - |
 | §4/5 저장 | EvaluationRun에 policy_version/ruleset_hash/override 추적 | 충족 | `qmtl/services/worldservice/storage`, `qmtl/services/worldservice/services.py` | - |

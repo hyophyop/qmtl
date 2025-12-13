@@ -376,7 +376,15 @@ async def test_evaluation_run_creation_and_fetch():
             assert default_resp.status_code == 200
             payload = {
                 "strategy_id": "s-eval",
-                "metrics": {"s-eval": {"sharpe": 1.5}},
+                "metrics": {
+                    "s-eval": {
+                        "returns": {"sharpe": 1.5},
+                        "risk": {
+                            "adv_utilization_p95": 0.2,
+                            "participation_rate_p95": 0.15,
+                        },
+                    }
+                },
                 "run_id": "run-eval-1",
                 "stage": "backtest",
                 "risk_tier": "medium",
@@ -395,6 +403,8 @@ async def test_evaluation_run_creation_and_fetch():
             assert record["stage"] == "backtest"
             assert record["model_card_version"] == "v1.0"
             assert record["metrics"]["returns"]["sharpe"] == 1.5
+            assert record["metrics"]["risk"]["adv_utilization_p95"] == 0.2
+            assert record["metrics"]["risk"]["participation_rate_p95"] == 0.15
             assert record["summary"]["status"] == "warn"
             assert record["summary"]["recommended_stage"] == "backtest_only"
             assert record["validation"]["results"]
