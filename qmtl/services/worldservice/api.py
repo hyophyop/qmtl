@@ -297,6 +297,21 @@ def create_app(
     risk_hub_token = risk_hub_token or (
         resolved_risk_hub_config.token if resolved_risk_hub_config else None
     )
+    risk_hub_ttl_default = (
+        int(resolved_risk_hub_config.ttl_sec_default)
+        if resolved_risk_hub_config is not None
+        else 10
+    )
+    risk_hub_allowed_actors = (
+        list(resolved_risk_hub_config.allowed_actors)
+        if resolved_risk_hub_config is not None and resolved_risk_hub_config.allowed_actors is not None
+        else None
+    )
+    risk_hub_allowed_stages = (
+        list(resolved_risk_hub_config.allowed_stages)
+        if resolved_risk_hub_config is not None and resolved_risk_hub_config.allowed_stages is not None
+        else None
+    )
 
     if risk_hub is None:
         risk_hub = RiskSignalHub(
@@ -383,6 +398,9 @@ def create_app(
                             policy_payload=None,
                         ),
                         dedupe_cache=getattr(risk_hub, "_cache", None),
+                        ttl_sec_default=risk_hub_ttl_default,
+                        allowed_actors=risk_hub_allowed_actors,
+                        allowed_stages=risk_hub_allowed_stages,
                         brokers=brokers,
                         topic=topic,
                     )
@@ -466,6 +484,9 @@ def create_app(
             risk_hub,
             bus=bus_instance,
             expected_token=risk_hub_token,
+            ttl_sec_default=risk_hub_ttl_default,
+            allowed_actors=risk_hub_allowed_actors,
+            allowed_stages=risk_hub_allowed_stages,
             schedule_extended_validation=lambda world_id: service._apply_extended_validation(  # type: ignore[attr-defined]
                 world_id=world_id,
                 stage=None,

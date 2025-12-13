@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, Mapping
 
 from .metrics import parse_timestamp
@@ -157,6 +157,21 @@ def _parse_policy_version(raw: Any) -> int | None:
         return None
 
 
+def _isoformat_utc(ts: datetime) -> str:
+    return ts.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _override_review_window_days(world: Mapping[str, Any], run: Mapping[str, Any]) -> int:
+    """Return override re-review window in days (Invariant 3)."""
+
+    stage = str(run.get("stage") or "").lower()
+    if stage == "live":
+        return 30
+    if _world_is_high_tier_and_critical(world):
+        return 30
+    return 90
+
+
 def check_validation_invariants(
     world: Mapping[str, Any],
     evaluation_runs: Iterable[Mapping[str, Any]],
@@ -223,13 +238,39 @@ def check_validation_invariants(
     for run in runs:
         summary = run.get("summary") or {}
         if str(summary.get("override_status", "")).lower() == "approved":
+            override_reason = summary.get("override_reason")
+            override_actor = summary.get("override_actor")
+            override_timestamp = summary.get("override_timestamp")
+            window_days = _override_review_window_days(world, run)
+            override_ts = parse_timestamp(str(override_timestamp)) if override_timestamp else None
+            review_due_at = None
+            review_overdue = None
+            if override_ts is not None:
+                due_dt = override_ts + timedelta(days=window_days)
+                review_due_at = _isoformat_utc(due_dt)
+                review_overdue = datetime.now(timezone.utc) > due_dt
+            missing_fields = [
+                key
+                for key, value in (
+                    ("override_reason", override_reason),
+                    ("override_actor", override_actor),
+                    ("override_timestamp", override_timestamp),
+                )
+                if not value
+            ]
             approved_overrides.append(
                 {
                     "world_id": world_id or run.get("world_id"),
                     "strategy_id": run.get("strategy_id"),
                     "run_id": run.get("run_id"),
-                    "override_reason": summary.get("override_reason"),
-                    "override_timestamp": summary.get("override_timestamp"),
+                    "stage": run.get("stage"),
+                    "override_reason": override_reason,
+                    "override_actor": override_actor,
+                    "override_timestamp": override_timestamp,
+                    "review_window_days": window_days,
+                    "review_due_at": review_due_at,
+                    "review_overdue": review_overdue,
+                    "missing_fields": missing_fields,
                 }
             )
 

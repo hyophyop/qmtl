@@ -8,14 +8,14 @@ import inspect
 import json
 import logging
 from collections import deque
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone, timedelta
 from typing import Any, Awaitable, Callable, Iterable
 
 from qmtl.foundation.common.cloudevents import format_event
 from qmtl.services.kafka import KafkaConsumerLike, create_kafka_consumer
 from qmtl.services.kafka import KafkaProducerLike, create_kafka_producer
-from qmtl.services.risk_hub_contract import risk_snapshot_dedupe_key
+from qmtl.services.risk_hub_contract import normalize_and_validate_snapshot, risk_snapshot_dedupe_key
 
 from . import metrics as ws_metrics
 from .controlbus_defaults import (
@@ -71,6 +71,9 @@ class RiskHubControlBusConsumer:
         retry_backoff_sec: float = DEFAULT_RISK_HUB_RETRY_BACKOFF_SEC,
         dlq_topic: str | None = DEFAULT_RISK_HUB_DLQ_TOPIC,
         dlq_producer: KafkaProducerLike | None = None,
+        ttl_sec_default: int = 10,
+        allowed_actors: Sequence[str] | None = None,
+        allowed_stages: Sequence[str] | None = None,
         brokers: Iterable[str] | None = None,
         topic: str | None = None,
         consumer: KafkaConsumerLike | None = None,
@@ -96,6 +99,9 @@ class RiskHubControlBusConsumer:
         self._dlq_topic = resolved_dlq_topic
         self._dlq_producer: KafkaProducerLike | None = dlq_producer
         self._dlq_started = False
+        self._ttl_sec_default = int(ttl_sec_default)
+        self._allowed_actors = list(allowed_actors) if allowed_actors is not None else None
+        self._allowed_stages = list(allowed_stages) if allowed_stages is not None else None
 
     async def _dedupe_cached(self, key: str) -> bool:
         cache = self._dedupe_cache
@@ -301,7 +307,14 @@ class RiskHubControlBusConsumer:
         world_id = str(data.get("world_id") or "")
         stage_label = self._extract_stage(data)
         try:
-            snapshot = PortfolioSnapshot.from_payload(data)
+            validated = normalize_and_validate_snapshot(
+                world_id,
+                data,
+                ttl_sec_default=self._ttl_sec_default,
+                allowed_actors=self._allowed_actors,
+                allowed_stages=self._allowed_stages,
+            )
+            snapshot = PortfolioSnapshot.from_payload(validated)
         except Exception as exc:
             ws_metrics.record_risk_snapshot_failed(world_id or "unknown", stage=stage_label)
             await self._publish_dlq(

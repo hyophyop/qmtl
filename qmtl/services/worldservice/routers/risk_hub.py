@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, Dict, Callable, Awaitable
 
 import inspect
@@ -7,6 +8,8 @@ import logging
 from fastapi import Request
 
 from fastapi import APIRouter, HTTPException
+
+from qmtl.services.risk_hub_contract import normalize_and_validate_snapshot
 
 from ..risk_hub import PortfolioSnapshot, RiskSignalHub
 from ..controlbus_producer import ControlBusProducer
@@ -20,6 +23,9 @@ def create_risk_hub_router(
     bus: ControlBusProducer | None = None,
     schedule_extended_validation: Callable[[str], Awaitable[Any]] | Callable[[str], Any] | None = None,
     expected_token: str | None = None,
+    ttl_sec_default: int = 10,
+    allowed_actors: Sequence[str] | None = None,
+    allowed_stages: Sequence[str] | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/risk-hub", tags=["risk-hub"])
 
@@ -36,13 +42,20 @@ def create_risk_hub_router(
         if payload.get("world_id") and payload["world_id"] != world_id:
             raise HTTPException(status_code=400, detail="world_id mismatch")
         try:
-            snapshot = PortfolioSnapshot.from_payload({"world_id": world_id, **payload})
-            # basic validation + weight normalization check occurs in hub
-        except Exception as exc:
+            validated = normalize_and_validate_snapshot(
+                world_id,
+                payload,
+                actor=actor,
+                stage=stage,
+                ttl_sec_default=ttl_sec_default,
+                allowed_actors=allowed_actors,
+                allowed_stages=allowed_stages,
+            )
+            snapshot = PortfolioSnapshot.from_payload(validated)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:  # pragma: no cover - defensive mapping
             raise HTTPException(status_code=422, detail=f"invalid snapshot: {exc}") from exc
-        snapshot.provenance.setdefault("actor", actor)
-        if stage:
-            snapshot.provenance.setdefault("stage", stage)
         await hub.upsert_snapshot(snapshot)
         if bus is not None:
             try:

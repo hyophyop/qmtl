@@ -102,6 +102,9 @@ def _build_risk_hub_client(
     inline_threshold = _resolve_risk_hub_inline(cfg)
     token = cfg.token if cfg else None
     stage = cfg.stage if cfg else None
+    ttl_sec_default = int(cfg.ttl_sec_default) if cfg else 10
+    allowed_actors = list(cfg.allowed_actors) if cfg and cfg.allowed_actors is not None else None
+    allowed_stages = list(cfg.allowed_stages) if cfg and cfg.allowed_stages is not None else None
     return RiskHubClient(
         world_client.base_url,
         timeout=3.0,
@@ -111,6 +114,9 @@ def _build_risk_hub_client(
         blob_store=blob_store,
         inline_cov_threshold=inline_threshold if inline_threshold is not None else 100,
         stage=stage,
+        ttl_sec=ttl_sec_default,
+        allowed_actors=allowed_actors,
+        allowed_stages=allowed_stages,
     )
 
 

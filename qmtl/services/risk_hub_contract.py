@@ -114,28 +114,37 @@ def normalize_and_validate_snapshot(
     provenance = data.get("provenance")
     provenance_map: dict[str, Any] = dict(provenance) if isinstance(provenance, Mapping) else {}
 
-    actor_value = actor or provenance_map.get("actor")
-    stage_value = stage or provenance_map.get("stage")
+    if actor is not None:
+        existing = provenance_map.get("actor")
+        if existing is not None and str(existing) != str(actor):
+            raise ValueError("actor mismatch between payload and header")
+        provenance_map["actor"] = str(actor)
 
-    if allowed_actors is not None:
-        _validate_actor(str(actor_value or ""), allowed_actors=allowed_actors)
-    elif actor_value:
-        _validate_actor(str(actor_value), allowed_actors=None)
+    if stage is not None:
+        existing = provenance_map.get("stage")
+        if existing is not None and str(existing) != str(stage):
+            raise ValueError("stage mismatch between payload and header")
+        provenance_map["stage"] = str(stage)
 
+    actor_value = str(provenance_map.get("actor") or "")
+    _validate_actor(actor_value, allowed_actors=allowed_actors)
+
+    stage_value = str(provenance_map.get("stage") or "")
     if allowed_stages is not None:
-        _validate_stage(str(stage_value or ""), allowed_stages=allowed_stages)
+        _validate_stage(stage_value, allowed_stages=allowed_stages)
     elif stage_value:
-        _validate_stage(str(stage_value), allowed_stages=None)
+        _validate_stage(stage_value, allowed_stages=None)
 
-    if actor_value:
-        provenance_map.setdefault("actor", str(actor_value))
-    if stage_value:
-        provenance_map.setdefault("stage", str(stage_value))
     if provenance_map:
         data["provenance"] = provenance_map
 
-    if not data.get("hash"):
-        data["hash"] = stable_snapshot_hash(data)
+    existing_hash = data.get("hash")
+    if existing_hash is not None and not isinstance(existing_hash, str):
+        raise ValueError("hash must be a string when provided")
+    computed_hash = stable_snapshot_hash(data)
+    if isinstance(existing_hash, str) and existing_hash and existing_hash != computed_hash:
+        raise ValueError("hash mismatch")
+    data["hash"] = existing_hash if isinstance(existing_hash, str) and existing_hash else computed_hash
 
     return data
 

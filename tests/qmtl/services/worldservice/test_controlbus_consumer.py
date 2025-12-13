@@ -78,6 +78,7 @@ async def test_controlbus_consumer_hydrates_hub_and_triggers_callback():
             "as_of": "2025-01-01T00:00:00Z",
             "version": "v1",
             "weights": {"a": 1.0},
+            "provenance": {"actor": "gateway"},
         },
     }
     msg = SimpleNamespace(value=json.dumps(data))
@@ -116,7 +117,6 @@ async def test_controlbus_consumer_dedupes_by_hash_and_actor():
         "as_of": "2025-01-01T00:00:00Z",
         "version": "v1",
         "weights": {"a": 1.0},
-        "hash": "sha256:test",
         "provenance": {"actor": "gateway", "stage": "paper"},
     }
     data = {"type": "risk_snapshot_updated", "data": payload}

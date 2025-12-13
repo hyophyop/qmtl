@@ -28,12 +28,12 @@
 | §4 DSL 구조 | validation vs selection, profiles, recommended_stage | 충족 | `qmtl/services/worldservice/policy_engine.py` | - |
 | §4/5 저장 | EvaluationRun에 policy_version/ruleset_hash/override 추적 | 충족 | `qmtl/services/worldservice/storage`, `qmtl/services/worldservice/services.py` | - |
 | §5 피드백 루프 | policy diff/회귀 자동화 도구 | 부분 | `scripts/policy_diff_batch.py`, `docs/ko/operations/evaluation_store.md` | “나쁜 전략” 세트/CI 임계 플래그 운영 정착 (G3) |
-| §5.3 Live Monitoring | live 결과 상시 재검증(run/report) | 부분 | `qmtl/services/worldservice/routers/live_monitoring.py`, `qmtl/services/worldservice/live_monitoring_worker.py` | 주기적 생성(스케줄러/워커) 운영 경로 연결 (G2) |
+| §5.3 Live Monitoring | live 결과 상시 재검증(run/report) | 충족 | `qmtl/services/worldservice/routers/live_monitoring.py`, `qmtl/services/worldservice/live_monitoring_worker.py`, `scripts/live_monitoring_worker.py`, `scripts/generate_live_monitoring_report.py` | - |
 | §5.3 Fail-closed | on_error/on_missing_metric 기본값/강제 | 충족 | `qmtl/services/worldservice/policy_engine.py`, `qmtl/services/worldservice/decision.py` | - |
 | §5.3 Evaluation Store | append-only 보존/운영 가이드 | 부분 | `docs/ko/operations/evaluation_store.md` | 삽입/조회 API + 보존 정책을 코드/CI로 고정 (G3) |
-| §5.3 Validation Report | 표준 리포트 산출물/보관 | 미구현 | - | 템플릿/생성·배포 경로 정의 + 샘플 산출 (G6) |
-| §8/§12 Invariants | SR 11-7 인바리언트 점검 API | 부분 | `qmtl/services/worldservice/routers/validations.py`, `qmtl/services/worldservice/validation_checks.py` | Invariant 1의 “policy_version 호환” 체크 추가, override 재검토 기한/큐 운영 (G6) |
-| §10 SLO/관측성 | 핵심 SLO/알람/대시보드 표준화 | 부분 | `qmtl/services/worldservice/metrics.py`, `docs/ko/operations/world_validation_observability.md` | 실제 운영 대시보드/알람 캡처 증빙 및 룰 튜닝 (G6) |
+| §5.3 Validation Report | 표준 리포트 산출물/보관 | 충족 | `scripts/generate_validation_report.py`, `docs/ko/operations/validation_report.md` | - |
+| §8/§12 Invariants | SR 11-7 인바리언트 점검 API | 충족 | `qmtl/services/worldservice/routers/validations.py`, `qmtl/services/worldservice/validation_checks.py`, `scripts/generate_override_rereview_report.py`, `docs/ko/operations/world_validation_governance.md` | - |
+| §10 SLO/관측성 | 핵심 SLO/알람/대시보드 표준화 | 부분 | `alert_rules.yml`, `docs/ko/operations/world_validation_observability.md` | 대시보드 스냅샷/임계 튜닝은 운영에서 지속(증빙 링크 첨부 권장) |
 | 스트리밍 정착 | ControlBus/큐 토픽·그룹·재시도·DLQ 표준화 | 부분 | `docs/ko/operations/controlbus_queue_standards.md`, `qmtl/services/worldservice/controlbus_*` | 워커/프로듀서까지 템플릿 공통 적용 + 리허설/증빙 (G1) |
 
 ## 차기 이슈 번들(제안)

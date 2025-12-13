@@ -37,6 +37,9 @@
 - SLI:
   - 실행 성공/실패: `rate(live_monitoring_run_total{status="success"}[5m])`, `rate(live_monitoring_run_total{status="failure"}[5m])`
   - 업데이트된 전략 수: `increase(live_monitoring_run_updated_strategies_total[1h])`
+- 운영 엔트리포인트(예시):
+  - Live run 생성(크론/데몬): `uv run python scripts/live_monitoring_worker.py --interval-seconds 3600`
+  - 리포트 생성(Markdown/JSON): `uv run python scripts/generate_live_monitoring_report.py --world <world_id> --output live_report.md`
 
 ### 5) Validation Health / Invariants
 
@@ -78,6 +81,24 @@ groups:
         annotations:
           summary: "Extended validation failures"
           description: "world={{ $labels.world_id }} stage={{ $labels.stage }}"
+
+      - alert: LiveMonitoringNoRuns
+        expr: (sum(increase(live_monitoring_run_total[6h])) or vector(0)) < 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Live monitoring job not running"
+          description: "No live monitoring runs observed for 6 hours"
+
+      - alert: LiveMonitoringFailures
+        expr: sum(increase(live_monitoring_run_total{status=\"failure\"}[10m])) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Live monitoring failures detected"
+          description: "Live monitoring worker failures observed"
 ```
 {% endraw %}
 
