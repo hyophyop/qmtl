@@ -30,6 +30,21 @@ status: draft
 
 ---
 
+## 구현 트래킹 (post v1.5)
+
+- v1.5 구현/closeout 상태: `docs/ko/design/world_validation_v1.5_implementation.md`
+- Epic: #1941 (본 문서 설계의 v1.5 이후 잔여 구현 트래킹)
+
+- [ ] #1942 Advanced metrics pack 구현 (tail/regime/CV/complexity)
+- [ ] #1943 Paper/ShadowConsistencyRule 구현 + DSL 지원
+- [ ] #1944 Benchmark/Challenger 메트릭 저장 + 상대평가 룰
+- [ ] #1945 Cohort/Campaign 평가 모델 도입 + CohortRule 고도화
+- [ ] #1946 Active portfolio snapshot 기반 incremental VaR/ES 산출
+- [ ] #1947 Stress scenario contract/메트릭/룰 고도화 (stress_ref)
+- [ ] #1948 Independent Validation 운영 모델 정착 (권한/CI 강제)
+- [ ] #1949 EvaluationRun 이벤트 기반 비동기 검증 파이프라인 구축
+- [ ] #1950 Validation SLO/시나리오/부하 테스트 + CI 게이트
+
 ## 0. 배경 & 문제 정의
 
 현재 v2 아키텍처에서 WorldService는 다음 역할을 갖는다.
