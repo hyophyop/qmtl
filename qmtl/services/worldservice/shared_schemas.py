@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .policy_engine import Policy
 
@@ -25,6 +25,26 @@ class EvaluationOverride(BaseModel):
     reason: str | None = None
     actor: str | None = None
     timestamp: str | None = None
+
+    @model_validator(mode="after")
+    def _require_metadata_for_approved(self) -> "EvaluationOverride":
+        if self.status != "approved":
+            return self
+
+        missing: list[str] = []
+        if not (self.reason and self.reason.strip()):
+            missing.append("reason")
+        if not (self.actor and self.actor.strip()):
+            missing.append("actor")
+        if not (self.timestamp and self.timestamp.strip()):
+            missing.append("timestamp")
+
+        if missing:
+            raise ValueError(
+                "approved override requires reason, actor, and timestamp "
+                f"(missing: {', '.join(missing)})"
+            )
+        return self
 
 
 class DecisionEnvelope(BaseModel):
