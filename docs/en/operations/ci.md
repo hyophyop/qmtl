@@ -65,6 +65,27 @@ def test_long_running_case():
 - Mark long/external tests as `slow` and, if needed, exclude them from preflight with `-k 'not slow'`.
 - Avoid unbounded network waits; always set client timeouts in tests.
 
+## Policy Diff Regression (CI/Cron)
+
+- Goal: automatically monitor the impact ratio of policy changes against the “bad strategies” regression set.
+- Example command:
+
+```
+uv run -m scripts.policy_diff_batch \
+  --old docs/ko/world/sample_policy.yml \
+  --new docs/ko/world/sample_policy.yml \
+  --runs-dir operations/policy_diff/bad_strategies_runs \
+  --runs-pattern '*.json' \
+  --stage backtest \
+  --output policy_diff_report.json \
+  --fail-impact-ratio 0.05
+```
+
+- Artifact: upload `policy_diff_report.json`, and fail the workflow when the impact ratio exceeds the threshold.
+- GitHub Actions workflow: `.github/workflows/policy-diff-regression.yml`
+  - Runs automatically when `docs/**/world/sample_policy.yml` changes in a PR and uploads the report artifact
+  - Also supports scheduled/manual triggers (default threshold `0.05`)
+
 ## Architecture Invariants (advisory checks)
 
 Add lightweight checks (unit/integration) that fail fast when core invariants are violated:

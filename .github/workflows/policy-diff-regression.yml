@@ -1,0 +1,106 @@
+name: policy-diff-regression
+
+on:
+  workflow_dispatch:
+    inputs:
+      fail_impact_ratio:
+        description: "Fail if impacted ratio >= threshold (0~1)"
+        required: false
+        default: "0.05"
+      stage:
+        description: "Validation stage (backtest/paper/live)"
+        required: false
+        default: "backtest"
+  schedule:
+    - cron: "41 2 * * 1" # Mondays 02:41 UTC
+  pull_request:
+    paths:
+      - "docs/**/world/sample_policy.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  policy-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv pip install -e ".[dev]"
+
+      - name: Materialize policy inputs
+        id: policies
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="${{ inputs.stage || 'backtest' }}"
+          echo "stage=$stage" >> "$GITHUB_OUTPUT"
+
+          policy_path="docs/ko/world/sample_policy.yml"
+          if [[ ! -f "$policy_path" ]]; then
+            echo "Missing $policy_path; nothing to diff."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_ref="${{ github.base_ref }}"
+            git fetch origin "$base_ref" --depth=1
+            git show "origin/$base_ref:$policy_path" > old_policy.yml
+            cp "$policy_path" new_policy.yml
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            if git rev-parse HEAD~1 >/dev/null 2>&1; then
+              git show "HEAD~1:$policy_path" > old_policy.yml || cp "$policy_path" old_policy.yml
+              cp "$policy_path" new_policy.yml
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # workflow_dispatch: compare HEAD~1 to HEAD (best-effort)
+          if git rev-parse HEAD~1 >/dev/null 2>&1; then
+            git show "HEAD~1:$policy_path" > old_policy.yml || cp "$policy_path" old_policy.yml
+          else
+            cp "$policy_path" old_policy.yml
+          fi
+          cp "$policy_path" new_policy.yml
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Run policy diff batch
+        if: ${{ steps.policies.outputs.skip != 'true' }}
+        run: |
+          fail_ratio="${{ inputs.fail_impact_ratio || '0.05' }}"
+          stage="${{ steps.policies.outputs.stage }}"
+          uv run -m scripts.policy_diff_batch \
+            --old old_policy.yml \
+            --new new_policy.yml \
+            --runs-dir operations/policy_diff/bad_strategies_runs \
+            --runs-pattern '*.json' \
+            --stage "$stage" \
+            --output policy_diff_report.json \
+            --fail-impact-ratio "$fail_ratio"
+
+      - name: Write skip report
+        if: ${{ steps.policies.outputs.skip == 'true' }}
+        run: |
+          cat > policy_diff_report.json <<'JSON'
+          {"skipped": true}
+          JSON
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: policy-diff-report
+          path: policy_diff_report.json
