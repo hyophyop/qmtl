@@ -44,6 +44,7 @@ from .schemas import (
     SeamlessArtifactPayload,
     StrategySeries,
 )
+from . import metrics as ws_metrics
 from .storage import Storage
 from .validation_checks import ensure_validation_health
 
@@ -546,11 +547,43 @@ class WorldService:
         worker = ExtendedValidationWorker(self.store)
         if hasattr(self, "_risk_hub"):
             worker.risk_hub = getattr(self, "_risk_hub")
-        coro = worker.run(world_id=world_id, stage=stage, policy_payload=policy_payload)
+
+        async def _run_with_metrics() -> int:
+            start = ws_metrics.monotonic_seconds()
+            try:
+                result = await worker.run(world_id=world_id, stage=stage, policy_payload=policy_payload)
+            except Exception:
+                ws_metrics.record_extended_validation_run(
+                    world_id,
+                    stage=stage,
+                    status="failure",
+                    latency_seconds=ws_metrics.monotonic_seconds() - start,
+                )
+                raise
+            ws_metrics.record_extended_validation_run(
+                world_id,
+                stage=stage,
+                status="success",
+                latency_seconds=ws_metrics.monotonic_seconds() - start,
+            )
+            return result
+
+        coro = _run_with_metrics()
         if self._extended_validation_scheduler:
             try:
                 self._extended_validation_scheduler(coro)
+                ws_metrics.record_extended_validation_run(
+                    world_id,
+                    stage=stage,
+                    status="scheduled",
+                )
             except Exception:  # pragma: no cover - defensive best-effort
+                ws_metrics.record_extended_validation_run(
+                    world_id,
+                    stage=stage,
+                    status="enqueue_failed",
+                )
+                coro.close()
                 logger.exception("Failed to enqueue extended validation for %s", world_id)
         else:
             try:

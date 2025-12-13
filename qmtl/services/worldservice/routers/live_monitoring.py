@@ -5,6 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter
 
+from .. import metrics as ws_metrics
 from ..schemas import LiveMonitoringReport, LiveMonitoringStrategyReport, RuleResultModel
 from ..services import WorldService
 from ..live_monitoring_worker import LiveMonitoringWorker
@@ -73,7 +74,16 @@ def create_live_monitoring_router(service: WorldService) -> APIRouter:
             service.store,
             risk_hub=getattr(service, "_risk_hub", None),
         )
-        updated = await worker.run_world(world_id)
+        try:
+            updated = await worker.run_world(world_id)
+        except Exception:  # pragma: no cover - defensive
+            ws_metrics.record_live_monitoring_run(world_id, status="failure")
+            raise
+        ws_metrics.record_live_monitoring_run(
+            world_id,
+            status="success",
+            updated_strategies=updated,
+        )
         return {"world_id": world_id, "updated": updated}
 
     @router.post("/worlds/live-monitoring/run-all")
@@ -82,7 +92,17 @@ def create_live_monitoring_router(service: WorldService) -> APIRouter:
             service.store,
             risk_hub=getattr(service, "_risk_hub", None),
         )
-        results = await worker.run_all_worlds()
+        try:
+            results = await worker.run_all_worlds()
+        except Exception:  # pragma: no cover - defensive
+            ws_metrics.record_live_monitoring_run("all", status="failure")
+            raise
+        for wid, updated in results.items():
+            ws_metrics.record_live_monitoring_run(
+                wid,
+                status="success",
+                updated_strategies=updated,
+            )
         return {"results": results}
 
     return router

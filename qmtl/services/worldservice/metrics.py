@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import MutableMapping
 from datetime import datetime, timezone
 from typing import Any, Mapping, cast
+import time
 
 from prometheus_client import REGISTRY as global_registry
 from prometheus_client import generate_latest
@@ -115,6 +116,30 @@ risk_hub_snapshot_processing_latency_seconds = _histogram(
     ("world_id", "stage"),
 )
 
+extended_validation_run_total = _counter(
+    "extended_validation_run_total",
+    "Total number of extended validation runs grouped by outcome",
+    ("world_id", "stage", "status"),
+)
+
+extended_validation_run_latency_seconds = _histogram(
+    "extended_validation_run_latency_seconds",
+    "Latency of extended validation runs (seconds)",
+    ("world_id", "stage"),
+)
+
+live_monitoring_run_total = _counter(
+    "live_monitoring_run_total",
+    "Total number of LiveMonitoringWorker runs grouped by outcome",
+    ("world_id", "status"),
+)
+
+live_monitoring_run_updated_strategies_total = _counter(
+    "live_monitoring_run_updated_strategies_total",
+    "Total number of strategies updated by LiveMonitoringWorker",
+    ("world_id",),
+)
+
 
 def _update_snapshot_ratio(world_id: str) -> None:
     total = get_metric_value(
@@ -218,6 +243,49 @@ def record_risk_snapshot_dlq(world_id: str, *, stage: str | None = None) -> None
     ).inc()
 
 
+def record_extended_validation_run(
+    world_id: str,
+    *,
+    stage: str | None,
+    status: str,
+    latency_seconds: float | None = None,
+) -> None:
+    """Record an extended validation run outcome and (optional) latency."""
+
+    stage_label = stage or "unknown"
+    extended_validation_run_total.labels(
+        world_id=world_id,
+        stage=stage_label,
+        status=status,
+    ).inc()
+    if latency_seconds is not None:
+        extended_validation_run_latency_seconds.labels(
+            world_id=world_id,
+            stage=stage_label,
+        ).observe(float(latency_seconds))
+
+
+def record_live_monitoring_run(
+    world_id: str,
+    *,
+    status: str,
+    updated_strategies: int | None = None,
+) -> None:
+    """Record a LiveMonitoringWorker run outcome and updated strategy count."""
+
+    live_monitoring_run_total.labels(world_id=world_id, status=status).inc()
+    if updated_strategies is not None and updated_strategies > 0:
+        live_monitoring_run_updated_strategies_total.labels(world_id=world_id).inc(
+            float(updated_strategies)
+        )
+
+
+def monotonic_seconds() -> float:
+    """Return a monotonic timestamp for latency measurements."""
+
+    return time.monotonic()
+
+
 def parse_timestamp(value: str | None) -> datetime | None:
     """Parse ISO8601 timestamps, normalizing to UTC."""
 
@@ -263,6 +331,10 @@ def reset_metrics() -> None:
         risk_hub_snapshot_retry_total,
         risk_hub_snapshot_dlq_total,
         risk_hub_snapshot_processing_latency_seconds,
+        extended_validation_run_total,
+        extended_validation_run_latency_seconds,
+        live_monitoring_run_total,
+        live_monitoring_run_updated_strategies_total,
     ):
         if hasattr(metric, "_metrics"):
             cast(Any, metric)._metrics.clear()
@@ -271,11 +343,18 @@ def reset_metrics() -> None:
 
 __all__ = [
     "collect_metrics",
+    "extended_validation_run_latency_seconds",
+    "extended_validation_run_total",
+    "live_monitoring_run_total",
+    "live_monitoring_run_updated_strategies_total",
+    "monotonic_seconds",
     "parse_timestamp",
     "record_allocation_snapshot",
     "record_apply_run_completed",
     "record_apply_run_failed",
     "record_apply_run_started",
+    "record_extended_validation_run",
+    "record_live_monitoring_run",
     "record_risk_snapshot_dedupe",
     "record_risk_snapshot_expired",
     "record_risk_snapshot_processed",
