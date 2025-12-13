@@ -90,6 +90,49 @@ async def test_publish_risk_snapshot_updated_preserves_snapshot_version():
 
 
 @pytest.mark.asyncio
+async def test_publish_evaluation_run_created_cloud_event():
+    dummy = DummyProducer()
+    producer = ControlBusProducer(producer=dummy, topic="evaluation")
+    await producer.publish_evaluation_run_created(
+        "w1",
+        strategy_id="s1",
+        run_id="run-1",
+        stage="backtest",
+        risk_tier="low",
+        status="pass",
+        recommended_stage="backtest_only",
+    )
+    topic, data, key = dummy.sent[0]
+    evt = json.loads(data.decode())
+    assert evt["type"] == "evaluation_run_created"
+    assert evt["data"]["world_id"] == "w1"
+    assert evt["data"]["strategy_id"] == "s1"
+    assert evt["data"]["run_id"] == "run-1"
+    assert evt["data"]["stage"] == "backtest"
+    assert evt["data"]["risk_tier"] == "low"
+    assert evt["data"]["status"] == "pass"
+    assert evt["data"]["recommended_stage"] == "backtest_only"
+    assert "idempotency_key" in evt["data"]
+    assert topic == "evaluation"
+    assert key == b"w1"
+
+
+@pytest.mark.asyncio
+async def test_publish_validation_profile_changed_cloud_event():
+    dummy = DummyProducer()
+    producer = ControlBusProducer(producer=dummy, topic="policy")
+    await producer.publish_validation_profile_changed("w1", policy_version=3)
+    topic, data, key = dummy.sent[0]
+    evt = json.loads(data.decode())
+    assert evt["type"] == "validation_profile_changed"
+    assert evt["data"]["world_id"] == "w1"
+    assert evt["data"]["policy_version"] == 3
+    assert "idempotency_key" in evt["data"]
+    assert topic == "policy"
+    assert key == b"w1"
+
+
+@pytest.mark.asyncio
 async def test_start_warns_when_optional_controlbus_missing(caplog):
     producer = ControlBusProducer(brokers=[], required=False)
 

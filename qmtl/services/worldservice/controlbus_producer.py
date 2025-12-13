@@ -53,23 +53,40 @@ class ControlBusProducer:
             await producer.stop()
         self._producer = None
 
-    async def _publish(self, event_type: str, world_id: str, payload: Dict[str, Any]) -> None:
-        producer = self._producer
+    async def _publish(
+        self,
+        event_type: str,
+        world_id: str,
+        payload: Dict[str, Any],
+        *,
+        correlation_id: str | None = None,
+    ) -> None:
+        producer = getattr(self, "_producer", None)
         if producer is None:
             return
-        event = format_event("qmtl.services.worldservice", event_type, payload)
+        topic = getattr(self, "topic", "")
+        if not topic:
+            return
+        event = format_event(
+            "qmtl.services.worldservice",
+            event_type,
+            payload,
+            correlation_id=correlation_id,
+        )
         data = json.dumps(event).encode()
         key = world_id.encode()
         last_exc: Exception | None = None
-        for attempt in range(self._retries + 1):
+        retries = int(getattr(self, "_retries", 0))
+        backoff = float(getattr(self, "_backoff", 0.0))
+        for attempt in range(retries + 1):
             try:
-                await producer.send_and_wait(self.topic, data, key=key)
+                await producer.send_and_wait(topic, data, key=key)
                 return
             except Exception as exc:  # pragma: no cover - best-effort reliability
                 last_exc = exc
-                if attempt >= self._retries:
+                if attempt >= retries:
                     break
-                await asyncio.sleep(self._backoff * (attempt + 1))
+                await asyncio.sleep(backoff * (attempt + 1))
         if last_exc:
             raise last_exc
 
@@ -161,6 +178,97 @@ class ControlBusProducer:
         payload["world_id"] = world_id
         payload.setdefault("event_version", version)
         await self._publish("risk_snapshot_updated", world_id, payload)
+
+    async def publish_evaluation_run_created(
+        self,
+        world_id: str,
+        *,
+        strategy_id: str,
+        run_id: str,
+        stage: str,
+        risk_tier: str | None = None,
+        status: str | None = None,
+        recommended_stage: str | None = None,
+        version: int = 1,
+    ) -> None:
+        payload: Dict[str, Any] = {
+            "world_id": world_id,
+            "strategy_id": strategy_id,
+            "run_id": run_id,
+            "stage": stage,
+            "version": version,
+            "idempotency_key": f"evaluation_run_created:{world_id}:{strategy_id}:{run_id}:{version}",
+        }
+        if risk_tier is not None:
+            payload["risk_tier"] = risk_tier
+        if status is not None:
+            payload["status"] = status
+        if recommended_stage is not None:
+            payload["recommended_stage"] = recommended_stage
+        correlation_id = f"evaluation_run:{world_id}:{strategy_id}:{run_id}"
+        await self._publish(
+            "evaluation_run_created",
+            world_id,
+            payload,
+            correlation_id=correlation_id,
+        )
+
+    async def publish_evaluation_run_updated(
+        self,
+        world_id: str,
+        *,
+        strategy_id: str,
+        run_id: str,
+        stage: str,
+        change_type: str,
+        risk_tier: str | None = None,
+        status: str | None = None,
+        recommended_stage: str | None = None,
+        version: int = 1,
+    ) -> None:
+        payload: Dict[str, Any] = {
+            "world_id": world_id,
+            "strategy_id": strategy_id,
+            "run_id": run_id,
+            "stage": stage,
+            "change_type": change_type,
+            "version": version,
+            "idempotency_key": f"evaluation_run_updated:{world_id}:{strategy_id}:{run_id}:{change_type}:{version}",
+        }
+        if risk_tier is not None:
+            payload["risk_tier"] = risk_tier
+        if status is not None:
+            payload["status"] = status
+        if recommended_stage is not None:
+            payload["recommended_stage"] = recommended_stage
+        correlation_id = f"evaluation_run:{world_id}:{strategy_id}:{run_id}"
+        await self._publish(
+            "evaluation_run_updated",
+            world_id,
+            payload,
+            correlation_id=correlation_id,
+        )
+
+    async def publish_validation_profile_changed(
+        self,
+        world_id: str,
+        *,
+        policy_version: int,
+        version: int = 1,
+    ) -> None:
+        payload: Dict[str, Any] = {
+            "world_id": world_id,
+            "policy_version": policy_version,
+            "version": version,
+            "idempotency_key": f"validation_profile_changed:{world_id}:{policy_version}:{version}",
+        }
+        correlation_id = f"validation_profile:{world_id}:{policy_version}"
+        await self._publish(
+            "validation_profile_changed",
+            world_id,
+            payload,
+            correlation_id=correlation_id,
+        )
 
 
 __all__ = ["ControlBusProducer"]

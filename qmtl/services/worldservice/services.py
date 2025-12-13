@@ -416,6 +416,23 @@ class WorldService:
                 validation=validation_payload,
                 summary=summary,
             )
+            if self.bus is not None:
+                try:
+                    await self.bus.publish_evaluation_run_created(
+                        world_id,
+                        strategy_id=strategy_id,
+                        run_id=run_id,
+                        stage=stage,
+                        risk_tier=risk_tier,
+                        status=summary.get("status"),
+                        recommended_stage=summary.get("recommended_stage"),
+                    )
+                except Exception:  # pragma: no cover - best-effort observability
+                    logger.exception(
+                        "Failed to publish evaluation run created event for %s/%s",
+                        world_id,
+                        strategy_id,
+                    )
             await self._apply_extended_validation(
                 world_id=world_id,
                 stage=stage,
@@ -434,12 +451,34 @@ class WorldService:
         override: EvaluationOverride,
     ) -> Dict[str, Any]:
         try:
-            return await self.store.record_evaluation_override(
+            record = await self.store.record_evaluation_override(
                 world_id,
                 strategy_id,
                 run_id,
                 override=override.model_dump(),
             )
+            if self.bus is not None:
+                try:
+                    summary = record.get("summary") if isinstance(record, Mapping) else {}
+                    await self.bus.publish_evaluation_run_updated(
+                        world_id,
+                        strategy_id=strategy_id,
+                        run_id=run_id,
+                        stage=str(record.get("stage") or ""),
+                        risk_tier=str(record.get("risk_tier") or "") or None,
+                        status=summary.get("status") if isinstance(summary, Mapping) else None,
+                        recommended_stage=(
+                            summary.get("recommended_stage") if isinstance(summary, Mapping) else None
+                        ),
+                        change_type="override",
+                    )
+                except Exception:  # pragma: no cover - best-effort observability
+                    logger.exception(
+                        "Failed to publish evaluation run updated event for %s/%s",
+                        world_id,
+                        strategy_id,
+                    )
+            return record
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="evaluation run not found") from exc
         except Exception as exc:  # pragma: no cover - defensive best-effort
