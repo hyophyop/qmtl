@@ -756,6 +756,59 @@ async def test_live_and_portfolio_metrics_are_derived():
 
 
 @pytest.mark.asyncio
+async def test_advanced_metrics_are_derived_from_series():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wadv"})
+            await client.post("/worlds/wadv/policies", json={"policy": {}})
+            await client.post("/worlds/wadv/set-default", json={"version": 1})
+
+            returns = [0.01 if i % 7 else -0.03 for i in range(120)]
+            payload = {
+                "strategy_id": "s-adv",
+                "run_id": "run-adv-1",
+                "metrics": {
+                    "s-adv": {
+                        "returns": {"sharpe": 1.0, "max_drawdown": -0.1},
+                        "diagnostics": {"search_intensity": 10, "extra_metrics": {"n_features": 50}},
+                    }
+                },
+                "series": {"s-adv": {"returns": returns}},
+                "stage": "backtest",
+                "risk_tier": "medium",
+            }
+
+            resp = await client.post("/worlds/wadv/evaluate", json=payload)
+            assert resp.status_code == 200
+
+            run_resp = await client.get("/worlds/wadv/strategies/s-adv/runs/run-adv-1")
+            assert run_resp.status_code == 200
+            body = run_resp.json()
+
+            returns_block = body["metrics"]["returns"]
+            assert returns_block["var_p01"] is not None
+            assert returns_block["es_p01"] is not None
+            assert returns_block["max_time_under_water_days"] is not None
+
+            sample_block = body["metrics"]["sample"]
+            coverage = sample_block["regime_coverage"]
+            assert coverage["low_vol"] is not None
+            assert coverage["mid_vol"] is not None
+            assert coverage["high_vol"] is not None
+            assert coverage["low_vol"] + coverage["mid_vol"] + coverage["high_vol"] == pytest.approx(1.0)
+
+            robustness = body["metrics"]["robustness"]
+            assert 0.0 <= robustness["probabilistic_sharpe_ratio"] <= 1.0
+            assert robustness["cv_folds"] is not None
+            assert robustness["cv_sharpe_mean"] is not None
+            assert robustness["cv_sharpe_std"] is not None
+
+            diagnostics = body["metrics"]["diagnostics"]
+            assert diagnostics["strategy_complexity"] is not None
+
+
+@pytest.mark.asyncio
 async def test_policy_missing_metrics_is_flagged():
     app = create_app(storage=Storage())
     async with httpx.ASGITransport(app=app) as asgi:
