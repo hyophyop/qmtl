@@ -1,6 +1,6 @@
 # World 검증 v1.5 진행 현황 및 잔여 작업
 
-본 문서는 `world_validation_architecture.md`·`world_validation_v1_implementation_plan.md`의 v1.5 범위를 마무리하기 위해 **현재 구현 상태**와 **남은 작업**을 정리한 체크포인트다.
+본 문서는 `world_validation_architecture.md`·`world_validation_v1_implementation_plan.md`의 v1.5 범위를 closeout하기 위해 **현재 구현 상태**를 정리하고, v1.5 이후의 **후속(선택) 확장 과제**를 분리해 두는 체크포인트다.
 
 ## 진행 현황 (요약)
 - **핵심 검증 경로**: EvaluationRun/metrics 블록, RuleResult 메타(severity/owner/tags), validation_profiles(backtest/paper), recommended_stage·policy_version·ruleset_hash 저장까지 구현 완료.
@@ -14,6 +14,9 @@
 ## 아키텍처 만족도 매트릭스 (2025-12-13 기준)
 
 아래 표는 `world_validation_architecture.md`의 핵심 요구를 기준으로 “현재 코드베이스가 어디까지 충족하는지”를 요약한 매트릭스입니다.
+
+- **closeout 상태**
+  - 2025-12-13 기준, 본 문서의 매트릭스 항목은 모두 **충족** 상태이며 잔여 갭 트래킹(#1927)을 종료합니다.
 
 - **상태 정의**
   - **충족**: 설계 의도를 v1.5 범위에서 구현·테스트/문서까지 완료
@@ -36,128 +39,24 @@
 | §10 SLO/관측성 | 핵심 SLO/알람/대시보드 표준화 | 충족 | `alert_rules.yml`, `docs/ko/operations/world_validation_observability.md`, `operations/monitoring/world_validation_v1.jsonnet` | - |
 | 스트리밍 정착 | ControlBus/큐 토픽·그룹·재시도·DLQ 표준화 | 충족 | `docs/ko/operations/controlbus_queue_standards.md`, `qmtl/services/worldservice/controlbus_*`, `qmtl/services/dagmanager/controlbus_producer.py`, `qmtl/services/gateway/controlbus_ack.py` | - |
 
-## 차기 이슈 번들(제안)
+## 후속(선택)
 
-매트릭스의 “부분/미구현” 항목을 다음과 같이 **운영 단위 이슈 번들**로 쪼개는 것을 권장합니다. (트래킹: #1905)
+본 문서의 매트릭스가 모두 **충족** 상태가 되면서(v1.5 closeout), 아래 항목은 v1.5 이후 확장 과제로 분리합니다.
 
-- **G1 ControlBus/큐 운영 패키징** (#1906): 토픽/컨슈머그룹/백오프·DLQ/재처리(runbook+리허설 증빙)까지 포함한 템플릿을 워커·프로듀서에 공통 적용
-- **G2 Live 모니터링 자동 생성** (#1907): 스케줄러 → Live EvaluationRun 생성 워커 연결(30/60/90일) + 실패/지연 알람 + 운영 리포트 샘플
-- **G3 Evaluation Store·회귀 자동화** (#1908): 불변 저장/보존 정책을 API·CI로 고정 + “나쁜 전략” 회귀 세트/임계 초과 실패 플래그 운영 정착
-- **G4 Portfolio/Stress 입력 소스 강화** (#1909): realized/stress 프로듀서 연결 + 해시/actor/ACL 검증 공통 모듈 + 계약 위반 차단/알람
-- **G5 SDK→WS SSOT 전환** (#1910): SDK precheck는 metrics-only로 유지하고, 룰 실행·오류 처리·오프로드를 WS 단일 진입으로 통합 테스트로 고정
-- **G6 거버넌스/운영 가시성** (#1911): override 재검토 큐·승인 SLA, Invariant 1(policy_version 호환) 보강, Validation Report 템플릿/산출물 정의
-
-## 남은 주요 갭
-1) **스트리밍·운영 배포 정착**
-   - ControlBus/큐 → ExtendedValidation/라이브·스트레스 워커를 운영 스케일에서 idempotent하게 트리거하도록 토픽/그룹/재시도·DLQ·헬스 메트릭을 표준화해야 함.
-   - risk snapshot 프로듀서(gateway/리스크 엔진) 측 재시도·알람·dedupe 키 규칙 문서화/코드 반영 필요.
-
-2) **Live 모니터링 자동 생성**
-   - 주기적 Live EvaluationRun 생산(30/60/90일 realized Sharpe/DD/ES, decay 지표)을 스케줄러/워커로 운영 경로에 연결해야 함.
-   - 라이브 리포트 템플릿/노출 경로 정의 필요.
-
-3) **Evaluation Store & 회귀 자동화**
-   - EvaluationRun/override/정책 버전 히스토리를 불변 스토어로 관리하는 정책 명문화.
-   - “나쁜 전략” 회귀 세트 + `scripts/policy_diff.py`를 주기 배치/CI 옵션으로 연결하고, 영향 임계치 초과 시 경고/실패 플래그화.
-
-4) **Portfolio/Stress 입력 소스 강화**
-   - realized_returns_ref/stress ref를 생성하는 프로듀서(gateway/리스크 엔진) 연결과 해시 검증/ACL 경로를 표준화.
-   - risk hub 스냅샷 계약(가중치 합≈1, TTL, hash, actor, offload 기준) 검증을 프로듀서에도 강제.
-
-5) **SDK 얇게 만들기 & WS SSOT 전환**
-   - Runner ValidationPipeline을 metrics-only로 축소하고, 룰 실행·오케스트레이션을 WS 단일 진입으로 이관하는 단계적 플랜 필요.
-
-6) **거버넌스/운영 가시성**
-   - 독립 검증(Repo/권한 분리), override 재검토 큐, SR 11-7 인바리언트 운영 체크/대시보드 정착.
-   - risk hub freshness/누락, extended validation 워커 성공/실패 메트릭 + Alertmanager 룰 보완.
-
-## 다음 실행 우선순위 제안
-1. ControlBus/큐 운영 패키징: 토픽·그룹·재시도/백오프·DLQ·헬스 메트릭 템플릿 확정 후 워커/프로듀서에 적용.
-2. Live 모니터링 스케줄러 배포: live run 생성 워커 + 리포트 경로 연결, 기본 주기/타임아웃 정의.
-3. Policy diff 회귀 배치: “나쁜 전략” 샘플 세트 마련 → `scripts/policy_diff.py` 크론/CI 옵션화 → 영향 임계 플래그 도입.
-4. realized/stress 프로듀서 연결: gateway/리스크 엔진에서 realized_returns_ref·stress ref를 hub로 push, 해시/actor 검증 강제.
-5. SDK→WS 오케스트레이션 전환 계획 수립: ValidationPipeline 축소, WS 룰 실행/오류 처리 중심으로 마이그레이션 단계 정의.
-6. 운영 가시성: risk hub freshness, extended validation 성공률, snapshot dedupe hit 등 메트릭 노출 + Alertmanager 룰 추가.
-
-## 갭별 상세 실행 계획
-- G1 ControlBus/큐 운영 표준화
-  - 토픽/컨슈머 그룹/재시도·DLQ·백오프·idempotency 키 템플릿 정의 → gateway·ExtendedValidation 워커·RiskHub 컨슈머에 공통 적용.
-  - dedupe 키 규칙(스냅샷 해시+actor+stage), 재시도/알람 정책을 프로듀서 코드와 운영 문서에 반영.
-  - 헬스 메트릭(큐 적체, 재시도·DLQ 카운트, dedupe hit, 처리 지연)과 Alertmanager 룰 초안 배포.
-  - DoD: 템플릿이 코드/런북에 반영되고, 재처리·중복 시나리오 리허설 로그/메트릭이 확보.
-
-- G2 Live 모니터링 자동 생성
-  - 스케줄러(30/60/90일) → Live EvaluationRun 생성 워커 연결, decay 지표 계산 파이프라인을 metrics-only 경로로 연결.
-  - 라이브 리포트 템플릿(요약·추세·임계 경고) 정의, 노출 경로(대시보드/API) 확정 및 샘플 출력 검증.
-  - 지연/실패 알림(스케줄 미실행, 워커 실패, 지표 계산 에러) 룰 추가.
-  - DoD: 정해진 주기마다 Live run이 기록되고, 리포트/알림이 운영 환경에서 확인 가능.
-
-- G3 Evaluation Store & 회귀 자동화
-  - EvaluationRun/override/정책 버전 불변 스토어 스키마/보존 정책 명문화, 삽입/조회 API 정리.
-  - “나쁜 전략” 회귀 세트 큐레이션 → `scripts/policy_diff.py` 크론/CI 옵션화 → 임계 초과 시 경고/실패 플래그 설정.
-  - 회귀 결과/히스토리 리포트(주간) 생성 경로 정의.
-  - DoD: 스토어에 정책 버전별 기록이 남고, 회귀 배치가 임계 초과 시 실패 신호를 내며 리포트가 생성.
-
-- G4 Portfolio/Stress 입력 소스 강화
-  - gateway/리스크 엔진 프로듀서가 realized_returns_ref·stress ref를 risk hub에 push하도록 연결, 해시/actor/ACL 검증을 공통 모듈로 강제.
-  - risk hub 스냅샷 계약(TTL 10s, sha256 hash, actor 헤더, offload 기준, 가중치 합≈1) 프로듀서·컨슈머 모두에 린터/테스트 추가.
-  - DoD: 계약 위반 시 프로듀서 단계에서 거부/로깅되고, hub 컨슈머에서도 동일 기준으로 차단·알림.
-
-- G5 SDK 얇게 만들기 & WS SSOT 전환
-  - ValidationPipeline을 metrics-only 경로로 축소, 룰 실행·오케스트레이션을 WS 단일 진입으로 단계 전환(플래그/롤백 경로 포함).
-  - WS 기반 통합 테스트(룰 실행·오류 처리·오프로드) 추가, SDK 호출부에는 디프리케이션 가이드 삽입.
-  - DoD: 신규 경로가 기본값, SDK 경로는 metrics-only로 남고, 전환 실패 시 롤백 플래그로 복구 가능.
-
-- G6 거버넌스/운영 가시성
-  - 독립 검증(Repo/권한 분리) 경로와 override 재검토 큐 운영 모델 정의, 승인 SLA 명시.
-  - SR 11-7 인바리언트, risk hub freshness/누락, extended validation 성공률·dedupe hit 메트릭 대시보드와 Alertmanager 룰 보강.
-  - DoD: 승인/재검토 흐름이 런북에 반영되고, 메트릭/알람이 운영 환경에서 확인 가능.
-
-## 공통 일정·추적 프레임
-- 순서: G1 → G2 → G3/G4 병행 → G5 → G6(지속)으로 추진, 각 단계 종료 시 런북/알람/테스트 업데이트.
-- 증빙: 리허설 로그, 대시보드 스냅샷, 알람 트리거 캡처, 회귀 리포트 샘플을 문서에 첨부.
-- 검증: 코드 변경 시 CI 전체(uv mypy, mkdocs, docs 링크, 사이클, pytest -n auto, e2e world_smoke) 실행을 기본으로 하고, 큐/워커는 재시도·중복·TTL 초과 시나리오 수동 리허설 포함.
-
-## 이번 사이클(2주) 실행 항목
-- Week 1 — G1·G2 토대
-  - ControlBus 템플릿 초안: 토픽/컨슈머 그룹/백오프·재시도/DLQ/헬스 메트릭 정의를 문서+코드에 반영, gateway·ExtendedValidation 워커에 적용 PR 착수.
-  - Risk snapshot dedupe·알람: dedupe 키(해시+actor+stage) 공용 헬퍼 추가, 재시도/Alertmanager 룰 PR, 재처리/중복 리허설 로그 확보.
-  - Live 스케줄러 골격: 30/60/90일 스케줄러 잡 생성, Live EvaluationRun 워커 엔드포인트 연결, decay 지표 계산 파이프라인 스텁 배치.
-  - 증빙/검증: 큐 리허설 캡처, 스케줄러 dry-run 결과, mkdocs 링크·CI 기본 세트 실행 로그.
-
-- Week 2 — G2 운영화 + G3/G4 착수
-  - Live 리포트 템플릿/노출: 대시보드/API 초안과 샘플 출력 확정, 스케줄 지연/실패 알람 튜닝.
-  - Evaluation Store 정책: 불변 스토어 스키마·보존 정책 결정, 삽입/조회 API 초안 문서화, “나쁜 전략” 회귀 세트 목록 작성.
-  - Realized/Stress 프로듀서 연결: gateway/리스크 엔진에서 realized_returns_ref·stress ref push 경로와 해시/ACL 검증 헬퍼 추가 PR.
-  - 증빙/검증: 회귀 세트 목록·스토어 스키마 리뷰 기록, 프로듀서 계약 위반 테스트 로그, CI 기본 세트 재실행.
-
-## 실행 체크리스트 (담당/마감/증빙)
-- G1 ControlBus 표준화
-  - [ ] 토픽·그룹·백오프·DLQ 템플릿 PR (담당/마감/PR 링크)
-  - [ ] dedupe 키 헬퍼 + 재시도·알람 규칙 PR (담당/마감/PR 링크)
-  - [ ] 재처리/중복 리허설 로그·메트릭 캡처 첨부
-- G2 Live 모니터링
-  - [ ] 스케줄러 잡 배포 + dry-run 로그
-  - [ ] Live EvaluationRun 워커/decay 계산 파이프라인 연결 PR
-  - [ ] 리포트 템플릿·노출 경로 샘플 출력, 지연/실패 알람 캡처
-- G3 Evaluation Store·회귀
-  - [ ] 불변 스토어 스키마/보존 정책 확정 문서
-  - [ ] 삽입/조회 API 초안 PR
-  - [ ] “나쁜 전략” 회귀 세트 목록 + `scripts/policy_diff.py` 크론/CI 옵션 PR + 임계 초과 실패 플래그 검증 로그
-- G4 Portfolio/Stress 입력
-  - [ ] realized_returns_ref·stress ref 프로듀서 연결 PR
-  - [ ] 해시/actor/ACL 검증 공용 모듈 + 린터/테스트 PR
-  - [ ] 계약 위반 차단 로그·알람 캡처
-- G5 SDK→WS 전환
-  - [ ] ValidationPipeline metrics-only 축소 PR + 플래그/롤백 경로 문서
-  - [ ] WS 통합 테스트(룰 실행·오류·오프로드) 추가 PR
-  - [ ] SDK 디프리케이션 가이드 배포
-- G6 거버넌스/가시성
-  - [ ] override 재검토 큐·승인 SLA 문서
-  - [ ] SR 11-7/메트릭 대시보드·Alertmanager 룰 PR
-  - [ ] 런북 업데이트 및 대시보드/알람 스냅샷 첨부
+- **Live 모니터링 자동 생성**: 스케줄러 → Live EvaluationRun 생성 워커 연결(30/60/90일) + 지연/실패 알람
+- **Portfolio/Stress 입력 소스 강화**: realized/stress 프로듀서 연결 + 해시/actor/ACL 검증
+- **SDK→WS SSOT 전환**: SDK metrics-only 유지, WS `/evaluate` 단일 진입 통합 테스트 고정
+- **거버넌스/운영 가시성**: override 재검토 큐·승인 SLA, SR 11-7 인바리언트 대시보드 확장
 
 ## 최근 진행 업데이트
+- v1 코어 risk 메트릭 산출 보강: #1922
+- Policy diff 회귀 자동화 운영 정착(CI/크론 + bad strategies 세트): #1923
+- Evaluation Store retention 정책 코드/잡 고정: #1924
+- World Validation 관측성(알람/대시보드 튜닝 + 운영 증빙): #1925
+- ControlBus 표준 템플릿 전면 적용 + 리허설/증빙: #1926
+
+아래 섹션은 운영 참고/템플릿 성격이며, v1.5 DoD에 포함되지 않는 후속 작업도 포함합니다.
+
 - ControlBus 경로 dedupe/TTL 계측: `risk_hub_snapshot_dedupe_total{world_id,stage}`·`risk_hub_snapshot_expired_total{world_id,stage}` 추가, 소비자에서 stage-aware 집계.
 - Stage 헤더 전파: gateway 리밸런스→RiskHubClient `X-Stage` 전달, activation 스냅샷도 `stage=live` 부여, WS 라우터가 provenance.stage 기록.
 - 런북/알림: ko/en Risk Signal Hub 런북에 헤더/TTL/dedupe 대응 추가, Alertmanager 룰에 dedupe/expired 스파이크 감지 룰 포함.
