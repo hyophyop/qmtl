@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
+from qmtl.foundation.common.metrics_factory import get_metric_value
+from qmtl.services.worldservice import metrics as ws_metrics
 from qmtl.services.worldservice.policy_engine import Policy, ThresholdRule
 from qmtl.services.worldservice.schemas import (
     AllocationUpsertRequest,
@@ -9,6 +13,7 @@ from qmtl.services.worldservice.schemas import (
     StrategySeries,
     EvaluateRequest,
 )
+import qmtl.services.worldservice.services as ws_services
 from qmtl.services.worldservice.services import WorldService
 from qmtl.services.worldservice.storage.facade import Storage
 
@@ -118,3 +123,78 @@ async def test_upsert_allocations_executes_pending_existing_plan():
     assert response.executed is True
     assert executor.calls and executor.calls[0]["world_allocations"] == {"w1": 1.0}
     assert store._allocation_runs[payload.run_id].executed is True
+
+
+@pytest.mark.asyncio
+async def test_apply_extended_validation_records_metrics_with_scheduler(monkeypatch):
+    ws_metrics.reset_metrics()
+    tasks: list[asyncio.Task[int]] = []
+
+    class _StubWorker:
+        def __init__(self, store):  # pragma: no cover - signature compatibility
+            self.risk_hub = None
+
+        async def run(self, *, world_id: str, stage: str | None, policy_payload):  # pragma: no cover
+            return 0
+
+    def _scheduler(coro):
+        task = asyncio.create_task(coro)
+        tasks.append(task)
+        return task
+
+    monkeypatch.setattr(ws_services, "ExtendedValidationWorker", _StubWorker)
+    service = WorldService(store=Storage(), extended_validation_scheduler=_scheduler)
+
+    await service._apply_extended_validation(world_id="w1", stage="cohort", policy_payload=None)
+
+    assert (
+        get_metric_value(
+            ws_metrics.extended_validation_run_total,
+            {"world_id": "w1", "stage": "cohort", "status": "scheduled"},
+        )
+        == 1.0
+    )
+
+    await tasks[0]
+
+    assert (
+        get_metric_value(
+            ws_metrics.extended_validation_run_total,
+            {"world_id": "w1", "stage": "cohort", "status": "success"},
+        )
+        == 1.0
+    )
+
+
+@pytest.mark.asyncio
+async def test_apply_extended_validation_records_failure_metrics_with_scheduler(monkeypatch):
+    ws_metrics.reset_metrics()
+    tasks: list[asyncio.Task[int]] = []
+
+    class _StubWorker:
+        def __init__(self, store):  # pragma: no cover - signature compatibility
+            self.risk_hub = None
+
+        async def run(self, *, world_id: str, stage: str | None, policy_payload):  # pragma: no cover
+            raise RuntimeError("boom")
+
+    def _scheduler(coro):
+        task = asyncio.create_task(coro)
+        tasks.append(task)
+        return task
+
+    monkeypatch.setattr(ws_services, "ExtendedValidationWorker", _StubWorker)
+    service = WorldService(store=Storage(), extended_validation_scheduler=_scheduler)
+
+    await service._apply_extended_validation(world_id="w1", stage="cohort", policy_payload=None)
+
+    with pytest.raises(RuntimeError):
+        await tasks[0]
+
+    assert (
+        get_metric_value(
+            ws_metrics.extended_validation_run_total,
+            {"world_id": "w1", "stage": "cohort", "status": "failure"},
+        )
+        == 1.0
+    )
