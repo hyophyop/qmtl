@@ -83,8 +83,8 @@ def run_diff(
     report = PolicyDiffReport(
         old_policy_version=str(getattr(old_policy, "version", None) or old_policy.model_dump().get("version")),
         new_policy_version=str(getattr(new_policy, "version", None) or new_policy.model_dump().get("version")),
-        old_ruleset_hash=None,
-        new_ruleset_hash=None,
+        old_ruleset_hash=result_old.ruleset_hash,
+        new_ruleset_hash=result_new.ruleset_hash,
         total_strategies=len(strategies),
         strategies_affected=sum(1 for d in diffs if d.has_changes),
         selection_changes=selection_changes,

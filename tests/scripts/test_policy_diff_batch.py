@@ -53,6 +53,9 @@ def test_policy_diff_batch_generates_report(tmp_path: Path):
     assert data["strategies_affected"] == 1
     assert any(diff["strategy_id"] == "s2" for diff in data["diffs"])
     assert report.impact_ratio > 0
+    assert report.old_ruleset_hash and report.old_ruleset_hash.startswith("blake3:")
+    assert report.new_ruleset_hash and report.new_ruleset_hash.startswith("blake3:")
+    assert report.old_ruleset_hash != report.new_ruleset_hash
 
 
 def test_policy_diff_batch_loads_runs_dir(tmp_path: Path):
@@ -77,3 +80,4 @@ def test_policy_diff_batch_loads_runs_dir(tmp_path: Path):
 
     assert report.total_strategies == 3
     assert any(d.strategy_id == "s3" for d in report.diffs)
+    assert report.old_ruleset_hash and report.new_ruleset_hash
