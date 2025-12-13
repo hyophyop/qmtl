@@ -54,6 +54,9 @@ status: draft
 You can rehearse a producer path (e.g., gateway/risk engine) that publishes snapshots containing **realized returns / stress** to the WS hub under the same contract used in production.
 
 - Sample payload: `operations/risk_hub/samples/risk_snapshot_with_realized_and_stress.json`
+- Stress ref rehearsal (force offload):
+  - Sample payload: `operations/risk_hub/samples/risk_snapshot_with_stress_ref.json`
+  - Command: `uv run python scripts/publish_risk_hub_snapshot.py --base-url $WS_URL --world <world_id> --snapshot operations/risk_hub/samples/risk_snapshot_with_stress_ref.json --token $HUB_TOKEN --actor gateway --stage paper --inline-threshold 1`
 - Publisher script:
   - `uv run python scripts/publish_risk_hub_snapshot.py --base-url $WS_URL --world <world_id> --snapshot operations/risk_hub/samples/risk_snapshot_with_realized_and_stress.json --token $HUB_TOKEN --actor gateway --stage paper`
 
