@@ -14,5 +14,13 @@ SDK의 `ValidationPipeline`은 로컬 사전 점검(precheck) 용도로만 유�
 - 제출/테스트 파이프라인에서는 WS 결과(`SubmitResult.ws.*`)를 사용자에게 표준 출력으로 노출하고, `precheck`는 별도 섹션으로 분리합니다.
 - SDK→WS 불일치가 있을 경우 WS 로그/메트릭을 우선 확인하고, `precheck`는 디버그 힌트로만 사용합니다.
 
-## 추가 단계(예정)
-- WS 단일 오케스트레이션 테스트(룰 실행/오류/오프로드)와 SDK 디프리케이션 알림을 순차적으로 배포합니다.
+## 운영 롤아웃(권장)
+- 순서: **Backtest → Paper → Live**
+- 각 단계에서 확인할 것:
+  - `SubmitResult.ws.*`가 정상 채워지는지(결정/activation/evaluation_run_url)
+  - `/worlds/{id}/evaluate` 4xx/5xx, latency, fail-closed 증가 여부
+  - WS/ControlBus/worker 경로의 알람(운영 대시보드) 이상 유무
+
+## 체크리스트(DoD)
+- WS 단일 진입 계약이 테스트로 고정됨(룰 실행/오류 처리 등).
+- 디프리케이션 가이드가 배포되고, 롤아웃/롤백 가이드가 문서화됨.
