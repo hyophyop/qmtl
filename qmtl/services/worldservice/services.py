@@ -6,6 +6,7 @@ import json
 import logging
 import asyncio
 import math
+import re
 from dataclasses import dataclass
 from copy import deepcopy
 from contextlib import AsyncExitStack, asynccontextmanager
@@ -42,6 +43,8 @@ from .schemas import (
     ApplyAck,
     ApplyRequest,
     ApplyResponse,
+    CohortEvaluateRequest,
+    CohortEvaluateResponse,
     DecisionEnvelope,
     EvaluateRequest,
     EvaluationOverride,
@@ -528,17 +531,100 @@ class WorldService:
             evaluation_run_url=eval_url,
         )
 
-    async def _maybe_record_evaluation_run(
+    async def evaluate_cohort(
+        self, world_id: str, payload: CohortEvaluateRequest
+    ) -> CohortEvaluateResponse:
+        try:
+            self._augment_payload_metrics_with_series(payload)
+        except Exception:  # pragma: no cover - best-effort enrichment
+            logger.exception("Failed to derive advanced metrics for %s", world_id)
+        try:
+            self._augment_payload_metrics_with_benchmark_comparisons(payload)
+        except Exception:  # pragma: no cover - best-effort enrichment
+            logger.exception("Failed to derive benchmark comparisons for %s", world_id)
+        try:
+            await self._augment_payload_metrics_with_paper_shadow_baselines(world_id, payload)
+        except Exception:  # pragma: no cover - best-effort enrichment
+            logger.exception("Failed to derive paper/shadow baselines for %s", world_id)
+
+        evaluation = await self._evaluator.determine_active(world_id, payload)
+        active = list(evaluation)
+        stage = (payload.stage or "backtest").lower()
+        run_id = payload.run_id or self._default_campaign_run_id(payload.campaign_id)
+        candidates = list(payload.candidates or [])
+        urls: Dict[str, str] = {}
+
+        try:
+            for strategy_id in candidates:
+                await self._record_evaluation_run_for_strategy(
+                    world_id=world_id,
+                    payload=payload,
+                    evaluation=evaluation,
+                    strategy_id=strategy_id,
+                    run_id=run_id,
+                    campaign_id=payload.campaign_id,
+                    candidates=candidates,
+                )
+                url = self._build_evaluation_run_url(world_id, strategy_id, run_id)
+                if url is not None:
+                    urls[strategy_id] = url
+
+            await self._apply_extended_validation(
+                world_id=world_id,
+                stage=stage,
+                policy_payload=payload.policy,
+            )
+        except Exception:  # pragma: no cover - defensive best-effort
+            logger.exception("Failed to record cohort evaluation runs for %s", world_id)
+
+        return CohortEvaluateResponse(
+            campaign_id=payload.campaign_id,
+            run_id=run_id,
+            candidates=candidates,
+            active=active,
+            evaluation_runs=urls,
+        )
+
+    @staticmethod
+    def _summary_status_from_rule_results(
+        results: Mapping[str, Any] | None,
+        *,
+        fallback_active: bool,
+    ) -> str:
+        if not results:
+            return "pass" if fallback_active else "fail"
+
+        blocking_fail = False
+        any_problem = False
+        for candidate in results.values():
+            status_value = getattr(candidate, "status", None)
+            severity_value = getattr(candidate, "severity", None)
+            status = str(status_value or "").lower()
+            severity = str(severity_value or "blocking").lower()
+            if status == "fail":
+                if severity == "blocking":
+                    blocking_fail = True
+                else:
+                    any_problem = True
+            elif status == "warn":
+                any_problem = True
+        if blocking_fail:
+            return "fail"
+        if any_problem:
+            return "warn"
+        return "pass"
+
+    async def _record_evaluation_run_for_strategy(
         self,
+        *,
         world_id: str,
         payload: EvaluateRequest,
         evaluation: PolicyEvaluationResult | None,
-    ) -> tuple[str | None, str | None]:
-        strategy_id = self._resolve_strategy_id(payload)
-        if strategy_id is None:
-            return None, None
-
-        run_id = payload.run_id or self._default_evaluation_run_id(strategy_id)
+        strategy_id: str,
+        run_id: str,
+        campaign_id: str | None = None,
+        candidates: list[str] | None = None,
+    ) -> None:
         stage = (payload.stage or "backtest").lower()
         risk_tier = (payload.risk_tier or "unknown").lower()
         metrics = self._extract_metrics(payload, strategy_id)
@@ -567,36 +653,8 @@ class WorldService:
             evaluation.recommended_stage if evaluation else None
         ) or recommended_stage(profile_hint, stage)
 
-        def _summary_status(
-            results: Mapping[str, Any] | None,
-            *,
-            fallback_active: bool,
-        ) -> str:
-            if not results:
-                return "pass" if fallback_active else "fail"
-
-            blocking_fail = False
-            any_problem = False
-            for candidate in results.values():
-                status_value = getattr(candidate, "status", None)
-                severity_value = getattr(candidate, "severity", None)
-                status = str(status_value or "").lower()
-                severity = str(severity_value or "blocking").lower()
-                if status == "fail":
-                    if severity == "blocking":
-                        blocking_fail = True
-                    else:
-                        any_problem = True
-                elif status == "warn":
-                    any_problem = True
-            if blocking_fail:
-                return "fail"
-            if any_problem:
-                return "warn"
-            return "pass"
-
-        summary = {
-            "status": _summary_status(rule_results, fallback_active=active_flag),
+        summary: Dict[str, Any] = {
+            "status": self._summary_status_from_rule_results(rule_results, fallback_active=active_flag),
             "active": active_flag,
             "active_set": list(evaluation.selected if evaluation else []),
         }
@@ -612,39 +670,64 @@ class WorldService:
                     "override_timestamp": self._override_timestamp(override.timestamp),
                 }
             )
+        if campaign_id:
+            summary["campaign_id"] = campaign_id
+            if candidates is not None:
+                summary["campaign_candidates"] = list(candidates)
+
         model_card_version = self._resolve_model_card_version(
             strategy_id, getattr(payload, "model_card_version", None)
         )
 
+        await self.store.record_evaluation_run(
+            world_id,
+            strategy_id,
+            run_id,
+            stage=stage,
+            risk_tier=risk_tier,
+            model_card_version=model_card_version,
+            metrics=metrics,
+            validation=validation_payload,
+            summary=summary,
+        )
+        if self.bus is not None:
+            try:
+                await self.bus.publish_evaluation_run_created(
+                    world_id,
+                    strategy_id=strategy_id,
+                    run_id=run_id,
+                    stage=stage,
+                    risk_tier=risk_tier,
+                    status=summary.get("status"),
+                    recommended_stage=summary.get("recommended_stage"),
+                )
+            except Exception:  # pragma: no cover - best-effort observability
+                logger.exception(
+                    "Failed to publish evaluation run created event for %s/%s",
+                    world_id,
+                    strategy_id,
+                )
+
+    async def _maybe_record_evaluation_run(
+        self,
+        world_id: str,
+        payload: EvaluateRequest,
+        evaluation: PolicyEvaluationResult | None,
+    ) -> tuple[str | None, str | None]:
+        strategy_id = self._resolve_strategy_id(payload)
+        if strategy_id is None:
+            return None, None
+
+        run_id = payload.run_id or self._default_evaluation_run_id(strategy_id)
+        stage = (payload.stage or "backtest").lower()
         try:
-            await self.store.record_evaluation_run(
-                world_id,
-                strategy_id,
-                run_id,
-                stage=stage,
-                risk_tier=risk_tier,
-                model_card_version=model_card_version,
-                metrics=metrics,
-                validation=validation_payload,
-                summary=summary,
+            await self._record_evaluation_run_for_strategy(
+                world_id=world_id,
+                payload=payload,
+                evaluation=evaluation,
+                strategy_id=strategy_id,
+                run_id=run_id,
             )
-            if self.bus is not None:
-                try:
-                    await self.bus.publish_evaluation_run_created(
-                        world_id,
-                        strategy_id=strategy_id,
-                        run_id=run_id,
-                        stage=stage,
-                        risk_tier=risk_tier,
-                        status=summary.get("status"),
-                        recommended_stage=summary.get("recommended_stage"),
-                    )
-                except Exception:  # pragma: no cover - best-effort observability
-                    logger.exception(
-                        "Failed to publish evaluation run created event for %s/%s",
-                        world_id,
-                        strategy_id,
-                    )
             await self._apply_extended_validation(
                 world_id=world_id,
                 stage=stage,
@@ -820,6 +903,12 @@ class WorldService:
     def _default_evaluation_run_id(strategy_id: str) -> str:
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         return f"eval-{strategy_id}-{ts}"
+
+    @staticmethod
+    def _default_campaign_run_id(campaign_id: str) -> str:
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        safe = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(campaign_id)).strip("-") or "campaign"
+        return f"camp-{safe}-{ts}"
 
     @staticmethod
     def _build_evaluation_run_url(world_id: str, strategy_id: str | None, run_id: str | None) -> str | None:

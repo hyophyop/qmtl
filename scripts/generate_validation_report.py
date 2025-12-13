@@ -227,6 +227,8 @@ def generate_markdown_report(evaluation_run: Mapping[str, Any], model_card: Mapp
     summary = summary_raw if isinstance(summary_raw, Mapping) else {}
     summary_status = _coerce_str(summary.get("status"), "unknown")
     recommended_stage = _coerce_str(summary.get("recommended_stage"), "")
+    campaign_id = _coerce_str(summary.get("campaign_id"), "")
+    campaign_candidates = _string_list(summary.get("campaign_candidates"))
     model_card_version = _coerce_str(
         evaluation_run.get("model_card_version") or model_card.get("model_card_version"),
         "",
@@ -270,6 +272,10 @@ def generate_markdown_report(evaluation_run: Mapping[str, Any], model_card: Mapp
     lines.append(_summary_line("World", world_id))
     lines.append(_summary_line("Strategy", strategy_id))
     lines.append(_summary_line("Run ID", run_id))
+    if campaign_id:
+        lines.append(_summary_line("Campaign ID", campaign_id))
+    if campaign_candidates:
+        lines.append(_summary_line("Campaign candidates", ", ".join(campaign_candidates)))
     lines.append(_summary_line("Stage", stage))
     lines.append(_summary_line("Risk tier", risk_tier))
     lines.append(_summary_line("Model card version", model_card_version or "(not provided)"))

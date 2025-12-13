@@ -125,6 +125,49 @@ class ApplyResponse(BaseModel):
     evaluation_run_url: str | None = None
 
 
+class CohortEvaluateRequest(EvaluateRequest):
+    campaign_id: str = Field(..., min_length=1)
+    candidates: List[str] | None = None
+
+    @model_validator(mode="after")
+    def _normalize_candidates(self) -> "CohortEvaluateRequest":
+        raw_metrics = getattr(self, "metrics", None) or {}
+        metric_keys = list(raw_metrics.keys()) if isinstance(raw_metrics, dict) else []
+
+        if self.candidates is None:
+            self.candidates = sorted(str(k) for k in metric_keys if str(k).strip())
+
+        candidates: list[str] = []
+        seen: set[str] = set()
+        for raw in self.candidates:
+            value = str(raw).strip()
+            if not value:
+                raise ValueError("candidates entries must be non-empty strings")
+            if value in seen:
+                continue
+            seen.add(value)
+            candidates.append(value)
+        self.candidates = candidates
+
+        if not self.candidates:
+            raise ValueError("cohort evaluation requires metrics for at least one strategy")
+
+        missing_metrics = [sid for sid in self.candidates if sid not in raw_metrics]
+        if missing_metrics:
+            raise ValueError(
+                "candidates missing metrics: " + ", ".join(sorted(missing_metrics))
+            )
+        return self
+
+
+class CohortEvaluateResponse(BaseModel):
+    campaign_id: str
+    run_id: str
+    candidates: List[str]
+    active: List[str]
+    evaluation_runs: Dict[str, str] = Field(default_factory=dict)
+
+
 class ApplyAck(BaseModel):
     ok: bool = True
     run_id: str
@@ -453,10 +496,16 @@ class EvaluationValidation(BaseModel):
 
 
 class EvaluationSummary(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     status: Literal["pass", "warn", "fail"] | None = None
     recommended_stage: Literal[
         "backtest_only", "paper_only", "paper_ok_live_candidate"
     ] | None = None
+    active: bool | None = None
+    active_set: List[str] | None = None
+    campaign_id: str | None = None
+    campaign_candidates: List[str] | None = None
     override_status: Literal["none", "approved", "rejected"] | None = None
     override_reason: str | None = None
     override_actor: str | None = None
@@ -508,6 +557,8 @@ __all__ = [
     'ApplyPlan',
     'ApplyRequest',
     'ApplyResponse',
+    'CohortEvaluateRequest',
+    'CohortEvaluateResponse',
     'BindingRequest',
     'BindingsResponse',
     'DecisionEnvelope',

@@ -15,7 +15,12 @@ def _sample_evaluation_run() -> dict:
         "run_id": "eval-123",
         "stage": "backtest",
         "risk_tier": "medium",
-        "summary": {"status": "warn", "recommended_stage": "paper_only"},
+        "summary": {
+            "status": "warn",
+            "recommended_stage": "paper_only",
+            "campaign_id": "camp-1",
+            "campaign_candidates": ["strat-a", "strat-b"],
+        },
         "validation": {
             "policy_version": "v1",
             "ruleset_hash": "abc123",
@@ -73,6 +78,8 @@ def test_generate_markdown_report_includes_core_fields() -> None:
 
     assert "Validation Report — strat-a @ world-demo" in report
     assert "- Run ID: eval-123" in report
+    assert "- Campaign ID: camp-1" in report
+    assert "- Campaign candidates: strat-a, strat-b" in report
     assert "- Stage: backtest" in report
     assert "- Recommended stage: paper_only" in report
     assert "- Extended revision: 2" in report
@@ -111,5 +118,6 @@ def test_cli_writes_report_file(tmp_path: Path, monkeypatch, capsys) -> None:
     report = out_path.read_text(encoding="utf-8")
     captured = capsys.readouterr()
     assert "Validation Report — strat-a @ world-demo" in report
+    assert "- Campaign ID: camp-1" in report
     assert "written to" in captured.out
     assert "Extended validation" in report
