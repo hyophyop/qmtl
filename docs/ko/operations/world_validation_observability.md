@@ -59,6 +59,10 @@
 - 운영에서의 체크 방법(권장):
   - 인바리언트 리포트: `GET /worlds/{world_id}/validations/invariants`
   - 최신 EvaluationRun 조회 후 `diagnostics.validation_health`를 샘플링(월드/스테이지별)
+- SLO 리포트(스토어 기반, 권장):
+  - 스크립트: `uv run python scripts/report_validation_slo.py --format md --output validation_slo_report.md`
+  - GitHub Actions(스케줄/수동): `.github/workflows/validation-slo-report.yml` (secrets 미설정 시 skip, 임계 초과 시 실패)
+  - 포함 지표: coverage(`metric_coverage_ratio`), rules 실행(`rules_executed_ratio`), `missing_metric`/`rule_error` run 비율(+ best-effort extended delay)
 
 ## Alertmanager 룰(예시 스니펫)
 
