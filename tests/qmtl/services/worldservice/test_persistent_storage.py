@@ -374,6 +374,61 @@ async def test_persistent_storage_evaluation_runs(persistent_storage):
 
 
 @pytest.mark.asyncio
+async def test_persistent_storage_purges_evaluation_run_history_by_recorded_at(persistent_storage):
+    world_id = "world-retention"
+    strategy_id = "strategy-retention"
+    run_id = "eval-retention-1"
+    await persistent_storage.create_world({"id": world_id})
+
+    await persistent_storage.record_evaluation_run(
+        world_id,
+        strategy_id,
+        run_id,
+        stage="backtest",
+        risk_tier="low",
+        metrics={"returns": {"sharpe": 1.0}},
+        summary={"status": "pass"},
+    )
+
+    old_ts = "2000-01-01T00:00:00Z"
+    await persistent_storage._driver.execute(
+        """
+        INSERT INTO evaluation_run_history(world_id, strategy_id, run_id, revision, payload, recorded_at)
+        VALUES(?, ?, ?, ?, ?, ?)
+        """,
+        world_id,
+        strategy_id,
+        run_id,
+        999,
+        json.dumps({"world_id": world_id, "strategy_id": strategy_id, "run_id": run_id}),
+        old_ts,
+    )
+
+    dry = await persistent_storage.purge_evaluation_run_history(
+        older_than="2010-01-01T00:00:00Z",
+        world_id=world_id,
+        dry_run=True,
+    )
+    assert dry["candidates"] == 1
+    assert dry["deleted"] == 0
+
+    executed = await persistent_storage.purge_evaluation_run_history(
+        older_than="2010-01-01T00:00:00Z",
+        world_id=world_id,
+        dry_run=False,
+    )
+    assert executed["deleted"] == 1
+
+    rows = await persistent_storage._driver.fetchall(
+        "SELECT recorded_at FROM evaluation_run_history WHERE world_id = ? AND strategy_id = ? AND run_id = ?",
+        world_id,
+        strategy_id,
+        run_id,
+    )
+    assert all(row[0] != old_ts for row in rows)
+
+
+@pytest.mark.asyncio
 async def test_persistent_storage_evaluation_override(persistent_storage):
     world_id = "world-override"
     strategy_id = "strategy-eval"

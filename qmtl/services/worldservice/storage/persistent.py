@@ -351,6 +351,18 @@ class PersistentStorage:
             )
             """
         )
+        await self._driver.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_evaluation_run_history_recorded_at
+            ON evaluation_run_history(recorded_at)
+            """
+        )
+        await self._driver.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_evaluation_run_history_world_recorded_at
+            ON evaluation_run_history(world_id, recorded_at)
+            """
+        )
 
     # ------------------------------------------------------------------
     # World lifecycle
@@ -956,6 +968,70 @@ class PersistentStorage:
                 }
             )
         return history
+
+    async def purge_evaluation_run_history(
+        self,
+        *,
+        older_than: str,
+        world_id: str | None = None,
+        dry_run: bool = True,
+        vacuum: bool = False,
+    ) -> Dict[str, Any]:
+        """Purge immutable EvaluationRun history entries older than a cutoff timestamp.
+
+        `older_than` must be an ISO-8601 UTC string comparable to recorded_at
+        (e.g., "2025-01-01T00:00:00Z").
+        """
+
+        clauses = ["recorded_at < ?"]
+        params: list[Any] = [older_than]
+        if world_id:
+            clauses.append("world_id = ?")
+            params.append(world_id)
+        where = " AND ".join(clauses)
+
+        before_row = await self._driver.fetchone(
+            f"SELECT COUNT(*) FROM evaluation_run_history WHERE {where}",
+            *params,
+        )
+        candidates = int(before_row[0]) if before_row and before_row[0] is not None else 0
+        if dry_run:
+            return {
+                "older_than": older_than,
+                "world_id": world_id,
+                "dry_run": True,
+                "candidates": candidates,
+                "deleted": 0,
+            }
+
+        await self._driver.execute(
+            f"DELETE FROM evaluation_run_history WHERE {where}",
+            *params,
+        )
+
+        after_row = await self._driver.fetchone(
+            f"SELECT COUNT(*) FROM evaluation_run_history WHERE {where}",
+            *params,
+        )
+        remaining = int(after_row[0]) if after_row and after_row[0] is not None else 0
+        deleted = max(0, candidates - remaining)
+
+        vacuum_ran = False
+        if vacuum:
+            try:
+                await self._driver.execute("VACUUM")
+                vacuum_ran = True
+            except Exception:
+                vacuum_ran = False
+
+        return {
+            "older_than": older_than,
+            "world_id": world_id,
+            "dry_run": False,
+            "candidates": candidates,
+            "deleted": deleted,
+            "vacuum": vacuum_ran,
+        }
 
     async def get_allocation_run(self, run_id: str) -> Optional[Dict[str, Any]]:
         row = await self._driver.fetchone(
