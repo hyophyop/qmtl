@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import logging
 from datetime import datetime, timezone
 from typing import Iterable
 
+from qmtl.foundation.common.cloudevents import format_event
 from qmtl.services.kafka import KafkaProducerLike, create_kafka_producer
 
 
@@ -20,6 +22,8 @@ class ControlBusProducer:
         sentinel_topic: str = "sentinel_weight",
         producer: KafkaProducerLike | None = None,
         required: bool = False,
+        retries: int = 2,
+        backoff: float = 0.5,
         logger: logging.Logger | None = None,
     ) -> None:
         self.brokers = list(brokers or [])
@@ -27,7 +31,29 @@ class ControlBusProducer:
         self.sentinel_topic = sentinel_topic
         self._producer: KafkaProducerLike | None = producer
         self._required = required
+        self._retries = int(retries)
+        self._backoff = float(backoff)
         self._logger = logger or logging.getLogger(__name__)
+
+    async def _publish(self, topic: str, key: bytes, event: dict) -> None:
+        producer = self._producer
+        if producer is None:
+            return
+        data = json.dumps(event).encode()
+        last_exc: Exception | None = None
+        retries = int(getattr(self, "_retries", 0))
+        backoff = float(getattr(self, "_backoff", 0.0))
+        for attempt in range(retries + 1):
+            try:
+                await producer.send_and_wait(topic, data, key=key)
+                return
+            except Exception as exc:  # pragma: no cover - best-effort reliability
+                last_exc = exc
+                if attempt >= retries:
+                    break
+                await asyncio.sleep(backoff * (attempt + 1))
+        if last_exc:
+            raise last_exc
 
     async def start(self) -> None:
         if self._producer is not None:
@@ -51,9 +77,6 @@ class ControlBusProducer:
         self._producer = None
 
     async def publish_queue_update(self, tags, interval, queues, match_mode: str = "any", *, version: int = 1) -> None:
-        producer = self._producer
-        if producer is None:
-            return
         tags_list = list(tags)
         tags_hash = ".".join(sorted(tags_list))
         etag = f"q:{tags_hash}:{interval}:{version}"
@@ -67,10 +90,17 @@ class ControlBusProducer:
             "version": version,
             "etag": etag,
             "ts": ts,
+            "idempotency_key": f"queue_updated:{tags_hash}:{interval}:{match_mode}:{version}",
         }
-        data = json.dumps(payload).encode()
         key = ",".join(tags_list).encode()
-        await producer.send_and_wait(self.topic, data, key=key)
+        corr = f"queue:{tags_hash}:{interval}"
+        event = format_event(
+            "qmtl.services.dagmanager",
+            "queue_updated",
+            payload,
+            correlation_id=corr,
+        )
+        await self._publish(self.topic, key, event)
 
     async def publish_sentinel_weight(
         self,
@@ -82,10 +112,6 @@ class ControlBusProducer:
         version: int = 1,
     ) -> None:
         """Publish a sentinel weight control event."""
-
-        producer = self._producer
-        if producer is None:
-            return
 
         ts = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         weight_value = float(weight)
@@ -103,14 +129,21 @@ class ControlBusProducer:
             "version": version,
             "etag": etag,
             "ts": ts,
+            "idempotency_key": f"sentinel_weight_updated:{sentinel_id}:{version_label}:{weight_str}:{version}",
         }
         if version_label:
             payload["sentinel_version"] = version_label
         if world_id:
             payload["world_id"] = world_id
-        data = json.dumps(payload).encode()
         key = sentinel_id.encode()
-        await producer.send_and_wait(self.sentinel_topic, data, key=key)
+        corr = f"sentinel:{sentinel_id}:{world_id or ''}"
+        event = format_event(
+            "qmtl.services.dagmanager",
+            "sentinel_weight_updated",
+            payload,
+            correlation_id=corr,
+        )
+        await self._publish(self.sentinel_topic, key, event)
 
     def _handle_disabled(self, reason: str) -> None:
         if self._required:

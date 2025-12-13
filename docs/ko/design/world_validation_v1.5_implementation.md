@@ -34,7 +34,7 @@
 | §5.3 Validation Report | 표준 리포트 산출물/보관 | 충족 | `scripts/generate_validation_report.py`, `docs/ko/operations/validation_report.md` | - |
 | §8/§12 Invariants | SR 11-7 인바리언트 점검 API | 충족 | `qmtl/services/worldservice/routers/validations.py`, `qmtl/services/worldservice/validation_checks.py`, `scripts/generate_override_rereview_report.py`, `docs/ko/operations/world_validation_governance.md` | - |
 | §10 SLO/관측성 | 핵심 SLO/알람/대시보드 표준화 | 부분 | `alert_rules.yml`, `docs/ko/operations/world_validation_observability.md` | 대시보드 스냅샷/임계 튜닝은 운영에서 지속(증빙 링크 첨부 권장) |
-| 스트리밍 정착 | ControlBus/큐 토픽·그룹·재시도·DLQ 표준화 | 부분 | `docs/ko/operations/controlbus_queue_standards.md`, `qmtl/services/worldservice/controlbus_*` | 워커/프로듀서까지 템플릿 공통 적용 + 리허설/증빙 (G1) |
+| 스트리밍 정착 | ControlBus/큐 토픽·그룹·재시도·DLQ 표준화 | 충족 | `docs/ko/operations/controlbus_queue_standards.md`, `qmtl/services/worldservice/controlbus_*`, `qmtl/services/dagmanager/controlbus_producer.py`, `qmtl/services/gateway/controlbus_ack.py` | - |
 
 ## 차기 이슈 번들(제안)
 

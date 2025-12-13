@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
 from typing import Any, Dict, Iterable
 
 from qmtl.foundation.common.cloudevents import format_event
 from qmtl.services.kafka import KafkaProducerLike, create_kafka_producer
+from qmtl.services.risk_hub_contract import stable_snapshot_hash
 
 from .controlbus_defaults import DEFAULT_CONTROLBUS_TOPIC
 
@@ -114,8 +116,15 @@ class ControlBusProducer:
             "status": status,
             "ts": ts,
             "version": version,
+            "idempotency_key": f"policy_updated:{world_id}:{policy_version}:{checksum}:{version}",
         }
-        await self._publish("policy_updated", world_id, payload)
+        correlation_id = f"policy:{world_id}:{policy_version}"
+        await self._publish(
+            "policy_updated",
+            world_id,
+            payload,
+            correlation_id=correlation_id,
+        )
 
     async def publish_activation_update(
         self,
@@ -144,7 +153,17 @@ class ControlBusProducer:
             body["requires_ack"] = True
         if sequence is not None:
             body["sequence"] = sequence
-        await self._publish("activation_updated", world_id, body)
+        body.setdefault(
+            "idempotency_key",
+            f"activation_updated:{world_id}:{etag}:{run_id}:{version}",
+        )
+        correlation_id = f"activation:{world_id}:{run_id}"
+        await self._publish(
+            "activation_updated",
+            world_id,
+            body,
+            correlation_id=correlation_id,
+        )
 
     async def publish_rebalancing_plan(
         self,
@@ -167,7 +186,16 @@ class ControlBusProducer:
             payload["alpha_metrics"] = alpha_metrics
         if rebalance_intent is not None:
             payload["rebalance_intent"] = rebalance_intent
-        await self._publish("rebalancing_planned", world_id, payload)
+        serialized = json.dumps(plan, sort_keys=True, separators=(",", ":")).encode()
+        digest = hashlib.sha256(serialized).hexdigest()
+        payload.setdefault("idempotency_key", f"rebalancing_planned:{world_id}:{digest}:{version}")
+        correlation_id = f"rebalancing_plan:{world_id}:{digest}"
+        await self._publish(
+            "rebalancing_planned",
+            world_id,
+            payload,
+            correlation_id=correlation_id,
+        )
 
     async def publish_risk_snapshot_updated(
         self,
@@ -179,7 +207,18 @@ class ControlBusProducer:
         payload: Dict[str, Any] = dict(snapshot)
         payload["world_id"] = world_id
         payload.setdefault("event_version", version)
-        await self._publish("risk_snapshot_updated", world_id, payload)
+        snapshot_hash = payload.get("hash")
+        if not isinstance(snapshot_hash, str) or not snapshot_hash:
+            snapshot_hash = stable_snapshot_hash(payload)
+            payload["hash"] = snapshot_hash
+        payload.setdefault("idempotency_key", f"risk_snapshot_updated:{world_id}:{snapshot_hash}:{version}")
+        correlation_id = f"risk_snapshot:{world_id}:{snapshot_hash}"
+        await self._publish(
+            "risk_snapshot_updated",
+            world_id,
+            payload,
+            correlation_id=correlation_id,
+        )
 
     async def publish_evaluation_run_created(
         self,
