@@ -256,7 +256,7 @@ async def test_extended_worker_injects_stress_from_hub_ref(tmp_path):
     storage = Storage()
     await storage.create_world({"id": "wstress"})
     policy_payload = {
-        "stress": {"scenarios": {"crash": {"dd_max": 0.3}}, "severity": "soft"},
+        "stress": {"scenarios": {"crash": {"dd_max": 0.3, "var_99": 0.01}}, "severity": "soft"},
     }
     policy = parse_policy(policy_payload)
     version = await storage.add_policy("wstress", policy)
@@ -277,7 +277,7 @@ async def test_extended_worker_injects_stress_from_hub_ref(tmp_path):
     hub = RiskSignalHub(blob_store=blob_store)
     stress_ref = blob_store.write(
         "stress",
-        {"s-stress": {"crash": {"max_drawdown": 0.2}}},
+        {"s-stress": {"crash": {"var_99": 0.02}}},
     )
     snap = PortfolioSnapshot(
         world_id="wstress",
@@ -297,4 +297,5 @@ async def test_extended_worker_injects_stress_from_hub_ref(tmp_path):
     assert record is not None
     results = record["validation"]["results"]
     assert "stress" in results
-    assert results["stress"]["reason_code"] != "crash_dd_missing"
+    assert results["stress"]["status"] == "fail"
+    assert results["stress"]["reason_code"] == "crash_var_exceeds_max"

@@ -775,8 +775,8 @@ def evaluate_stress_rules(
     scenarios = cfg.scenarios or {}
     results: Dict[str, RuleResult] = {}
     for sid, vals in metrics.items():
-        status = "pass"
-        reasons: list[str] = []
+        fail_reasons: list[str] = []
+        warn_reasons: list[str] = []
         details: Dict[str, Any] = {"scenarios": list(scenarios.keys()), "stage": stage}
 
         for name, thresholds in scenarios.items():
@@ -784,37 +784,51 @@ def evaluate_stress_rules(
             es_99_max = thresholds.get("es_99")
             var_99_max = thresholds.get("var_99")
             metric_prefix = f"stress.{name}."
-            dd = vals.get(f"{metric_prefix}max_drawdown") or vals.get(f"{metric_prefix}dd_max")
+            dd = vals.get(f"{metric_prefix}max_drawdown")
+            if dd is None:
+                dd = vals.get(f"{metric_prefix}dd_max")
             es = vals.get(f"{metric_prefix}es_99")
             var = vals.get(f"{metric_prefix}var_99")
 
+            dd_value: float | None = None
+            if isinstance(dd, (int, float)) and not isinstance(dd, bool):
+                dd_value = abs(float(dd))
+            es_value: float | None = None
+            if isinstance(es, (int, float)) and not isinstance(es, bool):
+                es_value = abs(float(es))
+            var_value: float | None = None
+            if isinstance(var, (int, float)) and not isinstance(var, bool):
+                var_value = abs(float(var))
+
             if dd_max is not None:
-                if dd is None:
-                    status = "warn"
-                    reasons.append(f"{name}_dd_missing")
-                elif dd > dd_max:
-                    status = "fail"
-                    reasons.append(f"{name}_dd_exceeds_max")
+                if dd_value is None:
+                    warn_reasons.append(f"{name}_dd_missing")
+                elif dd_value > float(dd_max):
+                    fail_reasons.append(f"{name}_dd_exceeds_max")
                     details[f"{name}_dd_max"] = dd_max
             if es_99_max is not None:
-                if es is None:
-                    status = "warn"
-                    reasons.append(f"{name}_es_missing")
-                elif es > es_99_max:
-                    status = "fail"
-                    reasons.append(f"{name}_es_exceeds_max")
+                if es_value is None:
+                    warn_reasons.append(f"{name}_es_missing")
+                elif es_value > float(es_99_max):
+                    fail_reasons.append(f"{name}_es_exceeds_max")
                     details[f"{name}_es_99_max"] = es_99_max
             if var_99_max is not None:
-                if var is None:
-                    status = "warn"
-                    reasons.append(f"{name}_var_missing")
-                elif var > var_99_max:
-                    status = "fail"
-                    reasons.append(f"{name}_var_exceeds_max")
+                if var_value is None:
+                    warn_reasons.append(f"{name}_var_missing")
+                elif var_value > float(var_99_max):
+                    fail_reasons.append(f"{name}_var_exceeds_max")
                     details[f"{name}_var_99_max"] = var_99_max
 
-        reason_code = reasons[0] if reasons else "stress_ok"
-        reason = ", ".join(reasons) if reasons else "Stress scenarios satisfied"
+        status = "fail" if fail_reasons else "warn" if warn_reasons else "pass"
+        reason_code = (
+            fail_reasons[0]
+            if fail_reasons
+            else warn_reasons[0]
+            if warn_reasons
+            else "stress_ok"
+        )
+        combined = fail_reasons + warn_reasons
+        reason = ", ".join(combined) if combined else "Stress scenarios satisfied"
         results[sid] = RuleResult(
             status=status,
             severity=severity,

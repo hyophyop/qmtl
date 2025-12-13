@@ -55,6 +55,9 @@ status: draft
 프로듀서(예: gateway/리스크 엔진)에서 **realized returns / stress**를 포함한 스냅샷을 WS hub로 발행하는 경로를, 로컬/운영 환경에서 동일한 계약으로 리허설할 수 있습니다.
 
 - 샘플 페이로드: `operations/risk_hub/samples/risk_snapshot_with_realized_and_stress.json`
+- Stress ref 리허설(오프로드 강제):
+  - 샘플 페이로드: `operations/risk_hub/samples/risk_snapshot_with_stress_ref.json`
+  - 실행: `uv run python scripts/publish_risk_hub_snapshot.py --base-url $WS_URL --world <world_id> --snapshot operations/risk_hub/samples/risk_snapshot_with_stress_ref.json --token $HUB_TOKEN --actor gateway --stage paper --inline-threshold 1`
 - 발행 스크립트:
   - `uv run python scripts/publish_risk_hub_snapshot.py --base-url $WS_URL --world <world_id> --snapshot operations/risk_hub/samples/risk_snapshot_with_realized_and_stress.json --token $HUB_TOKEN --actor gateway --stage paper`
 
