@@ -49,6 +49,16 @@ status: draft
 - Backfill:  
   `python scripts/backfill_risk_snapshots.py --dsn $DB --redis $REDIS --world w1`
 
+### Producer rehearsal (publishing snapshots)
+
+You can rehearse a producer path (e.g., gateway/risk engine) that publishes snapshots containing **realized returns / stress** to the WS hub under the same contract used in production.
+
+- Sample payload: `operations/risk_hub/samples/risk_snapshot_with_realized_and_stress.json`
+- Publisher script:
+  - `uv run python scripts/publish_risk_hub_snapshot.py --base-url $WS_URL --world <world_id> --snapshot operations/risk_hub/samples/risk_snapshot_with_realized_and_stress.json --token $HUB_TOKEN --actor gateway --stage paper`
+
+`scripts/publish_risk_hub_snapshot.py` validates the shared contract (`qmtl/services/risk_hub_contract.py`) for **weights sum≈1, ttl_sec>0, actor/stage, and hash consistency**, and offloads large payloads to a blob-store when needed (producing refs like `realized_returns_ref`, `stress_ref`, and `covariance_ref`).
+
 ## 6. Tests / validation
 - Unit: `tests/qmtl/services/worldservice/test_risk_hub_*`, `test_risk_snapshot_publisher.py`.
 - E2E (recommended): gateway→hub→ControlBus→WS worker, include large covariance ref and TTL-expired/delayed cases.
