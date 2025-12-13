@@ -8,10 +8,10 @@ status: draft
 # Risk Signal Hub Runbook
 
 ## 1. Topology
-- **WorldService**: `risk_hub` router (Bearer-protected), Redis cache, Postgres `risk_snapshots`, ControlBus consumer (`risk_snapshot_updated`), activation updates push snapshots.
+- **WorldService**: `risk_hub` router (Bearer-protected), Redis cache, Postgres `risk_snapshots`, ControlBus consumer (CloudEvents type `risk_snapshot_updated`), activation updates push snapshots.
 - **Gateway**: pushes after rebalance/fills/position sync with retry/backoff; large covariance/returns offloaded to blob-store (S3/Redis/file) and referenced via `covariance_ref`.
 - **Blob store**: dev=file(`JsonBlobStore`), prod=S3 (option: Redis).
-- **Events**: shared ControlBus/Kafka topic `risk_snapshot_updated`; WS consumes to trigger ExtendedValidation/stress/live workers.
+- **Events**: published on ControlBus/Kafka topic (`worldservice.server.controlbus_topic`) as CloudEvents with type `risk_snapshot_updated`; WS consumes to trigger ExtendedValidation/stress/live workers.
 - **Headers**: `Authorization: Bearer <token>` (prod), `X-Actor` required, `X-Stage` (backtest/paper/live) strongly recommended for dedupe/alert labels.
 
 ## 2. Deployment checklist
@@ -25,7 +25,7 @@ status: draft
   - Offload large covariance/returns to blob-store with shared ref schema.
   - Enable hub push after rebalance/fills/position sync.
 - ControlBus/Queue:
-  - Create Kafka topic `risk_snapshot_updated`, size/retention checked.
+  - Create Kafka topic `${controlbus_topic}` (route by CloudEvents `type`), size/retention checked.
   - WS consumer group `worldservice-risk-hub` alive.
 
 ## 3. Monitoring / alerts
