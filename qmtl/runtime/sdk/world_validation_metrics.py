@@ -10,7 +10,7 @@ DEFAULT_PERIODS_PER_YEAR = 252
 _EULER_MASCHERONI = 0.5772156649015329
 
 
-def _finite_returns(raw: Sequence[float]) -> list[float]:
+def _finite_returns(raw: Sequence[float | None]) -> list[float]:
     clean: list[float] = []
     for value in raw:
         if value is None:
