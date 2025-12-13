@@ -286,6 +286,9 @@ class MultiWorldRebalanceRequest(BaseModel):
     overlay: OverlayConfigModel | None = None
     schema_version: int | None = Field(default=None, ge=1)
     rebalance_intent: RebalanceIntentModel | None = None
+    # Optional RiskHub auxiliary payloads keyed by world_id.
+    realized_returns_by_world: Dict[str, Any] | None = None
+    stress_by_world: Dict[str, Any] | None = None
 
 
 class MultiWorldRebalanceResponse(BaseModel):

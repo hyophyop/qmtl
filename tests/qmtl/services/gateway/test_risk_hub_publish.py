@@ -58,3 +58,39 @@ async def test_publish_risk_snapshots_uses_strategy_allocations():
     assert world_id == "w"
     assert snapshot["weights"]["s1"] == pytest.approx(1.0)
     assert snapshot["as_of"] == "2025-01-01T00:00:00Z"
+
+
+@pytest.mark.asyncio
+async def test_publish_risk_snapshots_includes_realized_returns_and_stress():
+    payload = MultiWorldRebalanceRequest(
+        total_equity=100.0,
+        world_alloc_before={"w": 0.5},
+        world_alloc_after={"w": 0.6},
+        positions=[
+            PositionSliceModel(
+                world_id="w",
+                symbol="BTC",
+                qty=1.0,
+                mark=60.0,
+                strategy_id="s1",
+            )
+        ],
+        strategy_alloc_before_total={"w": {"s1": 0.5}},
+        strategy_alloc_after_total={"w": {"s1": 0.6}},
+        mode="scaling",
+        realized_returns_by_world={"w": {"s1": [0.01, -0.005]}},
+        stress_by_world={"w": {"crash": {"max_drawdown": 0.2}}},
+    )
+
+    client = _StubRiskHubClient()
+    published = await _publish_risk_snapshots(
+        client,
+        payload,
+        schema_version=1,
+        as_of="2025-01-01T00:00:00Z",
+    )
+
+    assert published is True
+    _, snapshot = client.calls[0]
+    assert snapshot["realized_returns"] == {"s1": [0.01, -0.005]}
+    assert snapshot["stress"] == {"crash": {"max_drawdown": 0.2}}
