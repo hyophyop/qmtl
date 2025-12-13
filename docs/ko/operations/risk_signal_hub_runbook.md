@@ -50,6 +50,16 @@ status: draft
 - Backfill:  
   `python scripts/backfill_risk_snapshots.py --dsn $DB --redis $REDIS --world w1`
 
+### 프로듀서 리허설(스냅샷 발행)
+
+프로듀서(예: gateway/리스크 엔진)에서 **realized returns / stress**를 포함한 스냅샷을 WS hub로 발행하는 경로를, 로컬/운영 환경에서 동일한 계약으로 리허설할 수 있습니다.
+
+- 샘플 페이로드: `operations/risk_hub/samples/risk_snapshot_with_realized_and_stress.json`
+- 발행 스크립트:
+  - `uv run python scripts/publish_risk_hub_snapshot.py --base-url $WS_URL --world <world_id> --snapshot operations/risk_hub/samples/risk_snapshot_with_realized_and_stress.json --token $HUB_TOKEN --actor gateway --stage paper`
+
+`scripts/publish_risk_hub_snapshot.py`는 공통 계약(`qmtl/services/risk_hub_contract.py`)으로 **weights 합≈1, ttl_sec>0, actor/stage, hash 정합성**을 검증하고, 필요 시 blob-store로 offload 후 ref(`realized_returns_ref`, `stress_ref`, `covariance_ref`)를 생성합니다.
+
 ## 6. 테스트/검증
 - 단위: `tests/qmtl/services/worldservice/test_risk_hub_*`, `test_risk_snapshot_publisher.py`.
 - e2e(추천): gateway→hub→ControlBus→WS worker 경로, 큰 공분산 ref 포함, TTL 만료/지연 시나리오.

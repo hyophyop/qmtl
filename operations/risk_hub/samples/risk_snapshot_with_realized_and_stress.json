@@ -1,0 +1,16 @@
+{
+  "as_of": "2025-01-01T00:00:00Z",
+  "version": "v1",
+  "weights": {
+    "strategy_a": 0.6,
+    "strategy_b": 0.4
+  },
+  "realized_returns": {
+    "strategy_a": [0.01, -0.005, 0.002],
+    "strategy_b": [0.008, -0.004, 0.001]
+  },
+  "stress": {
+    "crash": {"max_drawdown": 0.25},
+    "slowdown": {"max_drawdown": 0.12}
+  }
+}

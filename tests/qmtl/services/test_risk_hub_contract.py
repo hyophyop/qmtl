@@ -110,3 +110,58 @@ def test_normalize_and_validate_snapshot_enforces_stage_allowlist():
             payload,
             allowed_stages=["staging"],
         )
+
+
+def test_normalize_and_validate_snapshot_rejects_header_actor_mismatch():
+    payload = {
+        "as_of": "2025-01-01T00:00:00Z",
+        "version": "v1",
+        "weights": {"s1": 1.0},
+        "provenance": {"actor": "gateway", "stage": "paper"},
+    }
+    with pytest.raises(ValueError, match="actor mismatch"):
+        normalize_and_validate_snapshot(
+            "w",
+            payload,
+            actor="risk-engine",
+        )
+
+
+def test_normalize_and_validate_snapshot_rejects_header_stage_mismatch():
+    payload = {
+        "as_of": "2025-01-01T00:00:00Z",
+        "version": "v1",
+        "weights": {"s1": 1.0},
+        "provenance": {"actor": "gateway", "stage": "paper"},
+    }
+    with pytest.raises(ValueError, match="stage mismatch"):
+        normalize_and_validate_snapshot(
+            "w",
+            payload,
+            actor="gateway",
+            stage="live",
+        )
+
+
+def test_normalize_and_validate_snapshot_rejects_non_positive_ttl():
+    payload = {
+        "as_of": "2025-01-01T00:00:00Z",
+        "version": "v1",
+        "weights": {"s1": 1.0},
+        "ttl_sec": 0,
+        "provenance": {"actor": "gateway", "stage": "paper"},
+    }
+    with pytest.raises(ValueError, match="ttl_sec must be positive"):
+        normalize_and_validate_snapshot("w", payload)
+
+
+def test_normalize_and_validate_snapshot_rejects_hash_mismatch():
+    payload = {
+        "as_of": "2025-01-01T00:00:00Z",
+        "version": "v1",
+        "weights": {"s1": 1.0},
+        "hash": "not-a-real-hash",
+        "provenance": {"actor": "gateway", "stage": "paper"},
+    }
+    with pytest.raises(ValueError, match="hash mismatch"):
+        normalize_and_validate_snapshot("w", payload)
