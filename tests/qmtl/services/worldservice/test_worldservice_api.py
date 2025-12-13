@@ -375,7 +375,7 @@ async def test_evaluation_run_creation_and_fetch():
             assert record["stage"] == "backtest"
             assert record["model_card_version"] == "v1.0"
             assert record["metrics"]["returns"]["sharpe"] == 1.5
-            assert record["summary"]["status"] == "pass"
+            assert record["summary"]["status"] == "warn"
             assert record["summary"]["recommended_stage"] == "backtest_only"
             assert record["validation"]["results"]
             assert record["validation"]["policy_version"] == "1"
@@ -749,6 +749,34 @@ async def test_policy_missing_metrics_is_flagged():
             assert run_resp.status_code == 200
             run = run_resp.json()
             assert run["summary"]["status"] != "pass"
+
+
+@pytest.mark.asyncio
+async def test_summary_status_reflects_warn_results():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wwarn"})
+            policy = {
+                "thresholds": {"sharpe": {"metric": "sharpe", "min": 1.0}},
+                "validation": {"on_missing_metric": "warn"},
+            }
+            await client.post("/worlds/wwarn/policies", json={"policy": policy})
+            await client.post("/worlds/wwarn/set-default", json={"version": 1})
+
+            payload = {
+                "strategy_id": "s-warn",
+                "run_id": "run-warn",
+                "metrics": {"s-warn": {"max_drawdown": -0.1}},  # sharpe missing -> warn
+                "stage": "backtest",
+                "risk_tier": "low",
+            }
+            resp = await client.post("/worlds/wwarn/evaluate", json=payload)
+            assert resp.status_code == 200
+            run_resp = await client.get(resp.json()["evaluation_run_url"])
+            assert run_resp.status_code == 200
+            run = run_resp.json()
+            assert run["summary"]["status"] == "warn"
 
 
 @pytest.mark.asyncio
