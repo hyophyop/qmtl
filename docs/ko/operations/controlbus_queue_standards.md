@@ -7,6 +7,7 @@
 - WorldService는 `worldservice.server.controlbus_topic`(기본값: `policy`)에 **CloudEvents** 메시지를 발행/소비합니다.
 - 동일 토픽에 여러 이벤트 타입이 공존할 수 있으며, 필터링 기준은 CloudEvents의 `type` 입니다.
   - 예: `risk_snapshot_updated`, `policy_updated`, `activation_updated`, `evaluation_run_created`, `evaluation_run_updated`
+  - 예(운영/브리지): `queue_updated`, `sentinel_weight_updated`, `activation_ack`
 
 ## 컨슈머 그룹 (권장)
 
@@ -57,4 +58,3 @@ WorldService 내 Prometheus 메트릭(예):
 - TTL 만료 스냅샷 드롭(expired) 확인
 - 처리 실패 → 재시도(backoff) 후 성공/또는 DLQ 라우팅 확인
 - stage별(backtest/paper/live)로 메트릭 라벨 분리가 유지되는지 확인
-

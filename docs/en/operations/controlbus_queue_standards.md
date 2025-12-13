@@ -7,6 +7,7 @@ This document defines topic naming, consumer groups, retry/DLQ behavior, and ide
 - WorldService publishes/consumes CloudEvents on `worldservice.server.controlbus_topic` (default: `policy`).
 - Multiple event types may share the same topic; consumers must filter on CloudEvents `type`.
   - Examples: `risk_snapshot_updated`, `policy_updated`, `activation_updated`, `evaluation_run_created`, `evaluation_run_updated`
+  - Examples (ops/bridge): `queue_updated`, `sentinel_weight_updated`, `activation_ack`
 
 ## Consumer Groups (Recommended)
 
@@ -57,4 +58,3 @@ Example WorldService Prometheus metrics:
 - Dropping expired snapshots (TTL) is observable
 - Fail → retry(backoff) → success, or fail → DLQ routing
 - Stage labels (backtest/paper/live) remain separated in metrics
-

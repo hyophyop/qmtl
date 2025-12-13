@@ -583,7 +583,8 @@ async def test_grpc_diff_publishes_controlbus():
     assert producer.sent
     topic, data, key = producer.sent[0]
     assert topic == "queue"
-    payload = json.loads(data.decode())
+    event = json.loads(data.decode())
+    payload = event.get("data", event)
     assert payload["tags"] == ["x"]
 
 
@@ -650,7 +651,8 @@ async def test_grpc_diff_emits_sentinel_weight_and_gateway_consumes():
     topic, data, key = sentinel_msgs[-1]
     assert topic == "sentinel_weight"
     assert key == b"s-sentinel"
-    payload = json.loads(data.decode())
+    event = json.loads(data.decode())
+    payload = event.get("data", event)
     assert payload["sentinel_id"] == "s-sentinel"
     assert payload["weight"] == pytest.approx(0.75)
     assert payload["version"] == 1

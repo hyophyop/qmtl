@@ -201,14 +201,18 @@ class DagManagerClient:
             reply = await self._health_stub.Status(dagmanager_pb2.StatusRequest())
             return bool(reply.neo4j == "ok" and reply.state == "running")
 
-        try:
-            result = await _call()
-            if result:
-                self._breaker.reset()
-            gw_metrics.dagclient_breaker_failures.set(self._breaker.failures)
-            return result
-        except Exception:
-            return False
+        for attempt in range(2):
+            try:
+                result = await _call()
+                if result:
+                    self._breaker.reset()
+                gw_metrics.dagclient_breaker_failures.set(self._breaker.failures)
+                return result
+            except Exception:
+                if attempt == 0:
+                    await asyncio.sleep(0.1)
+                    continue
+                return False
 
     def _infer_namespace(
         self, dag_json: str, world_id: str | None
