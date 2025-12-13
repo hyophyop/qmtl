@@ -7,6 +7,7 @@ from fastapi import APIRouter
 
 from ..schemas import LiveMonitoringReport, LiveMonitoringStrategyReport, RuleResultModel
 from ..services import WorldService
+from ..live_monitoring_worker import LiveMonitoringWorker
 from ..validation_metrics import iso_timestamp_now
 
 
@@ -66,8 +67,25 @@ def create_live_monitoring_router(service: WorldService) -> APIRouter:
             summary={"counts": counts, "total": len(strategies)},
         )
 
+    @router.post("/worlds/{world_id}/live-monitoring/run")
+    async def post_live_monitoring_run(world_id: str) -> dict[str, Any]:
+        worker = LiveMonitoringWorker(
+            service.store,
+            risk_hub=getattr(service, "_risk_hub", None),
+        )
+        updated = await worker.run_world(world_id)
+        return {"world_id": world_id, "updated": updated}
+
+    @router.post("/worlds/live-monitoring/run-all")
+    async def post_live_monitoring_run_all() -> dict[str, Any]:
+        worker = LiveMonitoringWorker(
+            service.store,
+            risk_hub=getattr(service, "_risk_hub", None),
+        )
+        results = await worker.run_all_worlds()
+        return {"results": results}
+
     return router
 
 
 __all__ = ["create_live_monitoring_router"]
-
