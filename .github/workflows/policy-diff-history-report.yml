@@ -1,0 +1,149 @@
+name: policy-diff-history-report
+
+on:
+  workflow_dispatch:
+    inputs:
+      worlds:
+        description: "Comma-separated world ids (empty = all worlds)"
+        required: false
+        default: ""
+      stage:
+        description: "Validation stage filter (backtest/paper/live)"
+        required: false
+        default: "backtest"
+      months:
+        description: "Lookback window in months (approx; default=12)"
+        required: false
+        default: "12"
+      max_items:
+        description: "Max items per world (post-filter, pre-eval)"
+        required: false
+        default: "2000"
+      dedupe:
+        description: "Dedupe mode (strategy|none)"
+        required: false
+        default: "strategy"
+      sample_mode:
+        description: "Sampling mode (latest|random)"
+        required: false
+        default: "latest"
+      fail_impact_ratio:
+        description: "Fail if any world impact_ratio >= threshold (0~1); empty disables"
+        required: false
+        default: "0.05"
+      policy_path:
+        description: "Policy file path in repo"
+        required: false
+        default: "docs/ko/world/sample_policy.yml"
+  schedule:
+    - cron: "49 2 * * 2" # Tuesdays 02:49 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    env:
+      WORLDS_DB_DSN: ${{ secrets.WORLDS_DB_DSN }}
+      WORLDS_REDIS_DSN: ${{ secrets.WORLDS_REDIS_DSN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Skip if secrets missing
+        if: ${{ env.WORLDS_DB_DSN == '' || env.WORLDS_REDIS_DSN == '' }}
+        run: |
+          echo "Missing WORLDS_DB_DSN/WORLDS_REDIS_DSN secrets; skipping policy diff history report."
+          exit 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Prepare venv
+        run: uv venv
+
+      - name: Install dependencies
+        run: uv pip install -e ".[dev]"
+
+      - name: Resolve baseline revision
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git rev-parse HEAD~1 >/dev/null 2>&1; then
+            echo "baseline_rev=HEAD~1" >> "$GITHUB_OUTPUT"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+
+      - name: Create baseline worktree
+        if: ${{ steps.baseline.outputs.skip != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git worktree add --detach baseline "${{ steps.baseline.outputs.baseline_rev }}"
+
+      - name: Generate report
+        if: ${{ steps.baseline.outputs.skip != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          policy_path="${{ inputs.policy_path || 'docs/ko/world/sample_policy.yml' }}"
+          old_policy_path="baseline/$policy_path"
+          if [[ ! -f "$old_policy_path" ]]; then
+            old_policy_path="$policy_path"
+          fi
+
+          stage="${{ inputs.stage || 'backtest' }}"
+          months="${{ inputs.months || '12' }}"
+          max_items="${{ inputs.max_items || '2000' }}"
+          dedupe="${{ inputs.dedupe || 'strategy' }}"
+          sample_mode="${{ inputs.sample_mode || 'latest' }}"
+          fail_ratio="${{ inputs.fail_impact_ratio || '0.05' }}"
+
+          worlds="${{ inputs.worlds || '' }}"
+          args=(
+            --old "$old_policy_path"
+            --new "$policy_path"
+            --stage "$stage"
+            --months "$months"
+            --max-items "$max_items"
+            --dedupe "$dedupe"
+            --sample-mode "$sample_mode"
+            --output policy_diff_history_report.json
+            --output-md policy_diff_history_report.md
+          )
+          if [[ -n "$fail_ratio" ]]; then
+            args+=(--fail-impact-ratio "$fail_ratio")
+          fi
+          if [[ -n "$worlds" ]]; then
+            IFS=',' read -r -a world_list <<< "$worlds"
+            for w in "${world_list[@]}"; do
+              w_trim="$(echo "$w" | xargs)"
+              if [[ -n "$w_trim" ]]; then
+                args+=(--world "$w_trim")
+              fi
+            done
+          fi
+          uv run python scripts/policy_diff_store_history.py "${args[@]}"
+
+      - name: Write skip report
+        if: ${{ steps.baseline.outputs.skip == 'true' }}
+        run: |
+          cat > policy_diff_history_report.json <<'JSON'
+          {"skipped": true}
+          JSON
+          echo "# Policy Diff — EvaluationRun History Report (Skipped)" > policy_diff_history_report.md
+
+      - name: Upload report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: policy-diff-history-report
+          path: |
+            policy_diff_history_report.json
+            policy_diff_history_report.md
+

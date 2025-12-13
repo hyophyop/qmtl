@@ -67,6 +67,15 @@ Scenario SLO gate (defaults):
 - bad: `fail_ratio>=0.5`, `unknown_ratio=0.0`
 - known_bad: `pass_ratio<=0.05` (i.e., `fail|warn>=95%`), `unknown_ratio=0.0`
 
+## Store-History Regression Report (N months)
+
+In addition to the static scenario sets, you can generate an **old vs new policy diff report** over stored EvaluationRuns from the last N months (e.g. 12 months).
+
+- Script: `scripts/policy_diff_store_history.py` (env: `WORLDS_DB_DSN`, `WORLDS_REDIS_DSN`)
+- Outputs: JSON + Markdown (`--output`, `--output-md`)
+- Threshold (example): `--fail-impact-ratio 0.05` (per-world impact ratio)
+- GitHub Actions (scheduled/manual): `.github/workflows/policy-diff-history-report.yml` (auto-skips if secrets are missing)
+
 ## Change Log (Minimal)
 
 For every validation policy/rule PR, include in the PR description:
