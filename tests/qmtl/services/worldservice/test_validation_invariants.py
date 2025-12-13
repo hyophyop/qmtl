@@ -197,6 +197,78 @@ class TestInvariant1LiveStatusConsistency:
         assert not report.ok
         assert len(report.live_status_failures) == 1
 
+    def test_live_strategy_with_outdated_policy_version_is_flagged(self):
+        world = {"id": "world-prod", "default_policy_version": 3}
+        runs = [
+            {
+                "world_id": "world-prod",
+                "strategy_id": "strat-outdated",
+                "run_id": "run-legacy",
+                "stage": "live",
+                "summary": {"status": "pass"},
+                "metrics": ensure_validation_health(
+                    _full_metrics(), {"performance": {"status": "pass"}}
+                ),
+                "validation": {"results": {"performance": {"status": "pass"}}, "policy_version": "2"},
+                "created_at": "2025-01-01T00:00:00+00:00",
+            }
+        ]
+
+        report = check_validation_invariants(world, runs)
+
+        assert not report.ok
+        assert len(report.live_policy_version_mismatches) == 1
+        mismatch = report.live_policy_version_mismatches[0]
+        assert mismatch["policy_version"] == "2"
+        assert mismatch["required_policy_version"] == 3
+
+    def test_live_strategy_without_policy_version_is_flagged(self):
+        world = {"id": "world-prod", "default_policy_version": 1}
+        runs = [
+            {
+                "world_id": "world-prod",
+                "strategy_id": "strat-missing",
+                "run_id": "run-missing",
+                "stage": "live",
+                "summary": {"status": "pass"},
+                "metrics": ensure_validation_health(
+                    _full_metrics(), {"performance": {"status": "pass"}}
+                ),
+                "validation": {"results": {"performance": {"status": "pass"}}},
+                "created_at": "2025-01-01T00:00:00+00:00",
+            }
+        ]
+
+        report = check_validation_invariants(world, runs)
+
+        assert not report.ok
+        assert len(report.live_policy_version_mismatches) == 1
+
+    def test_live_policy_version_meeting_world_requirement_is_ok(self):
+        world = {"id": "world-prod", "default_policy_version": 2}
+        runs = [
+            {
+                "world_id": "world-prod",
+                "strategy_id": "strat-current",
+                "run_id": "run-current",
+                "stage": "live",
+                "summary": {"status": "pass"},
+                "metrics": ensure_validation_health(
+                    _full_metrics(), {"performance": {"status": "pass"}}
+                ),
+                "validation": {
+                    "results": {"performance": {"status": "pass"}},
+                    "policy_version": "2",
+                },
+                "created_at": "2025-01-02T00:00:00+00:00",
+            }
+        ]
+
+        report = check_validation_invariants(world, runs)
+
+        assert report.ok
+        assert len(report.live_policy_version_mismatches) == 0
+
     def test_multiple_live_strategies_only_latest_per_strategy_checked(self):
         """각 전략별 최신 run만 검사한다."""
         world = {"id": "world-prod"}
