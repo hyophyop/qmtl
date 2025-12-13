@@ -1,0 +1,108 @@
+name: live-monitoring-schedule
+
+on:
+  workflow_dispatch:
+    inputs:
+      worlds:
+        description: "Comma-separated world ids (empty = all worlds)"
+        required: false
+        default: ""
+      blob_store_type:
+        description: "Blob store type for refs (file|redis|s3)"
+        required: false
+        default: "file"
+      blob_store_bucket:
+        description: "S3 bucket (when blob_store_type=s3)"
+        required: false
+        default: ""
+      blob_store_prefix:
+        description: "S3 prefix (when blob_store_type=s3)"
+        required: false
+        default: ""
+      blob_store_base_dir:
+        description: "Base dir for file blob store (when blob_store_type=file)"
+        required: false
+        default: ".risk_blobs"
+  schedule:
+    - cron: "13 */2 * * *" # Every 2 hours at :13 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  live-monitoring:
+    runs-on: ubuntu-latest
+    env:
+      WORLDS_DB_DSN: ${{ secrets.WORLDS_DB_DSN }}
+      WORLDS_REDIS_DSN: ${{ secrets.WORLDS_REDIS_DSN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip if secrets missing
+        if: ${{ env.WORLDS_DB_DSN == '' || env.WORLDS_REDIS_DSN == '' }}
+        run: |
+          echo "Missing WORLDS_DB_DSN/WORLDS_REDIS_DSN secrets; skipping live monitoring job."
+          exit 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv pip install -e ".[dev]"
+
+      - name: Run live monitoring worker (once)
+        shell: bash
+        run: |
+          set -euo pipefail
+          worlds="${{ inputs.worlds || '' }}"
+          args=(
+            --interval-seconds 0
+            --blob-store-type "${{ inputs.blob_store_type || 'file' }}"
+            --blob-store-base-dir "${{ inputs.blob_store_base_dir || '.risk_blobs' }}"
+          )
+
+          if [[ -n "${{ inputs.blob_store_bucket || '' }}" ]]; then
+            args+=(--blob-store-bucket "${{ inputs.blob_store_bucket }}")
+          fi
+          if [[ -n "${{ inputs.blob_store_prefix || '' }}" ]]; then
+            args+=(--blob-store-prefix "${{ inputs.blob_store_prefix }}")
+          fi
+
+          if [[ -n "$worlds" ]]; then
+            IFS=',' read -r -a world_list <<< "$worlds"
+            for w in "${world_list[@]}"; do
+              w_trim="$(echo "$w" | xargs)"
+              if [[ -n "$w_trim" ]]; then
+                args+=(--world "$w_trim")
+              fi
+            done
+          fi
+
+          uv run python scripts/live_monitoring_worker.py "${args[@]}"
+
+      - name: Generate live monitoring report
+        shell: bash
+        run: |
+          set -euo pipefail
+          worlds="${{ inputs.worlds || '' }}"
+          args=()
+          if [[ -n "$worlds" ]]; then
+            IFS=',' read -r -a world_list <<< "$worlds"
+            for w in "${world_list[@]}"; do
+              w_trim="$(echo "$w" | xargs)"
+              if [[ -n "$w_trim" ]]; then
+                args+=(--world "$w_trim")
+              fi
+            done
+          fi
+          uv run python scripts/generate_live_monitoring_report.py "${args[@]}" --format md --output live_monitoring_report.md
+          uv run python scripts/generate_live_monitoring_report.py "${args[@]}" --format json --output live_monitoring_report.json
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-monitoring-report
+          path: |
+            live_monitoring_report.md
+            live_monitoring_report.json
+

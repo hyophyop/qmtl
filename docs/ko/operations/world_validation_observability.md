@@ -40,6 +40,7 @@
 - 운영 엔트리포인트(예시):
   - Live run 생성(크론/데몬): `uv run python scripts/live_monitoring_worker.py --interval-seconds 3600`
   - 리포트 생성(Markdown/JSON): `uv run python scripts/generate_live_monitoring_report.py --world <world_id> --output live_report.md`
+  - GitHub Actions 스케줄(권장): `.github/workflows/live-monitoring-schedule.yml` (secrets 미설정 시 자동 skip + 리포트 아티팩트 업로드)
 
 ### 5) Validation Health / Invariants
 
