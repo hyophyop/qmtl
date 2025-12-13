@@ -9,6 +9,8 @@ from typing import Any, Dict, Iterable
 from qmtl.foundation.common.cloudevents import format_event
 from qmtl.services.kafka import KafkaProducerLike, create_kafka_producer
 
+from .controlbus_defaults import DEFAULT_CONTROLBUS_TOPIC
+
 
 class ControlBusProducer:
     """Publish updates to the internal ControlBus."""
@@ -17,7 +19,7 @@ class ControlBusProducer:
         self,
         *,
         brokers: Iterable[str] | None = None,
-        topic: str = "policy",
+        topic: str = DEFAULT_CONTROLBUS_TOPIC,
         producer: KafkaProducerLike | None = None,
         required: bool = False,
         retries: int = 2,

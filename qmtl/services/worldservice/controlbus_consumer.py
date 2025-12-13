@@ -18,6 +18,13 @@ from qmtl.services.kafka import KafkaProducerLike, create_kafka_producer
 from qmtl.services.risk_hub_contract import risk_snapshot_dedupe_key
 
 from . import metrics as ws_metrics
+from .controlbus_defaults import (
+    DEFAULT_RISK_HUB_CONSUMER_GROUP_ID,
+    DEFAULT_RISK_HUB_DEDUPE_TTL_SEC,
+    DEFAULT_RISK_HUB_DLQ_TOPIC,
+    DEFAULT_RISK_HUB_MAX_ATTEMPTS,
+    DEFAULT_RISK_HUB_RETRY_BACKOFF_SEC,
+)
 from .risk_hub import PortfolioSnapshot, RiskSignalHub
 
 
@@ -58,15 +65,15 @@ class RiskHubControlBusConsumer:
         hub: RiskSignalHub,
         on_snapshot: Callable[[PortfolioSnapshot], Awaitable[Any]] | None = None,
         dedupe_cache: Any | None = None,
-        dedupe_ttl_sec: int | None = None,
-        max_attempts: int = 3,
-        retry_backoff_sec: float = 0.5,
-        dlq_topic: str | None = None,
+        dedupe_ttl_sec: int | None = DEFAULT_RISK_HUB_DEDUPE_TTL_SEC,
+        max_attempts: int = DEFAULT_RISK_HUB_MAX_ATTEMPTS,
+        retry_backoff_sec: float = DEFAULT_RISK_HUB_RETRY_BACKOFF_SEC,
+        dlq_topic: str | None = DEFAULT_RISK_HUB_DLQ_TOPIC,
         dlq_producer: KafkaProducerLike | None = None,
         brokers: Iterable[str] | None = None,
         topic: str | None = None,
         consumer: KafkaConsumerLike | None = None,
-        group_id: str = "worldservice-risk-hub",
+        group_id: str = DEFAULT_RISK_HUB_CONSUMER_GROUP_ID,
     ) -> None:
         self._hub = hub
         self._on_snapshot = on_snapshot

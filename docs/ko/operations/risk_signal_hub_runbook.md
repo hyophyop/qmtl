@@ -9,10 +9,10 @@ status: draft
 # Risk Signal Hub 운영 런북
 
 ## 1. 구성 요약
-- **WS**: `risk_hub` 라우터(토큰 보호), Redis 캐시, Postgres `risk_snapshots` 테이블, ControlBus 이벤트 소비(`risk_snapshot_updated`), activation 변경 시 스냅샷 push.
+- **WS**: `risk_hub` 라우터(토큰 보호), Redis 캐시, Postgres `risk_snapshots` 테이블, ControlBus 이벤트 소비(CloudEvents type `risk_snapshot_updated`), activation 변경 시 스냅샷 push.
 - **Gateway**: 리밸런스/체결 후 hub push(재시도/backoff), 대용량 공분산은 blob-store(S3/Redis/file)로 offload → `covariance_ref`.
 - **Blob store**: dev=file(`JsonBlobStore`), prod=S3(+옵션: Redis).
-- **이벤트**: ControlBus/Kafka 토픽 공통(`risk_snapshot_updated`); WS 소비 → ExtendedValidation/스트레스/라이브 워커 트리거.
+- **이벤트**: ControlBus/Kafka 토픽(`worldservice.server.controlbus_topic`)에 `risk_snapshot_updated` 타입 이벤트가 발행되며, WS가 소비 → ExtendedValidation/스트레스/라이브 워커 트리거.
   - 헤더 계약: `Authorization: Bearer <token>`(prod), `X-Actor`(필수), `X-Stage`(backtest/paper/live 등 — dedupe/알람 분리용).
 
 ## 2. 배포 체크리스트
@@ -26,7 +26,7 @@ status: draft
   - Offload 대상 공분산/returns를 blob-store 업로드(동일 ref 스키마).
   - 리밸런스·체결·포지션 싱크 후 hub push 경로 활성화.
 - ControlBus/Queue:
-  - Kafka 토픽 `risk_snapshot_updated` 생성, 파티션/보존일 확인.
+  - Kafka 토픽 `${controlbus_topic}` 생성, 파티션/보존일 확인(이벤트 `type`으로 분기).
   - WS `RiskHubControlBusConsumer` 그룹 생성(`worldservice-risk-hub`).
 
 ## 3. 모니터링/알람
