@@ -210,7 +210,7 @@ class GatewayClient:
         gateway_url: str,
         world_id: str,
         strategy_id: str,
-        metrics: dict[str, float],
+        metrics: dict[str, Any],
         returns: list[float],
         policy_payload: dict[str, Any] | None = None,
         evaluation_run_id: str | None = None,
