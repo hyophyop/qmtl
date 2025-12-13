@@ -809,6 +809,65 @@ async def test_advanced_metrics_are_derived_from_series():
 
 
 @pytest.mark.asyncio
+async def test_paper_shadow_consistency_rule_detects_drift():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wps"})
+            policy = {
+                "paper_shadow_consistency": {
+                    "stages": ["paper"],
+                    "min_sharpe_ratio": 0.8,
+                    "max_drawdown_ratio": 1.5,
+                    "severity": "blocking",
+                    "owner": "ops",
+                }
+            }
+            await client.post("/worlds/wps/policies", json={"policy": policy})
+            await client.post("/worlds/wps/set-default", json={"version": 1})
+
+            backtest_returns = [0.01 if i % 5 else -0.02 for i in range(60)]
+            await client.post(
+                "/worlds/wps/evaluate",
+                json={
+                    "strategy_id": "s-drift",
+                    "run_id": "run-backtest",
+                    "stage": "backtest",
+                    "risk_tier": "medium",
+                    "metrics": {"s-drift": {"returns": {"sharpe": 1.0, "max_drawdown": -0.2}}},
+                    "series": {"s-drift": {"returns": backtest_returns}},
+                },
+            )
+
+            paper_returns = [0.005 if i % 5 else -0.04 for i in range(60)]
+            paper_resp = await client.post(
+                "/worlds/wps/evaluate",
+                json={
+                    "strategy_id": "s-drift",
+                    "run_id": "run-paper",
+                    "stage": "paper",
+                    "risk_tier": "medium",
+                    "metrics": {"s-drift": {"returns": {"sharpe": 0.5, "max_drawdown": -0.4}}},
+                    "series": {"s-drift": {"returns": paper_returns}},
+                },
+            )
+            assert paper_resp.status_code == 200
+
+            run_resp = await client.get("/worlds/wps/strategies/s-drift/runs/run-paper")
+            assert run_resp.status_code == 200
+            record = run_resp.json()
+            results = record["validation"]["results"]
+            assert "paper_shadow_consistency" in results
+            assert results["paper_shadow_consistency"]["status"] == "fail"
+            assert results["paper_shadow_consistency"]["reason_code"].startswith("paper_shadow_")
+
+            extra = record["metrics"]["diagnostics"]["extra_metrics"]
+            assert extra["backtest_sharpe"] == pytest.approx(1.0)
+            assert extra["paper_vs_backtest_sharpe_ratio"] == pytest.approx(0.5)
+            assert extra["paper_vs_backtest_dd_ratio"] == pytest.approx(2.0)
+
+
+@pytest.mark.asyncio
 async def test_policy_missing_metrics_is_flagged():
     app = create_app(storage=Storage())
     async with httpx.ASGITransport(app=app) as asgi:
