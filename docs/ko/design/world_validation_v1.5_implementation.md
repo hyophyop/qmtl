@@ -43,10 +43,12 @@
 
 본 문서의 매트릭스가 모두 **충족** 상태가 되면서(v1.5 closeout), 아래 항목은 v1.5 이후 확장 과제로 분리합니다.
 
-- **Live 모니터링 자동 생성**: 스케줄러 → Live EvaluationRun 생성 워커 연결(30/60/90일) + 지연/실패 알람
-- **Portfolio/Stress 입력 소스 강화**: realized/stress 프로듀서 연결 + 해시/actor/ACL 검증
-- **SDK→WS SSOT 전환**: SDK metrics-only 유지, WS `/evaluate` 단일 진입 통합 테스트 고정
-- **거버넌스/운영 가시성**: override 재검토 큐·승인 SLA, SR 11-7 인바리언트 대시보드 확장
+추적 이슈: #1934
+
+- **Live 모니터링 자동 생성**: #1907 (완료)
+- **Portfolio/Stress 입력 소스 강화**: #1909 (완료)
+- **SDK→WS SSOT 전환**: #1910 (완료)
+- **거버넌스/운영 가시성**: #1911 (완료)
 
 ## 최근 진행 업데이트
 - v1 코어 risk 메트릭 산출 보강: #1922
