@@ -43,18 +43,27 @@
 
 - `.github/workflows/policy-diff-regression.yml`
 
-기본 시나리오 세트:
+기본 시나리오 세트(Good/Borderline/Bad):
 
+- `operations/policy_diff/good_strategies_runs/*.json`
+- `operations/policy_diff/borderline_strategies_runs/*.json`
 - `operations/policy_diff/bad_strategies_runs/*.json`
 
 산출물(artifact):
 
-- base/head 스냅샷
-- diff 리포트(JSON/Markdown)
+- base/head 스냅샷(시나리오별)
+- diff 리포트(JSON/Markdown, 시나리오별)
+- 시나리오 SLO 요약(JSON, head 기준)
 
 임계 초과 시 실패(기본값 5%):
 
 - `fail_impact_ratio` (0~1)
+
+시나리오 SLO 게이트(기본값):
+
+- good: `pass_ratio=1.0`, `fail_ratio=0.0`, `unknown_ratio=0.0`
+- borderline: `pass_ratio`/`fail_ratio` 모두 `0.1~0.9`, `unknown_ratio=0.0`
+- bad: `fail_ratio>=0.5`, `unknown_ratio=0.0`
 
 ## 변경 로그(최소 포맷)
 
@@ -73,11 +82,16 @@ uv run python scripts/policy_snapshot.py \
   --policy docs/ko/world/sample_policy.yml \
   --runs-dir operations/policy_diff/bad_strategies_runs \
   --stage backtest \
-  --output head_snapshot.json
+  --output head_snapshot_bad.json
+
+uv run python scripts/policy_scenario_check.py \
+  --snapshot head_snapshot_bad.json \
+  --min-fail-ratio 0.5 \
+  --max-unknown-ratio 0.0
 
 uv run python scripts/policy_snapshot_diff.py \
   --old base_snapshot.json \
-  --new head_snapshot.json \
+  --new head_snapshot_bad.json \
   --fail-impact-ratio 0.05 \
   --output policy_regression_report.json \
   --output-md policy_regression_report.md

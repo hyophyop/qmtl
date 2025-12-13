@@ -98,32 +98,74 @@ jobs:
           head_sha="$(git rev-parse HEAD)"
 
           policy_path="docs/ko/world/sample_policy.yml"
-          runs_dir="operations/policy_diff/bad_strategies_runs"
+          scenarios=(
+            "good:operations/policy_diff/good_strategies_runs"
+            "borderline:operations/policy_diff/borderline_strategies_runs"
+            "bad:operations/policy_diff/bad_strategies_runs"
+          )
 
-          PYTHONPATH="$PWD/baseline" uv run python scripts/policy_snapshot.py \
-            --policy "baseline/$policy_path" \
-            --runs-dir "baseline/$runs_dir" \
-            --runs-pattern '*.json' \
-            --stage "$stage" \
-            --revision "$base_sha" \
-            --policy-version "baseline:$base_sha" \
-            --output baseline_snapshot.json
+          for entry in "${scenarios[@]}"; do
+            name="${entry%%:*}"
+            runs_dir="${entry#*:}"
 
-          uv run python scripts/policy_snapshot.py \
-            --policy "$policy_path" \
-            --runs-dir "$runs_dir" \
-            --runs-pattern '*.json' \
-            --stage "$stage" \
-            --revision "$head_sha" \
-            --policy-version "head:$head_sha" \
-            --output head_snapshot.json
+            baseline_runs_dir="baseline/$runs_dir"
+            if [[ ! -d "$baseline_runs_dir" ]]; then
+              baseline_runs_dir="$runs_dir"
+            fi
 
-          uv run python scripts/policy_snapshot_diff.py \
-            --old baseline_snapshot.json \
-            --new head_snapshot.json \
-            --fail-impact-ratio "$fail_ratio" \
-            --output policy_diff_report.json \
-            --output-md policy_diff_report.md
+            PYTHONPATH="$PWD/baseline" uv run python scripts/policy_snapshot.py \
+              --policy "baseline/$policy_path" \
+              --runs-dir "$baseline_runs_dir" \
+              --runs-pattern '*.json' \
+              --stage "$stage" \
+              --revision "$base_sha" \
+              --policy-version "baseline:$base_sha" \
+              --output "baseline_snapshot_${name}.json"
+
+            uv run python scripts/policy_snapshot.py \
+              --policy "$policy_path" \
+              --runs-dir "$runs_dir" \
+              --runs-pattern '*.json' \
+              --stage "$stage" \
+              --revision "$head_sha" \
+              --policy-version "head:$head_sha" \
+              --output "head_snapshot_${name}.json"
+
+            uv run python scripts/policy_snapshot_diff.py \
+              --old "baseline_snapshot_${name}.json" \
+              --new "head_snapshot_${name}.json" \
+              --fail-impact-ratio "$fail_ratio" \
+              --output "policy_diff_report_${name}.json" \
+              --output-md "policy_diff_report_${name}.md"
+
+            case "$name" in
+              good)
+                uv run python scripts/policy_scenario_check.py \
+                  --snapshot "head_snapshot_${name}.json" \
+                  --output "scenario_summary_${name}.json" \
+                  --min-pass-ratio 1.0 \
+                  --max-fail-ratio 0.0 \
+                  --max-unknown-ratio 0.0
+                ;;
+              bad)
+                uv run python scripts/policy_scenario_check.py \
+                  --snapshot "head_snapshot_${name}.json" \
+                  --output "scenario_summary_${name}.json" \
+                  --min-fail-ratio 0.5 \
+                  --max-unknown-ratio 0.0
+                ;;
+              borderline)
+                uv run python scripts/policy_scenario_check.py \
+                  --snapshot "head_snapshot_${name}.json" \
+                  --output "scenario_summary_${name}.json" \
+                  --min-pass-ratio 0.1 \
+                  --max-pass-ratio 0.9 \
+                  --min-fail-ratio 0.1 \
+                  --max-fail-ratio 0.9 \
+                  --max-unknown-ratio 0.0
+                ;;
+            esac
+          done
 
       - name: Write skip report
         if: ${{ steps.baseline.outputs.skip == 'true' }}
@@ -134,11 +176,13 @@ jobs:
           echo "# Policy Regression Report (Skipped)" > policy_diff_report.md
 
       - name: Upload report
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: policy-diff-report
           path: |
-            policy_diff_report.json
-            policy_diff_report.md
-            baseline_snapshot.json
-            head_snapshot.json
+            policy_diff_report*.json
+            policy_diff_report*.md
+            baseline_snapshot_*.json
+            head_snapshot_*.json
+            scenario_summary_*.json

@@ -43,18 +43,27 @@ When validation policy/rule boundary files change, CI runs a **base vs head** re
 
 - `.github/workflows/policy-diff-regression.yml`
 
-Default scenario set:
+Default scenario sets (Good/Borderline/Bad):
 
+- `operations/policy_diff/good_strategies_runs/*.json`
+- `operations/policy_diff/borderline_strategies_runs/*.json`
 - `operations/policy_diff/bad_strategies_runs/*.json`
 
 Artifacts:
 
-- base/head snapshots
-- diff report (JSON/Markdown)
+- base/head snapshots (per scenario)
+- diff report (JSON/Markdown, per scenario)
+- scenario SLO summary (JSON, head only)
 
 Failure threshold (default 5%):
 
 - `fail_impact_ratio` (0~1)
+
+Scenario SLO gate (defaults):
+
+- good: `pass_ratio=1.0`, `fail_ratio=0.0`, `unknown_ratio=0.0`
+- borderline: both `pass_ratio` and `fail_ratio` within `0.1~0.9`, `unknown_ratio=0.0`
+- bad: `fail_ratio>=0.5`, `unknown_ratio=0.0`
 
 ## Change Log (Minimal)
 
@@ -73,11 +82,16 @@ uv run python scripts/policy_snapshot.py \
   --policy docs/ko/world/sample_policy.yml \
   --runs-dir operations/policy_diff/bad_strategies_runs \
   --stage backtest \
-  --output head_snapshot.json
+  --output head_snapshot_bad.json
+
+uv run python scripts/policy_scenario_check.py \
+  --snapshot head_snapshot_bad.json \
+  --min-fail-ratio 0.5 \
+  --max-unknown-ratio 0.0
 
 uv run python scripts/policy_snapshot_diff.py \
   --old base_snapshot.json \
-  --new head_snapshot.json \
+  --new head_snapshot_bad.json \
   --fail-impact-ratio 0.05 \
   --output policy_regression_report.json \
   --output-md policy_regression_report.md

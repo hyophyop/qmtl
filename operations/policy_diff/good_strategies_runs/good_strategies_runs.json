@@ -1,0 +1,71 @@
+[
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "good_set_1",
+    "run_id": "good-set-001",
+    "metrics": {
+      "returns": {
+        "sharpe": 1.2,
+        "max_drawdown": 0.12,
+        "gain_to_pain_ratio": 1.8
+      },
+      "sample": {
+        "effective_history_years": 5.0,
+        "n_trades_total": 500
+      },
+      "risk": {
+        "adv_utilization_p95": 0.1,
+        "participation_rate_p95": 0.05
+      },
+      "robustness": {
+        "deflated_sharpe_ratio": 0.8
+      }
+    }
+  },
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "good_set_2",
+    "run_id": "good-set-002",
+    "metrics": {
+      "returns": {
+        "sharpe": 0.9,
+        "max_drawdown": 0.18,
+        "gain_to_pain_ratio": 1.4
+      },
+      "sample": {
+        "effective_history_years": 3.5,
+        "n_trades_total": 220
+      },
+      "risk": {
+        "adv_utilization_p95": 0.2,
+        "participation_rate_p95": 0.1
+      },
+      "robustness": {
+        "deflated_sharpe_ratio": 0.5
+      }
+    }
+  },
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "good_set_3",
+    "run_id": "good-set-003",
+    "metrics": {
+      "returns": {
+        "sharpe": 0.7,
+        "max_drawdown": 0.2,
+        "gain_to_pain_ratio": 1.2
+      },
+      "sample": {
+        "effective_history_years": 2.5,
+        "n_trades_total": 120
+      },
+      "risk": {
+        "adv_utilization_p95": 0.3,
+        "participation_rate_p95": 0.2
+      },
+      "robustness": {
+        "deflated_sharpe_ratio": 0.2
+      }
+    }
+  }
+]
