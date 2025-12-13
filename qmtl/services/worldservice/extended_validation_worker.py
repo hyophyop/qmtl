@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+import math
 import logging
 import inspect
 
@@ -113,6 +114,75 @@ class ExtendedValidationWorker:
                 derived = augment_stress_metrics(derived, policy_payload=policy_payload)
                 run["metrics"] = derived
 
+        hub_weights = (
+            dict(hub_payload.get("weights") or {})
+            if isinstance(hub_payload, Mapping) and isinstance(hub_payload.get("weights"), Mapping)
+            else None
+        )
+        hub_covariance = (
+            dict(hub_payload.get("covariance") or {})
+            if isinstance(hub_payload, Mapping) and isinstance(hub_payload.get("covariance"), Mapping)
+            else None
+        )
+        baseline_from_hub = (
+            self._baseline_from_covariance(hub_weights, hub_covariance)
+            if hub_weights is not None and hub_covariance is not None
+            else {}
+        )
+        candidate_weight = self._candidate_weight_from_snapshot(
+            hub_payload, active_count=len(hub_weights) if hub_weights else 0
+        )
+
+        for run in filtered:
+            strategy_id = run.get("strategy_id")
+            if not strategy_id:
+                continue
+            sid = str(strategy_id)
+            raw_metrics = run.get("metrics") if isinstance(run.get("metrics"), Mapping) else {}
+            metrics: dict[str, Any] = dict(raw_metrics or {})
+
+            baseline = baseline_from_hub or await self._portfolio_baseline(world_id, exclude_strategy_id=sid)
+            incremental = (
+                self._incremental_var_es_from_covariance(
+                    weights=hub_weights,
+                    covariance=hub_covariance,
+                    candidate_id=sid,
+                    candidate_weight=candidate_weight,
+                    baseline=baseline_from_hub,
+                )
+                if hub_weights is not None
+                and hub_covariance is not None
+                and baseline_from_hub.get("var_99") is not None
+                and baseline_from_hub.get("es_99") is not None
+                else None
+            )
+            if incremental is not None:
+                risk_block = metrics.get("risk") if isinstance(metrics.get("risk"), Mapping) else {}
+                risk_block = dict(risk_block or {})
+                risk_block["incremental_var_99"] = incremental["incremental_var_99"]
+                risk_block["incremental_es_99"] = incremental["incremental_es_99"]
+                metrics["risk"] = risk_block
+
+                diagnostics = (
+                    metrics.get("diagnostics")
+                    if isinstance(metrics.get("diagnostics"), Mapping)
+                    else {}
+                )
+                diagnostics = dict(diagnostics or {})
+                extra = diagnostics.get("extra_metrics")
+                extra = dict(extra) if isinstance(extra, Mapping) else {}
+                extra.setdefault("portfolio_candidate_weight", incremental["candidate_weight"])
+                diagnostics["extra_metrics"] = extra
+                metrics["diagnostics"] = diagnostics
+
+            metrics = augment_portfolio_metrics(
+                metrics,
+                baseline_sharpe=baseline.get("sharpe") if isinstance(baseline, Mapping) else None,
+                baseline_var_99=baseline.get("var_99") if isinstance(baseline, Mapping) else None,
+                baseline_es_99=baseline.get("es_99") if isinstance(baseline, Mapping) else None,
+            )
+            run["metrics"] = metrics
+
         extended = evaluate_extended_layers(filtered, policy, stage=stage)
         if not extended:
             return 0
@@ -125,33 +195,6 @@ class ExtendedValidationWorker:
             strategy_id = str(strategy_id)
             if strategy_id not in extended:
                 continue
-
-            baseline = await self._portfolio_baseline(world_id, exclude_strategy_id=strategy_id)
-            metrics = run.get("metrics") or {}
-            if baseline.get("var_99") is not None or baseline.get("es_99") is not None:
-                risk_block = metrics.get("risk") if isinstance(metrics, Mapping) else {}
-                risk_block = dict(risk_block or {})
-                if baseline.get("var_99") is not None:
-                    risk_block.setdefault("incremental_var_99", baseline["var_99"])
-                if baseline.get("es_99") is not None:
-                    risk_block.setdefault("incremental_es_99", baseline["es_99"])
-                metrics["risk"] = risk_block
-            metrics = augment_live_metrics(metrics, windows=self.windows)
-            metrics = augment_stress_metrics(metrics, policy_payload=policy_payload)
-            metrics = augment_portfolio_metrics(
-                metrics,
-                baseline_sharpe=baseline.get("sharpe"),
-                baseline_var_99=baseline.get("var_99"),
-                baseline_es_99=baseline.get("es_99"),
-            )
-            # Ensure baseline-derived increments persist
-            if baseline.get("var_99") is not None:
-                risk_block = metrics.get("risk") if isinstance(metrics, Mapping) else {}
-                risk_block = dict(risk_block or {})
-                risk_block.setdefault("incremental_var_99", baseline["var_99"])
-                if baseline.get("es_99") is not None:
-                    risk_block.setdefault("incremental_es_99", baseline["es_99"])
-                metrics["risk"] = risk_block
 
             validation = dict(run.get("validation") or {})
             history = validation.get("extended_history")
@@ -179,6 +222,7 @@ class ExtendedValidationWorker:
             )
             validation["extended_history"] = history_list
 
+            metrics = run.get("metrics") if isinstance(run.get("metrics"), Mapping) else {}
             await self.store.record_evaluation_run(
                 world_id,
                 strategy_id,
@@ -422,31 +466,125 @@ class ExtendedValidationWorker:
         return None
 
 
+    @staticmethod
+    def _lookup_covariance(covariance: Mapping[str, Any], a: str, b: str) -> float | None:
+        for sep in (",", ":"):
+            key = f"{a}{sep}{b}"
+            if key in covariance:
+                try:
+                    return float(covariance[key])
+                except Exception:
+                    return None
+            rev = f"{b}{sep}{a}"
+            if rev in covariance:
+                try:
+                    return float(covariance[rev])
+                except Exception:
+                    return None
+        return None
+
+    @staticmethod
+    def _candidate_weight_from_snapshot(snapshot: Any, *, active_count: int) -> float:
+        default = 1.0 / float(max(int(active_count), 0) + 1)
+        constraints = snapshot.get("constraints") if isinstance(snapshot, Mapping) else None
+        if isinstance(constraints, Mapping):
+            raw = None
+            if "candidate_weight" in constraints:
+                raw = constraints.get("candidate_weight")
+            elif "candidate_weight_default" in constraints:
+                raw = constraints.get("candidate_weight_default")
+            elif "candidate_weight_pct" in constraints:
+                raw = constraints.get("candidate_weight_pct")
+                try:
+                    raw = float(raw) / 100.0
+                except Exception:
+                    raw = None
+
+            if raw is not None:
+                try:
+                    value = float(raw)
+                except Exception:
+                    value = None
+                if value is not None and math.isfinite(value) and 0.0 < value <= 1.0:
+                    return value
+        return default
+
+    def _incremental_var_es_from_covariance(
+        self,
+        *,
+        weights: Mapping[str, float],
+        covariance: Mapping[str, Any],
+        candidate_id: str,
+        candidate_weight: float,
+        baseline: Mapping[str, Any],
+    ) -> dict[str, float] | None:
+        if candidate_id in weights:
+            return None
+        base_var = baseline.get("var_99")
+        base_es = baseline.get("es_99")
+        if not isinstance(base_var, (int, float)) or not isinstance(base_es, (int, float)):
+            return None
+        alpha = float(candidate_weight)
+        if not math.isfinite(alpha) or alpha <= 0.0:
+            return None
+        if alpha > 1.0:
+            alpha = 1.0
+
+        if self._lookup_covariance(covariance, candidate_id, candidate_id) is None:
+            return None
+
+        scaled_existing: dict[str, float] = {}
+        if alpha < 1.0:
+            for sid, weight in weights.items():
+                if not isinstance(weight, (int, float)):
+                    continue
+                if weight == 0:
+                    continue
+                scaled = float(weight) * (1.0 - alpha)
+                if scaled != 0:
+                    scaled_existing[str(sid)] = scaled
+
+        new_weights = dict(scaled_existing)
+        new_weights[candidate_id] = alpha
+        with_candidate = self._baseline_from_covariance(new_weights, covariance)
+        with_var = with_candidate.get("var_99")
+        with_es = with_candidate.get("es_99")
+        if not isinstance(with_var, (int, float)) or not isinstance(with_es, (int, float)):
+            return None
+        return {
+            "candidate_weight": alpha,
+            "incremental_var_99": float(with_var) - float(base_var),
+            "incremental_es_99": float(with_es) - float(base_es),
+        }
+
     def _baseline_from_covariance(
-        self, weights: Mapping[str, float], covariance: Mapping[str, float]
+        self, weights: Mapping[str, float], covariance: Mapping[str, Any]
     ) -> dict[str, float | int | None]:
         """Compute baseline var/es from provided weights + covariance matrix."""
 
         if not weights:
             return {}
-        w_sum = sum(weights.values())
+        if not covariance:
+            return {}
+        w_sum = 0.0
+        for value in weights.values():
+            try:
+                w_sum += float(value)
+            except Exception:
+                return {}
         if w_sum <= 0:
             return {}
-        norm_weights = {k: v / w_sum for k, v in weights.items()}
+        norm_weights = {str(k): float(v) / w_sum for k, v in weights.items()}
         variance = 0.0
         sids = list(norm_weights.keys())
         for a in sids:
             for b in sids:
-                key = f"{a},{b}"
-                alt = f"{a}:{b}"
-                cov_val = covariance.get(key) or covariance.get(alt)
+                cov_val = self._lookup_covariance(covariance, a, b)
                 if cov_val is None:
                     continue
                 variance += norm_weights.get(a, 0.0) * norm_weights.get(b, 0.0) * float(cov_val)
         if variance < 0:
             return {}
-        if variance == 0 and covariance:
-            return {"var_99": 0.0, "es_99": 0.0}
         z_var_99 = 2.33
         var_99 = (variance ** 0.5) * z_var_99
         return {"var_99": var_99, "es_99": var_99 * 1.2}
