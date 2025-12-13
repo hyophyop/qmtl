@@ -97,6 +97,7 @@ def create_validations_router(service: WorldService) -> APIRouter:
         return ValidationInvariantsReport(
             ok=report.ok,
             live_status_failures=report.live_status_failures,
+            live_policy_version_mismatches=report.live_policy_version_mismatches,
             fail_closed_violations=report.fail_closed_violations,
             approved_overrides=report.approved_overrides,
             validation_health_gaps=report.validation_health_gaps,

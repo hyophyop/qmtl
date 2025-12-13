@@ -33,6 +33,7 @@ class InvariantReport:
     """Container for validation invariant results."""
 
     live_status_failures: list[dict[str, Any]]
+    live_policy_version_mismatches: list[dict[str, Any]]
     fail_closed_violations: list[dict[str, Any]]
     approved_overrides: list[dict[str, Any]]
     validation_health_gaps: list[dict[str, Any]]
@@ -41,6 +42,7 @@ class InvariantReport:
     def ok(self) -> bool:
         return not (
             self.live_status_failures
+            or self.live_policy_version_mismatches
             or self.fail_closed_violations
             or self.approved_overrides
             or self.validation_health_gaps
@@ -148,6 +150,13 @@ def _close(a: float | None, b: float | None, *, tol: float = 1e-6) -> bool:
     return abs(a - b) <= tol
 
 
+def _parse_policy_version(raw: Any) -> int | None:
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 def check_validation_invariants(
     world: Mapping[str, Any],
     evaluation_runs: Iterable[Mapping[str, Any]],
@@ -156,6 +165,7 @@ def check_validation_invariants(
 
     runs = list(evaluation_runs)
     world_id = world.get("id") or world.get("world_id")
+    required_policy_version = _parse_policy_version(world.get("default_policy_version"))
 
     live_runs = [
         run for run in runs if str(run.get("stage", "")).lower() == "live"
@@ -163,6 +173,7 @@ def check_validation_invariants(
     latest_live = _latest_live_runs(live_runs)
 
     live_failures: list[dict[str, Any]] = []
+    live_policy_version_mismatches: list[dict[str, Any]] = []
     for run in latest_live:
         summary = run.get("summary") or {}
         status = str(summary.get("status", "")).lower()
@@ -175,6 +186,23 @@ def check_validation_invariants(
                     "status": summary.get("status"),
                 }
             )
+
+        if required_policy_version is not None:
+            validation = run.get("validation") if isinstance(run, Mapping) else {}
+            run_version_raw = (
+                validation.get("policy_version") if isinstance(validation, Mapping) else None
+            )
+            run_version = _parse_policy_version(run_version_raw)
+            if run_version is None or run_version < required_policy_version:
+                live_policy_version_mismatches.append(
+                    {
+                        "world_id": world_id or run.get("world_id"),
+                        "strategy_id": run.get("strategy_id"),
+                        "run_id": run.get("run_id"),
+                        "policy_version": run_version_raw,
+                        "required_policy_version": required_policy_version,
+                    }
+                )
 
     fail_closed_violations: list[dict[str, Any]] = []
     if _world_is_high_tier_and_critical(world):
@@ -235,6 +263,7 @@ def check_validation_invariants(
 
     return InvariantReport(
         live_status_failures=live_failures,
+        live_policy_version_mismatches=live_policy_version_mismatches,
         fail_closed_violations=fail_closed_violations,
         approved_overrides=approved_overrides,
         validation_health_gaps=validation_health_gaps,

@@ -219,6 +219,7 @@ class ValidationCacheResponse(BaseModel):
 class ValidationInvariantsReport(BaseModel):
     ok: bool
     live_status_failures: List[Dict[str, Any]] = Field(default_factory=list)
+    live_policy_version_mismatches: List[Dict[str, Any]] = Field(default_factory=list)
     fail_closed_violations: List[Dict[str, Any]] = Field(default_factory=list)
     approved_overrides: List[Dict[str, Any]] = Field(default_factory=list)
     validation_health_gaps: List[Dict[str, Any]] = Field(default_factory=list)
