@@ -1,0 +1,222 @@
+[
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "known_bad_short_history_01",
+    "run_id": "known-bad-001",
+    "metrics": {
+      "returns": {"sharpe": 1.4, "max_drawdown": 0.08, "gain_to_pain_ratio": 1.6},
+      "sample": {"effective_history_years": 0.4, "n_trades_total": 35},
+      "risk": {"adv_utilization_p95": 0.12, "participation_rate_p95": 0.08},
+      "robustness": {"deflated_sharpe_ratio": 0.6}
+    }
+  },
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "known_bad_short_history_02",
+    "run_id": "known-bad-002",
+    "metrics": {
+      "returns": {"sharpe": 1.1, "max_drawdown": 0.12, "gain_to_pain_ratio": 1.3},
+      "sample": {"effective_history_years": 1.2, "n_trades_total": 120},
+      "risk": {"adv_utilization_p95": 0.15, "participation_rate_p95": 0.1},
+      "robustness": {"deflated_sharpe_ratio": 0.55}
+    }
+  },
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "known_bad_low_trades_01",
+    "run_id": "known-bad-003",
+    "metrics": {
+      "returns": {"sharpe": 1.0, "max_drawdown": 0.15, "gain_to_pain_ratio": 1.4},
+      "sample": {"effective_history_years": 4.0, "n_trades_total": 12},
+      "risk": {"adv_utilization_p95": 0.18, "participation_rate_p95": 0.12},
+      "robustness": {"deflated_sharpe_ratio": 0.45}
+    }
+  },
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "known_bad_low_sharpe_01",
+    "run_id": "known-bad-004",
+    "metrics": {
+      "returns": {"sharpe": 0.05, "max_drawdown": 0.12, "gain_to_pain_ratio": 1.1},
+      "sample": {"effective_history_years": 3.2, "n_trades_total": 160},
+      "risk": {"adv_utilization_p95": 0.2, "participation_rate_p95": 0.15},
+      "robustness": {"deflated_sharpe_ratio": 0.2}
+    }
+  },
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "known_bad_low_sharpe_02",
+    "run_id": "known-bad-005",
+    "metrics": {
+      "returns": {"sharpe": -0.2, "max_drawdown": 0.2, "gain_to_pain_ratio": 0.9},
+      "sample": {"effective_history_years": 2.8, "n_trades_total": 240},
+      "risk": {"adv_utilization_p95": 0.18, "participation_rate_p95": 0.12},
+      "robustness": {"deflated_sharpe_ratio": 0.1}
+    }
+  },
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "known_bad_extreme_drawdown_01",
+    "run_id": "known-bad-006",
+    "metrics": {
+      "returns": {"sharpe": 0.9, "max_drawdown": 0.62, "gain_to_pain_ratio": 1.2},
+      "sample": {"effective_history_years": 4.5, "n_trades_total": 310},
+      "risk": {"adv_utilization_p95": 0.22, "participation_rate_p95": 0.18},
+      "robustness": {"deflated_sharpe_ratio": 0.3}
+    }
+  },
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "known_bad_extreme_drawdown_02",
+    "run_id": "known-bad-007",
+    "metrics": {
+      "returns": {"sharpe": 1.3, "max_drawdown": 0.41, "gain_to_pain_ratio": 1.5},
+      "sample": {"effective_history_years": 6.0, "n_trades_total": 480},
+      "risk": {"adv_utilization_p95": 0.25, "participation_rate_p95": 0.15},
+      "robustness": {"deflated_sharpe_ratio": 0.6}
+    }
+  },
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "known_bad_low_gain_to_pain_01",
+    "run_id": "known-bad-008",
+    "metrics": {
+      "returns": {"sharpe": 1.0, "max_drawdown": 0.18, "gain_to_pain_ratio": 0.4},
+      "sample": {"effective_history_years": 3.8, "n_trades_total": 260},
+      "risk": {"adv_utilization_p95": 0.2, "participation_rate_p95": 0.14},
+      "robustness": {"deflated_sharpe_ratio": 0.5}
+    }
+  },
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "known_bad_low_gain_to_pain_02",
+    "run_id": "known-bad-009",
+    "metrics": {
+      "returns": {"sharpe": 0.7, "max_drawdown": 0.22, "gain_to_pain_ratio": 0.7},
+      "sample": {"effective_history_years": 2.4, "n_trades_total": 190},
+      "risk": {"adv_utilization_p95": 0.15, "participation_rate_p95": 0.1},
+      "robustness": {"deflated_sharpe_ratio": 0.3}
+    }
+  },
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "known_bad_liquidity_adv_01",
+    "run_id": "known-bad-010",
+    "metrics": {
+      "returns": {"sharpe": 1.0, "max_drawdown": 0.12, "gain_to_pain_ratio": 1.3},
+      "sample": {"effective_history_years": 4.0, "n_trades_total": 320},
+      "risk": {"adv_utilization_p95": 0.92, "participation_rate_p95": 0.25},
+      "robustness": {"deflated_sharpe_ratio": 0.55}
+    }
+  },
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "known_bad_liquidity_adv_02",
+    "run_id": "known-bad-011",
+    "metrics": {
+      "returns": {"sharpe": 0.8, "max_drawdown": 0.2, "gain_to_pain_ratio": 1.0},
+      "sample": {"effective_history_years": 3.0, "n_trades_total": 210},
+      "risk": {"adv_utilization_p95": 0.7, "participation_rate_p95": 0.2},
+      "robustness": {"deflated_sharpe_ratio": 0.4}
+    }
+  },
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "known_bad_liquidity_participation_01",
+    "run_id": "known-bad-012",
+    "metrics": {
+      "returns": {"sharpe": 1.1, "max_drawdown": 0.15, "gain_to_pain_ratio": 1.2},
+      "sample": {"effective_history_years": 5.0, "n_trades_total": 410},
+      "risk": {"adv_utilization_p95": 0.25, "participation_rate_p95": 0.8},
+      "robustness": {"deflated_sharpe_ratio": 0.6}
+    }
+  },
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "known_bad_liquidity_participation_02",
+    "run_id": "known-bad-013",
+    "metrics": {
+      "returns": {"sharpe": 0.9, "max_drawdown": 0.22, "gain_to_pain_ratio": 1.0},
+      "sample": {"effective_history_years": 3.4, "n_trades_total": 280},
+      "risk": {"adv_utilization_p95": 0.3, "participation_rate_p95": 0.55},
+      "robustness": {"deflated_sharpe_ratio": 0.5}
+    }
+  },
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "known_bad_low_dsr_01",
+    "run_id": "known-bad-014",
+    "metrics": {
+      "returns": {"sharpe": 0.9, "max_drawdown": 0.2, "gain_to_pain_ratio": 1.1},
+      "sample": {"effective_history_years": 3.5, "n_trades_total": 200},
+      "risk": {"adv_utilization_p95": 0.2, "participation_rate_p95": 0.15},
+      "robustness": {"deflated_sharpe_ratio": 0.02}
+    }
+  },
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "known_bad_low_dsr_02",
+    "run_id": "known-bad-015",
+    "metrics": {
+      "returns": {"sharpe": 1.0, "max_drawdown": 0.14, "gain_to_pain_ratio": 1.2},
+      "sample": {"effective_history_years": 4.2, "n_trades_total": 360},
+      "risk": {"adv_utilization_p95": 0.18, "participation_rate_p95": 0.12},
+      "robustness": {"deflated_sharpe_ratio": 0.08}
+    }
+  },
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "known_bad_compound_01",
+    "run_id": "known-bad-016",
+    "metrics": {
+      "returns": {"sharpe": 0.2, "max_drawdown": 0.48, "gain_to_pain_ratio": 0.6},
+      "sample": {"effective_history_years": 1.4, "n_trades_total": 28},
+      "risk": {"adv_utilization_p95": 0.75, "participation_rate_p95": 0.62},
+      "robustness": {"deflated_sharpe_ratio": 0.05}
+    }
+  },
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "known_bad_compound_02",
+    "run_id": "known-bad-017",
+    "metrics": {
+      "returns": {"sharpe": 0.35, "max_drawdown": 0.3, "gain_to_pain_ratio": 0.8},
+      "sample": {"effective_history_years": 1.8, "n_trades_total": 45},
+      "risk": {"adv_utilization_p95": 0.65, "participation_rate_p95": 0.41},
+      "robustness": {"deflated_sharpe_ratio": 0.12}
+    }
+  },
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "known_bad_compound_03",
+    "run_id": "known-bad-018",
+    "metrics": {
+      "returns": {"sharpe": 0.4, "max_drawdown": 0.33, "gain_to_pain_ratio": 0.95},
+      "sample": {"effective_history_years": 2.1, "n_trades_total": 80},
+      "risk": {"adv_utilization_p95": 0.55, "participation_rate_p95": 0.5},
+      "robustness": {"deflated_sharpe_ratio": 0.1}
+    }
+  },
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "known_bad_compound_04",
+    "run_id": "known-bad-019",
+    "metrics": {
+      "returns": {"sharpe": 0.25, "max_drawdown": 0.26, "gain_to_pain_ratio": 0.7},
+      "sample": {"effective_history_years": 2.6, "n_trades_total": 140},
+      "risk": {"adv_utilization_p95": 0.58, "participation_rate_p95": 0.3},
+      "robustness": {"deflated_sharpe_ratio": 0.09}
+    }
+  },
+  {
+    "world_id": "policy-diff",
+    "strategy_id": "known_bad_compound_05",
+    "run_id": "known-bad-020",
+    "metrics": {
+      "returns": {"sharpe": 0.1, "max_drawdown": 0.38, "gain_to_pain_ratio": 0.5},
+      "sample": {"effective_history_years": 2.9, "n_trades_total": 110},
+      "risk": {"adv_utilization_p95": 0.82, "participation_rate_p95": 0.44},
+      "robustness": {"deflated_sharpe_ratio": 0.07}
+    }
+  }
+]

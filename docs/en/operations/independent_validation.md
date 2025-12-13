@@ -43,11 +43,12 @@ When validation policy/rule boundary files change, CI runs a **base vs head** re
 
 - `.github/workflows/policy-diff-regression.yml`
 
-Default scenario sets (Good/Borderline/Bad):
+Default scenario sets (Good/Borderline/Bad/Known-bad):
 
 - `operations/policy_diff/good_strategies_runs/*.json`
 - `operations/policy_diff/borderline_strategies_runs/*.json`
 - `operations/policy_diff/bad_strategies_runs/*.json`
+- `operations/policy_diff/known_bad_strategies_runs/*.json`
 
 Artifacts:
 
@@ -64,6 +65,7 @@ Scenario SLO gate (defaults):
 - good: `pass_ratio=1.0`, `fail_ratio=0.0`, `unknown_ratio=0.0`
 - borderline: both `pass_ratio` and `fail_ratio` within `0.1~0.9`, `unknown_ratio=0.0`
 - bad: `fail_ratio>=0.5`, `unknown_ratio=0.0`
+- known_bad: `pass_ratio<=0.05` (i.e., `fail|warn>=95%`), `unknown_ratio=0.0`
 
 ## Change Log (Minimal)
 

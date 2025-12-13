@@ -76,6 +76,7 @@ def test_long_running_case():
     --output policy_diff_report.json \
     --fail-impact-ratio 0.05
   ```
+- 추가 가드레일(고위험 false-negative): `operations/policy_diff/known_bad_strategies_runs/*.json` 은 `pass_ratio<=0.05` (즉 `fail|warn>=95%`)를 강제.
 - 아티팩트: `policy_diff_report.json` 을 업로드하고, 임팩트 비율이 임계 초과 시 워크플로를 실패 처리.
 - GitHub Actions 워크플로: `.github/workflows/policy-diff-regression.yml`
   - PR에서 `docs/**/world/sample_policy.yml` 변경 시 자동 실행 + 리포트 아티팩트 업로드
