@@ -120,6 +120,75 @@ class DummyBus(ControlBusProducer):
         payload.setdefault("event_version", version)
         self.events.append(("risk_snapshot_updated", world_id, payload))
 
+    async def publish_evaluation_run_created(  # type: ignore[override]
+        self,
+        world_id: str,
+        *,
+        strategy_id: str,
+        run_id: str,
+        stage: str,
+        risk_tier: str | None = None,
+        status: str | None = None,
+        recommended_stage: str | None = None,
+        version: int = 1,
+    ) -> None:
+        payload: dict[str, Any] = {
+            "strategy_id": strategy_id,
+            "run_id": run_id,
+            "stage": stage,
+            "version": version,
+        }
+        if risk_tier is not None:
+            payload["risk_tier"] = risk_tier
+        if status is not None:
+            payload["status"] = status
+        if recommended_stage is not None:
+            payload["recommended_stage"] = recommended_stage
+        self.events.append(("evaluation_run_created", world_id, payload))
+
+    async def publish_evaluation_run_updated(  # type: ignore[override]
+        self,
+        world_id: str,
+        *,
+        strategy_id: str,
+        run_id: str,
+        stage: str,
+        change_type: str,
+        risk_tier: str | None = None,
+        status: str | None = None,
+        recommended_stage: str | None = None,
+        version: int = 1,
+    ) -> None:
+        payload: dict[str, Any] = {
+            "strategy_id": strategy_id,
+            "run_id": run_id,
+            "stage": stage,
+            "change_type": change_type,
+            "version": version,
+        }
+        if risk_tier is not None:
+            payload["risk_tier"] = risk_tier
+        if status is not None:
+            payload["status"] = status
+        if recommended_stage is not None:
+            payload["recommended_stage"] = recommended_stage
+        self.events.append(("evaluation_run_updated", world_id, payload))
+
+    async def publish_validation_profile_changed(  # type: ignore[override]
+        self,
+        world_id: str,
+        *,
+        policy_version: int,
+        version: int = 1,
+    ) -> None:
+        self.events.append(
+            (
+                "validation_profile_changed",
+                world_id,
+                {"policy_version": policy_version, "version": version},
+            )
+        )
+
 
 class DummyExecutor:
     def __init__(self) -> None:
@@ -214,6 +283,62 @@ async def test_world_crud_policy_apply_and_events():
             # Idempotent acknowledgement for same run
             r = await client.post("/worlds/w1/apply", json=payload)
             assert r.json()["phase"] == "completed"
+
+
+class _CapturingProducer:
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, dict, bytes | None]] = []
+
+    async def start(self) -> None:  # pragma: no cover - trivial stub
+        return None
+
+    async def stop(self) -> None:  # pragma: no cover - trivial stub
+        return None
+
+    async def send_and_wait(self, topic: str, data: bytes, key: bytes | None = None) -> None:
+        import json
+
+        self.sent.append((topic, json.loads(data.decode()), key))
+
+
+@pytest.mark.asyncio
+async def test_evaluation_and_overrides_emit_controlbus_events():
+    producer = _CapturingProducer()
+    bus = ControlBusProducer(producer=producer, topic="events")
+    app = create_app(bus=bus, storage=Storage())
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "w-events", "name": "Events"})
+            await client.post("/worlds/w-events/policies", json={"policy": {}})
+            await client.post("/worlds/w-events/set-default", json={"version": 1})
+
+            eval_payload = {
+                "strategy_id": "s1",
+                "metrics": {"s1": {"sharpe": 1.0}},
+                "policy": {},
+                "run_id": "run-1",
+                "stage": "backtest",
+                "risk_tier": "low",
+            }
+            eval_resp = await client.post("/worlds/w-events/evaluate", json=eval_payload)
+            assert eval_resp.status_code == 200
+
+            override_resp = await client.post(
+                "/worlds/w-events/strategies/s1/runs/run-1/override",
+                json={
+                    "status": "approved",
+                    "reason": "risk sign-off",
+                    "actor": "risk_team",
+                    "timestamp": "2025-01-01T00:00:00Z",
+                },
+            )
+            assert override_resp.status_code == 200
+
+    types = [evt.get("type") for _, evt, _ in producer.sent]
+    assert "validation_profile_changed" in types
+    assert "evaluation_run_created" in types
+    assert "evaluation_run_updated" in types
 
 
 @pytest.mark.asyncio
