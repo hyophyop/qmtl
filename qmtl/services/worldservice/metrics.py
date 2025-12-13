@@ -116,6 +116,48 @@ risk_hub_snapshot_processing_latency_seconds = _histogram(
     ("world_id", "stage"),
 )
 
+validation_event_dedupe_total = _counter(
+    "validation_event_dedupe_total",
+    "Validation events dropped due to idempotency/dedupe collisions",
+    ("world_id", "event_type", "stage"),
+)
+
+validation_event_expired_total = _counter(
+    "validation_event_expired_total",
+    "Validation events dropped because TTL was exceeded",
+    ("world_id", "event_type", "stage"),
+)
+
+validation_event_processed_total = _counter(
+    "validation_event_processed_total",
+    "Validation events successfully processed from ControlBus",
+    ("world_id", "event_type", "stage"),
+)
+
+validation_event_failed_total = _counter(
+    "validation_event_failed_total",
+    "Validation events that failed to process from ControlBus",
+    ("world_id", "event_type", "stage"),
+)
+
+validation_event_retry_total = _counter(
+    "validation_event_retry_total",
+    "Validation event processing retries from ControlBus",
+    ("world_id", "event_type", "stage"),
+)
+
+validation_event_dlq_total = _counter(
+    "validation_event_dlq_total",
+    "Validation events routed to DLQ after retries",
+    ("world_id", "event_type", "stage"),
+)
+
+validation_event_processing_latency_seconds = _histogram(
+    "validation_event_processing_latency_seconds",
+    "Time between event emission and WS processing",
+    ("world_id", "event_type", "stage"),
+)
+
 extended_validation_run_total = _counter(
     "extended_validation_run_total",
     "Total number of extended validation runs grouped by outcome",
@@ -243,6 +285,104 @@ def record_risk_snapshot_dlq(world_id: str, *, stage: str | None = None) -> None
     ).inc()
 
 
+def record_validation_event_dedupe(
+    world_id: str,
+    *,
+    event_type: str,
+    stage: str | None = None,
+) -> None:
+    """Record when a validation event is skipped due to dedupe."""
+
+    validation_event_dedupe_total.labels(
+        world_id=world_id,
+        event_type=event_type,
+        stage=stage or "unknown",
+    ).inc()
+
+
+def record_validation_event_expired(
+    world_id: str,
+    *,
+    event_type: str,
+    stage: str | None = None,
+) -> None:
+    """Record when a validation event is skipped because it expired."""
+
+    validation_event_expired_total.labels(
+        world_id=world_id,
+        event_type=event_type,
+        stage=stage or "unknown",
+    ).inc()
+
+
+def record_validation_event_processed(
+    world_id: str,
+    *,
+    event_type: str,
+    stage: str | None = None,
+    latency_seconds: float | None = None,
+) -> None:
+    """Record successful processing of a validation event."""
+
+    stage_label = stage or "unknown"
+    validation_event_processed_total.labels(
+        world_id=world_id,
+        event_type=event_type,
+        stage=stage_label,
+    ).inc()
+    if latency_seconds is not None:
+        validation_event_processing_latency_seconds.labels(
+            world_id=world_id,
+            event_type=event_type,
+            stage=stage_label,
+        ).observe(float(latency_seconds))
+
+
+def record_validation_event_failed(
+    world_id: str,
+    *,
+    event_type: str,
+    stage: str | None = None,
+) -> None:
+    """Record failed processing of a validation event."""
+
+    validation_event_failed_total.labels(
+        world_id=world_id,
+        event_type=event_type,
+        stage=stage or "unknown",
+    ).inc()
+
+
+def record_validation_event_retry(
+    world_id: str,
+    *,
+    event_type: str,
+    stage: str | None = None,
+) -> None:
+    """Record a retry attempt while processing a validation event."""
+
+    validation_event_retry_total.labels(
+        world_id=world_id,
+        event_type=event_type,
+        stage=stage or "unknown",
+    ).inc()
+
+
+def record_validation_event_dlq(
+    world_id: str,
+    *,
+    event_type: str,
+    stage: str | None = None,
+) -> None:
+    """Record when a validation event is routed to DLQ after failures."""
+
+    validation_event_dlq_total.labels(
+        world_id=world_id,
+        event_type=event_type,
+        stage=stage or "unknown",
+    ).inc()
+
+
 def record_extended_validation_run(
     world_id: str,
     *,
@@ -331,6 +471,13 @@ def reset_metrics() -> None:
         risk_hub_snapshot_retry_total,
         risk_hub_snapshot_dlq_total,
         risk_hub_snapshot_processing_latency_seconds,
+        validation_event_dedupe_total,
+        validation_event_expired_total,
+        validation_event_processed_total,
+        validation_event_failed_total,
+        validation_event_retry_total,
+        validation_event_dlq_total,
+        validation_event_processing_latency_seconds,
         extended_validation_run_total,
         extended_validation_run_latency_seconds,
         live_monitoring_run_total,
@@ -361,6 +508,12 @@ __all__ = [
     "record_risk_snapshot_failed",
     "record_risk_snapshot_retry",
     "record_risk_snapshot_dlq",
+    "record_validation_event_dedupe",
+    "record_validation_event_expired",
+    "record_validation_event_processed",
+    "record_validation_event_failed",
+    "record_validation_event_retry",
+    "record_validation_event_dlq",
     "reset_metrics",
     "risk_hub_snapshot_dedupe_total",
     "risk_hub_snapshot_expired_total",
@@ -369,6 +522,13 @@ __all__ = [
     "risk_hub_snapshot_retry_total",
     "risk_hub_snapshot_dlq_total",
     "risk_hub_snapshot_processing_latency_seconds",
+    "validation_event_dedupe_total",
+    "validation_event_expired_total",
+    "validation_event_processed_total",
+    "validation_event_failed_total",
+    "validation_event_retry_total",
+    "validation_event_dlq_total",
+    "validation_event_processing_latency_seconds",
     "world_allocation_snapshot_stale_ratio",
     "world_allocation_snapshot_total",
     "world_allocation_snapshot_stale_total",

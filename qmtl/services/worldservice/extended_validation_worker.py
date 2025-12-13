@@ -47,6 +47,8 @@ class ExtendedValidationWorker:
         *,
         stage: str | None = None,
         policy_payload: Any | None = None,
+        strategy_id: str | None = None,
+        run_id: str | None = None,
     ) -> int:
         """Evaluate extended layers for a world and persist results."""
 
@@ -62,6 +64,10 @@ class ExtendedValidationWorker:
             if not stage_normalized
             or str(run.get("stage", "")).lower() == stage_normalized
         ]
+        if strategy_id:
+            filtered = [run for run in filtered if str(run.get("strategy_id") or "") == str(strategy_id)]
+        if run_id:
+            filtered = [run for run in filtered if str(run.get("run_id") or "") == str(run_id)]
         if not filtered:
             return 0
 

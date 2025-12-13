@@ -26,13 +26,24 @@
   - DLQ: `increase(risk_hub_snapshot_dlq_total[5m])`
   - Dedupe/TTL: `increase(risk_hub_snapshot_dedupe_total[5m])`, `increase(risk_hub_snapshot_expired_total[5m])`
 
-### 3) Extended Validation Worker
+### 3) Validation Event Pipeline Health (EvaluationRun 이벤트)
+
+- Runner/WS가 발행하는 `evaluation_run_created`/`evaluation_run_updated`/`validation_profile_changed` 이벤트를 소비해 **심층 검증 결과를 append-only로 갱신**합니다.
+- SLI:
+  - 처리량: `rate(validation_event_processed_total[5m])`
+  - 실패율: `rate(validation_event_failed_total[5m]) / (rate(validation_event_processed_total[5m]) + rate(validation_event_failed_total[5m]))`
+  - DLQ: `increase(validation_event_dlq_total[5m])`
+  - Dedupe/TTL: `increase(validation_event_dedupe_total[5m])`, `increase(validation_event_expired_total[5m])`
+- 운영 엔트리포인트(예시):
+  - 워커 실행: `uv run python scripts/validation_worker.py` (env: `WORLDS_DB_DSN`, `WORLDS_REDIS_DSN`, `CONTROLBUS_BROKERS`, `CONTROLBUS_TOPIC`)
+
+### 4) Extended Validation Worker
 
 - SLI:
   - 성공/실패: `rate(extended_validation_run_total{status="success"}[5m])`, `rate(extended_validation_run_total{status=~"failure|enqueue_failed"}[5m])`
   - p95 latency: `histogram_quantile(0.95, sum(rate(extended_validation_run_latency_seconds_bucket[5m])) by (le, world_id, stage))`
 
-### 4) Live Monitoring Materialization
+### 5) Live Monitoring Materialization
 
 - SLI:
   - 실행 성공/실패: `rate(live_monitoring_run_total{status="success"}[5m])`, `rate(live_monitoring_run_total{status="failure"}[5m])`
@@ -42,7 +53,7 @@
   - 리포트 생성(Markdown/JSON): `uv run python scripts/generate_live_monitoring_report.py --world <world_id> --output live_report.md`
   - GitHub Actions 스케줄(권장): `.github/workflows/live-monitoring-schedule.yml` (secrets 미설정 시 자동 skip + 리포트 아티팩트 업로드)
 
-### 5) Validation Health / Invariants
+### 6) Validation Health / Invariants
 
 - EvaluationRun의 `metrics.diagnostics.validation_health.metric_coverage_ratio`는 Prometheus가 아니라 **EvaluationRun 저장 레이어**에 기록됩니다.
 - 운영에서의 체크 방법(권장):
@@ -73,6 +84,15 @@ groups:
         annotations:
           summary: "RiskHub DLQ spike"
           description: "world={{ $labels.world_id }} stage={{ $labels.stage }}"
+
+      - alert: ValidationEventDlqSpike
+        expr: increase(validation_event_dlq_total[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Validation event DLQ spike"
+          description: "world={{ $labels.world_id }} type={{ $labels.event_type }} stage={{ $labels.stage }}"
 
       - alert: ExtendedValidationFailures
         expr: increase(extended_validation_run_total{status=~\"failure|enqueue_failed\"}[10m]) > 0
@@ -107,6 +127,7 @@ groups:
 
 - RiskHub freshness: `risk_hub_snapshot_lag_seconds` (world_id 별)
 - Snapshot pipeline health: processed/failed/retry/dlq/dedupe/expired
+- Validation event pipeline: processed/failed/retry/dlq/dedupe/expired
 - Extended validation: success/failure, p95 latency
 - Live monitoring: run success/failure, updated strategies
 - Invariants/Health: `/validations/invariants` 결과(운영 스크립트/외부 폴러로 주기 수집 권장)
