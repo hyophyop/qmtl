@@ -71,6 +71,8 @@ class StrategyMetrics:
     rar_mdd: float | None = None
     total_return: float | None = None
     num_trades: int | None = None
+    adv_utilization_p95: float | None = None
+    participation_rate_p95: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -83,6 +85,8 @@ class StrategyMetrics:
             "rar_mdd": self.rar_mdd,
             "total_return": self.total_return,
             "num_trades": self.num_trades,
+            "adv_utilization_p95": self.adv_utilization_p95,
+            "participation_rate_p95": self.participation_rate_p95,
         }
 
 
@@ -1704,6 +1708,8 @@ def _clone_metrics_with_corr(metrics: StrategyMetrics, correlation_avg: float | 
         rar_mdd=metrics.rar_mdd,
         total_return=metrics.total_return,
         num_trades=metrics.num_trades,
+        adv_utilization_p95=metrics.adv_utilization_p95,
+        participation_rate_p95=metrics.participation_rate_p95,
     )
 
 
@@ -2066,9 +2072,15 @@ async def _evaluate_with_worldservice(
         value = getattr(metrics, key, None)
         if value is not None:
             extra[key] = value
+    risk_metrics: dict[str, Any] = {}
+    for key in ("adv_utilization_p95", "participation_rate_p95"):
+        value = getattr(metrics, key, None)
+        if value is not None:
+            risk_metrics[key] = value
     payload_metrics: dict[str, Any] = build_v1_evaluation_metrics(
         returns,
         extra_metrics=extra or None,
+        risk_metrics=risk_metrics or None,
     )
     policy_payload: dict[str, Any] | None = None
     if preset:

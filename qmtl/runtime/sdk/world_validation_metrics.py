@@ -37,6 +37,15 @@ def _alpha_metric(raw: Mapping[str, Any], name: str) -> float | None:
     return None
 
 
+def _finite_float(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        candidate = float(value)
+        return candidate if math.isfinite(candidate) else None
+    return None
+
+
 def _mean(values: Sequence[float]) -> float:
     return sum(values) / len(values)
 
@@ -236,6 +245,7 @@ def build_v1_evaluation_metrics(
     transaction_cost: float = 0.0,
     search_intensity: int = 1,
     returns_source: str | None = None,
+    risk_metrics: Mapping[str, Any] | None = None,
     extra_metrics: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build an EvaluationMetrics-like payload for WorldService v1 core checks."""
@@ -279,11 +289,20 @@ def build_v1_evaluation_metrics(
         trials=search_intensity,
     )
 
-    diagnostics: dict[str, Any] = {}
+    diagnostics: dict[str, Any] = {"search_intensity": int(search_intensity)}
     if returns_source is not None:
         diagnostics["returns_source"] = str(returns_source)
     if extra_metrics:
         diagnostics["extra_metrics"] = dict(extra_metrics)
+
+    risk: dict[str, Any] = {}
+    if risk_metrics:
+        adv_util = _finite_float(risk_metrics.get("adv_utilization_p95"))
+        participation = _finite_float(risk_metrics.get("participation_rate_p95"))
+        if adv_util is not None:
+            risk["adv_utilization_p95"] = adv_util
+        if participation is not None:
+            risk["participation_rate_p95"] = participation
 
     return {
         "returns": {
@@ -297,6 +316,7 @@ def build_v1_evaluation_metrics(
             "n_trades_total": trades_total,
             "n_trades_per_year": trades_per_year,
         },
+        "risk": risk or None,
         "robustness": {
             "deflated_sharpe_ratio": dsr,
             "sharpe_first_half": sharpe_first,
