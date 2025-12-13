@@ -2062,12 +2062,17 @@ async def _evaluate_with_worldservice(
     risk_tier: str | None = None,
 ) -> WsEvalResult:
     """Ask WorldService (via Gateway) to evaluate strategy metrics."""
-    payload_metrics: dict[str, float] = {}
-    # StrategyMetrics lacks drawdown sign convention; map to common keys
-    for key in ("sharpe", "max_drawdown", "win_rate", "win_ratio", "profit_factor"):
+    from .world_validation_metrics import build_v1_evaluation_metrics
+
+    extra: dict[str, Any] = {}
+    for key in ("win_rate", "win_ratio", "profit_factor", "car_mdd", "rar_mdd", "total_return", "num_trades"):
         value = getattr(metrics, key, None)
         if value is not None:
-            payload_metrics[key] = float(value)
+            extra[key] = value
+    payload_metrics: dict[str, Any] = build_v1_evaluation_metrics(
+        returns,
+        extra_metrics=extra or None,
+    )
     policy_payload: dict[str, Any] | None = None
     if preset:
         try:
