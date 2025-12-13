@@ -440,7 +440,9 @@ class Storage:
                 "timestamp": override_timestamp,
             },
         )
-        return updated.to_dict()
+        payload = updated.to_dict()
+        payload["revision"] = revision
+        return payload
 
     async def list_evaluation_runs(
         self, *, world_id: str | None = None, strategy_id: str | None = None

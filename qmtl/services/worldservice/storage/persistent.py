@@ -900,7 +900,19 @@ class PersistentStorage:
                 "timestamp": override_timestamp,
             },
         )
-        return record.to_dict()
+        revision_row = await self._driver.fetchone(
+            "SELECT MAX(revision) FROM evaluation_run_history WHERE world_id = ? AND strategy_id = ? AND run_id = ?",
+            world_id,
+            strategy_id,
+            run_id,
+        )
+        try:
+            revision = int(revision_row[0]) if revision_row and revision_row[0] is not None else 0
+        except Exception:
+            revision = 0
+        payload = record.to_dict()
+        payload["revision"] = revision
+        return payload
 
     async def get_evaluation_run(
         self, world_id: str, strategy_id: str, run_id: str

@@ -335,10 +335,30 @@ async def test_evaluation_and_overrides_emit_controlbus_events():
             )
             assert override_resp.status_code == 200
 
+            override_resp_2 = await client.post(
+                "/worlds/w-events/strategies/s1/runs/run-1/override",
+                json={
+                    "status": "rejected",
+                    "reason": "manual reversal",
+                    "actor": "risk_team",
+                    "timestamp": "2025-01-02T00:00:00Z",
+                },
+            )
+            assert override_resp_2.status_code == 200
+
     types = [evt.get("type") for _, evt, _ in producer.sent]
     assert "validation_profile_changed" in types
     assert "evaluation_run_created" in types
     assert "evaluation_run_updated" in types
+
+    override_updates = [
+        evt.get("data", {})
+        for _, evt, _ in producer.sent
+        if evt.get("type") == "evaluation_run_updated" and evt.get("data", {}).get("change_type") == "override"
+    ]
+    assert len(override_updates) == 2
+    idempotency_keys = [entry.get("idempotency_key") for entry in override_updates]
+    assert len(set(idempotency_keys)) == 2
 
 
 @pytest.mark.asyncio
@@ -913,6 +933,7 @@ async def test_risk_hub_persists_snapshots_with_persistent_storage(tmp_path, fak
                     "version": "v1",
                     "weights": {"s1": 1.0},
                     "covariance": {"s1,s1": 0.02},
+                    "realized_returns": {"s1": [0.01, -0.005]},
                 }
                 resp = await client.post(
                     "/risk-hub/worlds/persist-hub/snapshots",
@@ -930,6 +951,7 @@ async def test_risk_hub_persists_snapshots_with_persistent_storage(tmp_path, fak
         assert latest is not None
         assert latest["version"] == "v1"
         assert latest["weights"] == {"s1": 1.0}
+        assert latest["realized_returns"] == {"s1": [0.01, -0.005]}
     finally:
         await storage_inspect.close()
 

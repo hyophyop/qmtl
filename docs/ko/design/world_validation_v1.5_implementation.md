@@ -11,6 +11,42 @@
 - **문서/내비게이션**: Risk Signal Hub/Exit Engine 문서를 mkdocs nav에 추가.
 - **품질**: 풀 CI 스위트, mypy, mkdocs, 링크/사이클 검사 모두 통과.
 
+## 아키텍처 만족도 매트릭스 (2025-12-13 기준)
+
+아래 표는 `world_validation_architecture.md`의 핵심 요구를 기준으로 “현재 코드베이스가 어디까지 충족하는지”를 요약한 매트릭스입니다.
+
+- **상태 정의**
+  - **충족**: 설계 의도를 v1.5 범위에서 구현·테스트/문서까지 완료
+  - **부분**: 핵심은 구현했지만, 설계에서 명시한 일부 조건/운영 패키지/자동화가 빠짐
+  - **미구현**: 설계에서 요구하지만 아직 코드/운영 경로가 없음
+
+| 설계 섹션 | 요구(요약) | 상태 | 구현 근거(대표) | 남은 갭 / 후속(G*) |
+| --- | --- | --- | --- | --- |
+| §1 원칙 | WS가 검증 SSOT, 레이어드 검증 | 충족 | `qmtl/services/worldservice/services.py`, `qmtl/services/worldservice/policy_engine.py` | - |
+| §2 Metrics 블록 | returns/sample/risk/robustness/diagnostics + 확장 슬롯 | 부분 | `qmtl/runtime/sdk/world_validation_metrics.py`, `qmtl/services/worldservice/schemas.py` | v1 코어 risk 메트릭 일부(예: `adv_utilization_p95`) 산출 경로 보강 (G4) |
+| §3 Rule 모듈성 | RuleResult(status/severity/owner/reason/details) | 충족 | `qmtl/services/worldservice/policy_engine.py` | - |
+| §4 DSL 구조 | validation vs selection, profiles, recommended_stage | 충족 | `qmtl/services/worldservice/policy_engine.py` | - |
+| §4/5 저장 | EvaluationRun에 policy_version/ruleset_hash/override 추적 | 충족 | `qmtl/services/worldservice/storage`, `qmtl/services/worldservice/services.py` | - |
+| §5 피드백 루프 | policy diff/회귀 자동화 도구 | 부분 | `scripts/policy_diff_batch.py`, `docs/ko/operations/evaluation_store.md` | “나쁜 전략” 세트/CI 임계 플래그 운영 정착 (G3) |
+| §5.3 Live Monitoring | live 결과 상시 재검증(run/report) | 부분 | `qmtl/services/worldservice/routers/live_monitoring.py`, `qmtl/services/worldservice/live_monitoring_worker.py` | 주기적 생성(스케줄러/워커) 운영 경로 연결 (G2) |
+| §5.3 Fail-closed | on_error/on_missing_metric 기본값/강제 | 충족 | `qmtl/services/worldservice/policy_engine.py`, `qmtl/services/worldservice/decision.py` | - |
+| §5.3 Evaluation Store | append-only 보존/운영 가이드 | 부분 | `docs/ko/operations/evaluation_store.md` | 삽입/조회 API + 보존 정책을 코드/CI로 고정 (G3) |
+| §5.3 Validation Report | 표준 리포트 산출물/보관 | 미구현 | - | 템플릿/생성·배포 경로 정의 + 샘플 산출 (G6) |
+| §8/§12 Invariants | SR 11-7 인바리언트 점검 API | 부분 | `qmtl/services/worldservice/routers/validations.py`, `qmtl/services/worldservice/validation_checks.py` | Invariant 1의 “policy_version 호환” 체크 추가, override 재검토 기한/큐 운영 (G6) |
+| §10 SLO/관측성 | 핵심 SLO/알람/대시보드 표준화 | 부분 | `qmtl/services/worldservice/metrics.py`, `docs/ko/operations/world_validation_observability.md` | 실제 운영 대시보드/알람 캡처 증빙 및 룰 튜닝 (G6) |
+| 스트리밍 정착 | ControlBus/큐 토픽·그룹·재시도·DLQ 표준화 | 부분 | `docs/ko/operations/controlbus_queue_standards.md`, `qmtl/services/worldservice/controlbus_*` | 워커/프로듀서까지 템플릿 공통 적용 + 리허설/증빙 (G1) |
+
+## 차기 이슈 번들(제안)
+
+매트릭스의 “부분/미구현” 항목을 다음과 같이 **운영 단위 이슈 번들**로 쪼개는 것을 권장합니다.
+
+- **G1 ControlBus/큐 운영 패키징**: 토픽/컨슈머그룹/백오프·DLQ/재처리(runbook+리허설 증빙)까지 포함한 템플릿을 워커·프로듀서에 공통 적용
+- **G2 Live 모니터링 자동 생성**: 스케줄러 → Live EvaluationRun 생성 워커 연결(30/60/90일) + 실패/지연 알람 + 운영 리포트 샘플
+- **G3 Evaluation Store·회귀 자동화**: 불변 저장/보존 정책을 API·CI로 고정 + “나쁜 전략” 회귀 세트/임계 초과 실패 플래그 운영 정착
+- **G4 Portfolio/Stress 입력 소스 강화**: realized/stress 프로듀서 연결 + 해시/actor/ACL 검증 공통 모듈 + 계약 위반 차단/알람
+- **G5 SDK→WS SSOT 전환**: SDK precheck는 metrics-only로 유지하고, 룰 실행·오류 처리·오프로드를 WS 단일 진입으로 통합 테스트로 고정
+- **G6 거버넌스/운영 가시성**: override 재검토 큐·승인 SLA, Invariant 1(policy_version 호환) 보강, Validation Report 템플릿/산출물 정의
+
 ## 남은 주요 갭
 1) **스트리밍·운영 배포 정착**
    - ControlBus/큐 → ExtendedValidation/라이브·스트레스 워커를 운영 스케일에서 idempotent하게 트리거하도록 토픽/그룹/재시도·DLQ·헬스 메트릭을 표준화해야 함.
