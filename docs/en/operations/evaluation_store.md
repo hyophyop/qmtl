@@ -24,6 +24,7 @@ Key endpoints:
 - Get: `GET /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}`
 - History: `GET /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/history`
 - Override: `POST /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/override`
+- Ex-post failure record: `POST /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/ex-post-failures`
 - Invariants report: `GET /worlds/{world_id}/validations/invariants`
 
 Compatibility guidelines:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
@@ -438,6 +439,86 @@ class Storage:
                 "status": override.get("status"),
                 "actor": override.get("actor"),
                 "timestamp": override_timestamp,
+            },
+        )
+        payload = updated.to_dict()
+        payload["revision"] = revision
+        return payload
+
+    async def record_ex_post_failure(
+        self,
+        world_id: str,
+        strategy_id: str,
+        run_id: str,
+        failure: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        record = self._evaluation_runs.get((world_id, strategy_id, run_id))
+        if record is None:
+            raise KeyError("evaluation run not found")
+
+        recorded_at = str(failure.get("recorded_at") or datetime_now())
+        case_id = str(failure.get("case_id") or uuid.uuid4())
+        event = {
+            "case_id": case_id,
+            "status": failure.get("status") or "confirmed",
+            "category": failure.get("category"),
+            "reason_code": failure.get("reason_code"),
+            "severity": failure.get("severity"),
+            "evidence_url": failure.get("evidence_url"),
+            "actor": failure.get("actor"),
+            "recorded_at": recorded_at,
+            "source": failure.get("source") or "manual",
+            "notes": failure.get("notes"),
+        }
+
+        summary = dict(record.summary or {})
+        raw_log = summary.get("ex_post_failures")
+        log: list[dict[str, Any]]
+        if isinstance(raw_log, list):
+            log = [dict(item) for item in raw_log if isinstance(item, dict)]
+        else:
+            log = []
+        log.append(event)
+        summary["ex_post_failures"] = log
+
+        updated = EvaluationRunRecord(
+            run_id=record.run_id,
+            world_id=record.world_id,
+            strategy_id=record.strategy_id,
+            stage=record.stage,
+            risk_tier=record.risk_tier,
+            model_card_version=record.model_card_version,
+            metrics=deepcopy(record.metrics),
+            validation=deepcopy(record.validation),
+            summary=summary,
+            created_at=record.created_at,
+            updated_at=recorded_at,
+        )
+        self._evaluation_runs[(world_id, strategy_id, run_id)] = updated
+        history_key = (world_id, strategy_id, run_id)
+        history = self._evaluation_run_history.setdefault(history_key, [])
+        revision = len(history) + 1
+        history.append(
+            {
+                "revision": revision,
+                "recorded_at": recorded_at,
+                "payload": updated.to_dict(),
+            }
+        )
+        self._audit.append(
+            world_id,
+            {
+                "event": "evaluation_run_ex_post_failure_recorded",
+                "strategy_id": strategy_id,
+                "run_id": run_id,
+                "case_id": case_id,
+                "status": event.get("status"),
+                "category": event.get("category"),
+                "reason_code": event.get("reason_code"),
+                "severity": event.get("severity"),
+                "actor": event.get("actor"),
+                "timestamp": recorded_at,
+                "source": event.get("source"),
             },
         )
         payload = updated.to_dict()

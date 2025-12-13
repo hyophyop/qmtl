@@ -41,3 +41,19 @@ approved override에는 아래 필드를 반드시 기록합니다.
    - override 해제(정상화) 또는
    - override 갱신(사유/승인자/시각 갱신) 및 추가 조치 기록
 3) 반복 발생 전략/월드는 원인 분석(룰/데이터/리밸런스/리스크 신호) 및 정책/룰 보강으로 연결합니다.
+
+## Ex-post 실패 관리 (pass 후 실패율)
+
+ex-post 실패는 “검증은 통과했지만, live 운영 관점에서 명백히 피했어야 할 실패”로 분류된 케이스를 의미합니다.
+
+- 저장 위치(SSOT): `EvaluationRun.summary.ex_post_failures` (append-only 로그)
+  - 필드: `case_id`, `status=candidate|confirmed`, `category`, `reason_code`, `severity`, `evidence_url`, `actor`, `recorded_at`, `source`, `notes`
+  - taxonomy(예시):
+    - `category`: `risk_breach`, `performance_failure`, `liquidity_failure`, `data_issue`, `ops_incident`
+    - `severity`: `critical|high|medium|low`
+- 기록 API:
+  - `POST /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/ex-post-failures`
+  - 후보 자동 생성은 `status=candidate, source=auto`로 기록하고, 사람이 확정할 때 동일 `case_id`로 `status=confirmed, source=manual` 이벤트를 추가합니다.
+- 리포트(월/분기 집계):
+  - `uv run python scripts/generate_ex_post_failure_report.py --format md --output ex_post_failures.md`
+  - GitHub Actions(스케줄/수동): `.github/workflows/ex-post-failure-report.yml` (secrets 미설정 시 skip)
