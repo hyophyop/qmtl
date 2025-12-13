@@ -67,44 +67,19 @@ def test_long_running_case():
 - 목적: 정책 변경이 “나쁜 전략” 회귀 세트에 미치는 영향 비율을 자동 감시.
 - 명령 예시:
   ```bash
-  uv run python scripts/policy_diff_batch.py \
-    --old policies/baseline.yml \
-    --new policies/candidate.yml \
-    --runs-dir artifacts/bad_strategies_runs \
+  uv run -m scripts.policy_diff_batch \
+    --old docs/ko/world/sample_policy.yml \
+    --new docs/ko/world/sample_policy.yml \
+    --runs-dir operations/policy_diff/bad_strategies_runs \
     --runs-pattern '*.json' \
     --stage backtest \
     --output policy_diff_report.json \
     --fail-impact-ratio 0.05
   ```
 - 아티팩트: `policy_diff_report.json` 을 업로드하고, 임팩트 비율이 임계 초과 시 워크플로를 실패 처리.
-- 스케줄 샘플(GitHub Actions):
-  ```yaml
-  on:
-    schedule:
-      - cron: "0 */6 * * *"  # 6시간마다
-  jobs:
-    policy-diff:
-      runs-on: ubuntu-latest
-      steps:
-        - uses: actions/checkout@v4
-        - name: Install deps
-          run: uv pip install -e .[dev]
-        - name: Run policy diff batch
-          run: |
-            uv run python scripts/policy_diff_batch.py \
-              --old policies/baseline.yml \
-              --new policies/candidate.yml \
-              --runs-dir artifacts/bad_strategies_runs \
-              --runs-pattern '*.json' \
-              --stage backtest \
-              --output policy_diff_report.json \
-              --fail-impact-ratio 0.05
-        - name: Upload report
-          uses: actions/upload-artifact@v4
-          with:
-            name: policy-diff-report
-            path: policy_diff_report.json
-  ```
+- GitHub Actions 워크플로: `.github/workflows/policy-diff-regression.yml`
+  - PR에서 `docs/**/world/sample_policy.yml` 변경 시 자동 실행 + 리포트 아티팩트 업로드
+  - 스케줄/수동 트리거로도 실행 가능(기본 임계값 `0.05`)
 ## 아키텍처 불변 조건(권장 검사)
 
 핵심 불변 조건이 깨지면 즉시 실패하도록 가벼운 검사(단위/통합)를 추가하세요.

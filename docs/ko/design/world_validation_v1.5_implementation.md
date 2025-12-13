@@ -27,10 +27,10 @@
 | §3 Rule 모듈성 | RuleResult(status/severity/owner/reason/details) | 충족 | `qmtl/services/worldservice/policy_engine.py` | - |
 | §4 DSL 구조 | validation vs selection, profiles, recommended_stage | 충족 | `qmtl/services/worldservice/policy_engine.py` | - |
 | §4/5 저장 | EvaluationRun에 policy_version/ruleset_hash/override 추적 | 충족 | `qmtl/services/worldservice/storage`, `qmtl/services/worldservice/services.py` | - |
-| §5 피드백 루프 | policy diff/회귀 자동화 도구 | 부분 | `scripts/policy_diff_batch.py`, `docs/ko/operations/evaluation_store.md` | “나쁜 전략” 세트/CI 임계 플래그 운영 정착 (G3) |
+| §5 피드백 루프 | policy diff/회귀 자동화 도구 | 충족 | `scripts/policy_diff_batch.py`, `.github/workflows/policy-diff-regression.yml`, `operations/policy_diff/bad_strategies_runs` | - |
 | §5.3 Live Monitoring | live 결과 상시 재검증(run/report) | 충족 | `qmtl/services/worldservice/routers/live_monitoring.py`, `qmtl/services/worldservice/live_monitoring_worker.py`, `scripts/live_monitoring_worker.py`, `scripts/generate_live_monitoring_report.py` | - |
 | §5.3 Fail-closed | on_error/on_missing_metric 기본값/강제 | 충족 | `qmtl/services/worldservice/policy_engine.py`, `qmtl/services/worldservice/decision.py` | - |
-| §5.3 Evaluation Store | append-only 보존/운영 가이드 | 부분 | `docs/ko/operations/evaluation_store.md` | 삽입/조회 API + 보존 정책을 코드/CI로 고정 (G3) |
+| §5.3 Evaluation Store | append-only 보존/운영 가이드 | 충족 | `docs/ko/operations/evaluation_store.md`, `scripts/purge_evaluation_run_history.py`, `.github/workflows/evaluation-store-retention.yml` | - |
 | §5.3 Validation Report | 표준 리포트 산출물/보관 | 충족 | `scripts/generate_validation_report.py`, `docs/ko/operations/validation_report.md` | - |
 | §8/§12 Invariants | SR 11-7 인바리언트 점검 API | 충족 | `qmtl/services/worldservice/routers/validations.py`, `qmtl/services/worldservice/validation_checks.py`, `scripts/generate_override_rereview_report.py`, `docs/ko/operations/world_validation_governance.md` | - |
 | §10 SLO/관측성 | 핵심 SLO/알람/대시보드 표준화 | 부분 | `alert_rules.yml`, `docs/ko/operations/world_validation_observability.md` | 대시보드 스냅샷/임계 튜닝은 운영에서 지속(증빙 링크 첨부 권장) |
@@ -164,9 +164,10 @@
 - 회귀 자동화(G3): `scripts/policy_diff_batch.py`가 stage 지정(`--stage`)과 runs 디렉터리 glob(`--runs-dir/--runs-pattern`)를 지원하여 “나쁜 전략” 세트+최신 runs를 묶어 크론/CI에서 임팩트 비율 임계(`--fail-impact-ratio`)로 실패 플래그를 낼 수 있음.
 
 ## G3 실행 가이드 (회귀/스토어)
-- 크론/CI 스니펫: `uv run python scripts/policy_diff_batch.py --old baseline.yml --new candidate.yml --runs-dir artifacts/bad_strategies_runs --runs-pattern '*.json' --stage backtest --output policy_diff_report.json --fail-impact-ratio 0.05`
-- 아티팩트: `policy_diff_report.json` 업로드, 임팩트 비율 초과 시 워크플로 실패 처리.
-- 스토어/보존: EvaluationRun/override 불변 저장, 정책 버전별 히스토리 유지(최소 90일) → API/문서로 스키마 고정 필요(추후 PR).
+- “나쁜 전략” 세트: `operations/policy_diff/bad_strategies_runs/*.json`
+- 크론/CI 스니펫: `uv run -m scripts.policy_diff_batch --old baseline.yml --new candidate.yml --runs-dir operations/policy_diff/bad_strategies_runs --runs-pattern '*.json' --stage backtest --output policy_diff_report.json --fail-impact-ratio 0.05`
+- GitHub Actions: `.github/workflows/policy-diff-regression.yml` (리포트 아티팩트 업로드 + 임계 초과 시 실패)
+- 스토어/보존: `scripts/purge_evaluation_run_history.py`, `.github/workflows/evaluation-store-retention.yml` (history 180d 권장)
 
 ## G5 전환 스텝 (SDK→WS)
 - SDK: ValidationPipeline은 **metrics 산출(precheck)** 만 담당하고, 정책/룰 실행·오케스트레이션은 WS `/evaluate` 단일 진입으로 수렴(SSOT).
