@@ -407,6 +407,8 @@ async def _publish_risk_snapshots(
     if not weights_by_world:
         return False
     ts = as_of or datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    realized_by_world = payload.realized_returns_by_world if hasattr(payload, "realized_returns_by_world") else None
+    stress_by_world = payload.stress_by_world if hasattr(payload, "stress_by_world") else None
     for wid, weights in weights_by_world.items():
         if not weights:
             continue
@@ -420,6 +422,10 @@ async def _publish_risk_snapshots(
                 "schema_version": schema_version,
             },
         }
+        if isinstance(realized_by_world, Mapping) and wid in realized_by_world:
+            snapshot["realized_returns"] = realized_by_world.get(wid)
+        if isinstance(stress_by_world, Mapping) and wid in stress_by_world:
+            snapshot["stress"] = stress_by_world.get(wid)
         if stage:
             provenance = snapshot.setdefault("provenance", {})
             if isinstance(provenance, dict):
