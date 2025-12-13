@@ -1,5 +1,7 @@
 import pytest
 
+import math
+
 from qmtl.services.worldservice.extended_validation_worker import ExtendedValidationWorker
 from qmtl.services.worldservice.policy_engine import parse_policy
 from qmtl.services.worldservice.storage import Storage
@@ -76,6 +78,58 @@ async def test_baseline_uses_risk_hub_covariance():
 
     assert baseline["var_99"] is not None
     assert baseline["es_99"] is not None
+
+
+@pytest.mark.asyncio
+async def test_incremental_var_es_uses_active_snapshot_covariance():
+    storage = Storage()
+    hub = RiskSignalHub()
+    await storage.create_world({"id": "winc"})
+    policy = parse_policy({"portfolio": {"max_incremental_var_99": 0.01, "severity": "soft"}})
+    version = await storage.add_policy("winc", policy)
+    await storage.set_default_policy("winc", version=version)
+
+    await storage.record_evaluation_run(
+        "winc",
+        "s-cand",
+        "run-1",
+        stage="backtest",
+        risk_tier="medium",
+        metrics={"returns": {"sharpe": 1.0, "max_drawdown": 0.1}},
+        validation={},
+        summary={"status": "pass"},
+    )
+
+    snap = PortfolioSnapshot(
+        world_id="winc",
+        as_of="2025-01-01T00:00:00Z",
+        version="v1",
+        weights={"s-live": 1.0},
+        covariance={
+            "s-live,s-live": 0.0001,
+            "s-cand,s-cand": 0.0004,
+            "s-live,s-cand": 0.00005,
+        },
+        provenance={"actor": "gateway", "stage": "backtest"},
+    )
+    await hub.upsert_snapshot(snap)
+
+    worker = ExtendedValidationWorker(storage, risk_hub=hub)
+    updated = await worker.run("winc", stage="backtest")
+    assert updated == 1
+
+    record = await storage.get_evaluation_run("winc", "s-cand", "run-1")
+    assert record is not None
+    risk = record["metrics"]["risk"]
+
+    z = 2.33
+    baseline_var = z * math.sqrt(0.0001)
+    with_candidate_var = z * math.sqrt(0.00015)
+    expected_delta = with_candidate_var - baseline_var
+
+    assert risk["incremental_var_99"] == pytest.approx(expected_delta, rel=1e-4)
+    assert risk["incremental_es_99"] == pytest.approx(expected_delta * 1.2, rel=1e-4)
+    assert record["validation"]["results"]["portfolio"]["status"] == "pass"
 
 
 @pytest.mark.asyncio
