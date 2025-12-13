@@ -213,6 +213,7 @@ class DagManagerClient:
                     await asyncio.sleep(0.1)
                     continue
                 return False
+        return False
 
     def _infer_namespace(
         self, dag_json: str, world_id: str | None

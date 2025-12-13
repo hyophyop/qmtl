@@ -109,3 +109,11 @@ groups:
 - Extended validation: success/failure, p95 latency
 - Live monitoring: run success/failure, updated strategies
 - Invariants/Health: `/validations/invariants` 결과(운영 스크립트/외부 폴러로 주기 수집 권장)
+
+### 대시보드 스펙(Repo 내 텍스트)
+
+- Grafana 패널 스펙(텍스트): `operations/monitoring/world_validation_v1.jsonnet`
+
+### 운영 증빙(권장)
+
+- 증빙 템플릿: `operations/monitoring/samples/world_validation_observability_evidence.md`

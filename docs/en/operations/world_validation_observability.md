@@ -109,3 +109,11 @@ groups:
 - Extended validation: success/failure, p95 latency
 - Live monitoring: run success/failure, updated strategies
 - Invariants/health: `/validations/invariants` results (recommended to collect periodically via an ops script/external poller)
+
+### Dashboard spec (stored in repo)
+
+- Grafana panel spec (text): `operations/monitoring/world_validation_v1.jsonnet`
+
+### Operational evidence (recommended)
+
+- Evidence template: `operations/monitoring/samples/world_validation_observability_evidence.md`

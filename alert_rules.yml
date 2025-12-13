@@ -144,6 +144,14 @@ prometheus:
           annotations:
             summary: Risk hub snapshots are older than 10 minutes
             runbook: docs/operations/risk_signal_hub_runbook.html
+        - alert: RiskHubSnapshotLagCritical
+          expr: max_over_time(risk_hub_snapshot_lag_seconds[5m]) > 1800
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: Risk hub snapshots are older than 30 minutes
+            runbook: docs/operations/risk_signal_hub_runbook.html
         - alert: RiskHubSnapshotMissing
           expr: sum(increase(risk_hub_snapshot_missing_total[5m])) > 0
           for: 5m
@@ -199,4 +207,20 @@ prometheus:
             severity: warning
           annotations:
             summary: Live monitoring worker failures detected
+            runbook: docs/operations/world_validation_observability.html
+        - alert: ExtendedValidationFailures
+          expr: sum(increase(extended_validation_run_total{status=~"failure|enqueue_failed"}[10m])) > 0
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: Extended validation failures detected
+            runbook: docs/operations/world_validation_observability.html
+        - alert: ExtendedValidationLatencyHigh
+          expr: histogram_quantile(0.95, sum by (le, world_id, stage) (rate(extended_validation_run_latency_seconds_bucket[10m]))) > 60
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Extended validation p95 latency is high
             runbook: docs/operations/world_validation_observability.html
