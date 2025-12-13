@@ -24,6 +24,7 @@ from .controlbus_defaults import (
     DEFAULT_RISK_HUB_DLQ_TOPIC,
     DEFAULT_RISK_HUB_MAX_ATTEMPTS,
     DEFAULT_RISK_HUB_RETRY_BACKOFF_SEC,
+    default_dlq_topic,
 )
 from .risk_hub import PortfolioSnapshot, RiskSignalHub
 
@@ -78,7 +79,8 @@ class RiskHubControlBusConsumer:
         self._hub = hub
         self._on_snapshot = on_snapshot
         self._brokers = list(brokers or [])
-        self._topic = topic
+        resolved_topic = topic
+        self._topic = resolved_topic
         self._consumer: KafkaConsumerLike | None = consumer
         self._task: asyncio.Task | None = None
         self._group_id = group_id
@@ -88,7 +90,10 @@ class RiskHubControlBusConsumer:
         self._dedupe_keys: deque[str] | None = deque(maxlen=1000)
         self._max_attempts = max(1, int(max_attempts))
         self._retry_backoff_sec = max(0.0, float(retry_backoff_sec))
-        self._dlq_topic = dlq_topic
+        resolved_dlq_topic = dlq_topic
+        if resolved_dlq_topic is None and resolved_topic:
+            resolved_dlq_topic = default_dlq_topic(str(resolved_topic))
+        self._dlq_topic = resolved_dlq_topic
         self._dlq_producer: KafkaProducerLike | None = dlq_producer
         self._dlq_started = False
 
