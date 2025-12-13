@@ -2,7 +2,7 @@
 title: "World 검증 계층 확장 설계 스케치"
 tags: [design, world, validation, core-loop]
 author: "QMTL Team"
-last_modified: 2025-12-08
+last_modified: 2025-12-13
 status: draft
 ---
 
@@ -25,7 +25,7 @@ status: draft
 > 최근 변경 요약 (risk_signal_hub 연계)
 > - Hub 최소 구현: WS에 `risk_hub` 라우터를 추가하고 dev(in-memory/SQLite+fakeredis 캐시, offload 비활성)·prod(Postgres+Redis+S3/redis)에서 스냅샷 메타를 영속화하도록 바인딩.
 > - 소비자 전환: `ExtendedValidationWorker`가 hub 스냅샷(가중치/공분산) 기반으로 Var/ES 베이스라인을 계산하도록 수정하여 gateway 직접 의존을 제거.
-> - 생산자 연결 준비: gateway/alloc이 리밸런스·체결 이후 스냅샷을 push 할 수 있도록 HTTP 헬퍼(`services/gateway/risk_hub_client.py`)를 추가. ControlBus/큐 이벤트 연동은 후속 단계로 남김.
+> - 생산자/이벤트 경로 정착: gateway가 리밸런스·체결 이후 스냅샷을 push하고(`qmtl/services/gateway/risk_hub_client.py`), ControlBus(CloudEvents)로 `risk_snapshot_updated`/activation/evaluation run 업데이트 이벤트를 발행·소비하도록 표준 템플릿을 적용함.
 > - 환경 설정 일원화: `qmtl.yml` `risk_hub` 블록(dev=inline+fakeredis 캐시만, prod=Postgres+Redis+S3/redis)으로 WS 라우터 토큰/inline offload/blob 스토어와 gateway push 클라이언트를 동시에 구성하도록 연결.
 
 ---
@@ -77,12 +77,13 @@ status: draft
   - `Runner.submit(..., world="...")`는 dev/prod 모두 World/WS 경로를 통해 EvaluationRun과 메트릭을 생성한다.
   - SDK는 `SubmitResult.evaluation_run_id` 또는 WS 링크만 받고,  
     필요 시 별도 헬퍼(예: `Runner.poll_evaluation(world, run_id, ...)`)로 지표가 준비되었는지 확인한 뒤 EvaluationRun/EvaluationMetrics를 조회한다.
-- returns는 SDK 전처리(auto_returns)에서 파생하지 않는다.
-  - 검증/World 평가에서 사용하는 returns는 전략이 내보낸 equity/pnl/position 시계열과 WorldService 평가 파이프라인에서 파생된 값에 한정한다.
+- returns/metrics의 **검증 SSOT는 WorldService** 이다.
+  - SDK는 로컬 편의를 위해 `auto_returns` 등으로 returns를 만들 수 있지만, 이는 **precheck 입력/참고 정보**이며 정책 평가/게이팅의 최종 결정은 WS 평가 결과를 따른다.
+  - World 평가에서 사용하는 returns/메트릭은 최종적으로 WS가 저장한 EvaluationRun/metrics를 기준으로 운영·감사 가능해야 한다.
 - dev/prod 두 스택:
   - dev 스택에서는 로컬/테스트용 WorldService/Gateway/Seamless 구성을 사용하지만,  
     prod와 동일한 “제출 → EvaluationRun → 지표 조회” 플로우를 그대로 사용한다.
-  - 로컬 DX는 별도 auto_returns 편의 기능이 아니라, dev World에서 prod와 동일한 경로를 실행할 수 있게 하는 방식으로만 지원한다.
+  - 로컬 DX는 (선택적 편의 기능 포함) dev World에서 prod와 동일한 경로/결과 구조를 실행할 수 있게 하는 것을 목표로 한다.
 
 과거 SDK auto_returns 설계는 [`archive/auto_returns_unified_design.md`](../archive/auto_returns_unified_design.md)에 아카이브되어 있으며,  
 이 문서는 World/WS 기반 평가 모델을 기준으로 검증 계층을 정의한다.
@@ -759,6 +760,7 @@ validation:
 
 !!! warning "검토 의견"
     이 섹션은 현재 QMTL 코드베이스(2025-12-09 기준)와 본 설계 문서 간의 구조적 갭을 분석한 내용이다. 실제 구현 시 이질적으로 동작할 가능성이 높은 부분을 식별하고, 점진적 마이그레이션 전략을 제안한다.
+    2025-12-13 기준 v1.5 closeout으로 주요 갭은 해소되었으며, 일부 항목은 “추가 고도화/조직 프로세스” 성격으로 남아 있다.
 
 ### 9.1 Validation 레이어 위치 문제
 
@@ -788,6 +790,11 @@ Runner.submit() → (SDK metrics precheck) → Gateway /worlds/{world_id}/evalua
 1. 단기: SDK ValidationPipeline을 metrics-only로 유지하고, WS `/evaluate` 계약(입력/출력/저장 메타)을 통합 테스트로 고정
 2. 중기: WS가 Rule 실행·요약 산출·EvaluationRun 저장을 단일 진입으로 일원화(SSOT 강화)
 3. 장기: SDK의 ValidationPipeline(로컬 precheck) 디프리케이션/제거 및 문서/런북 정리
+
+**현 상태(2025-12-13):**
+
+- SDK→WS `/evaluate` 경로의 계약(리스크 메트릭 전달/에러 매핑 등)을 테스트로 고정: `tests/qmtl/runtime/sdk/test_worldservice_eval_contract.py`
+- 디프리케이션 가이드(ko/en): `docs/ko/guides/sdk_deprecation.md`, `docs/en/guides/sdk_deprecation.md`
 
 ---
 
