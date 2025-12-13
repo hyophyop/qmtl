@@ -463,6 +463,37 @@ class Storage:
         history = self._evaluation_run_history.get((world_id, strategy_id, run_id), [])
         return deepcopy(history)
 
+    async def purge_evaluation_run_history(
+        self,
+        *,
+        older_than: str,
+        world_id: str | None = None,
+        dry_run: bool = True,
+    ) -> Dict[str, Any]:
+        candidates = 0
+        deleted = 0
+        for (wid, sid, rid), history in list(self._evaluation_run_history.items()):
+            if world_id and wid != world_id:
+                continue
+            kept: list[dict[str, Any]] = []
+            for item in history:
+                recorded_at = item.get("recorded_at")
+                if isinstance(recorded_at, str) and recorded_at < older_than:
+                    candidates += 1
+                    if not dry_run:
+                        deleted += 1
+                        continue
+                kept.append(item)
+            if not dry_run:
+                self._evaluation_run_history[(wid, sid, rid)] = kept
+        return {
+            "older_than": older_than,
+            "world_id": world_id,
+            "dry_run": dry_run,
+            "candidates": candidates,
+            "deleted": 0 if dry_run else deleted,
+        }
+
     async def mark_allocation_run_executed(self, run_id: str) -> None:
         record = self._allocation_runs.get(run_id)
         if record is not None:

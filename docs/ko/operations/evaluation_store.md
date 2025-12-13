@@ -45,6 +45,14 @@ WorldService의 Evaluation Store는 `EvaluationRun`과 그 변경 이력을 **�
 - 용량/PII/규정 요구에 따라, 보존 기간이 지난 history 레코드만 정리합니다.
 - 정리 작업은 **append-only 불변성(감사 가능성)** 을 훼손할 수 있으므로, 운영 승인을 거쳐 수행합니다.
 
+### Retention 잡(코드/운영) 고정
+
+- 스크립트: `scripts/purge_evaluation_run_history.py`
+  - dry-run(기본): `WORLDS_DB_DSN=... WORLDS_REDIS_DSN=... uv run python scripts/purge_evaluation_run_history.py --retention-days 180`
+  - 실행: `WORLDS_DB_DSN=... WORLDS_REDIS_DSN=... uv run python scripts/purge_evaluation_run_history.py --retention-days 180 --execute --output purge_report.json`
+- GitHub Actions(스케줄/수동): `.github/workflows/evaluation-store-retention.yml`
+  - `WORLDS_DB_DSN`, `WORLDS_REDIS_DSN` 시크릿이 설정된 경우에만 실행됩니다(미설정 시 skip).
+
 ## 운영 절차 (예시)
 
 - 회귀/감사:
@@ -53,4 +61,3 @@ WorldService의 Evaluation Store는 `EvaluationRun`과 그 변경 이력을 **�
 - 오버라이드:
   - 승인(approved)은 사유/승인자/타임스탬프를 포함해야 하며,
     추후 재검토를 위해 관련 run의 `/history`를 함께 보관합니다.
-

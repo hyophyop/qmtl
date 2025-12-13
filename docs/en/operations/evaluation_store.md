@@ -45,6 +45,14 @@ Purge guidance:
 - Only purge history records that are beyond the retention period (as required for capacity/PII/compliance).
 - Purging can weaken auditability of an append-only store, so require an operational approval process.
 
+### Retention job (code + operations)
+
+- Script: `scripts/purge_evaluation_run_history.py`
+  - Dry-run (default): `WORLDS_DB_DSN=... WORLDS_REDIS_DSN=... uv run python scripts/purge_evaluation_run_history.py --retention-days 180`
+  - Execute: `WORLDS_DB_DSN=... WORLDS_REDIS_DSN=... uv run python scripts/purge_evaluation_run_history.py --retention-days 180 --execute --output purge_report.json`
+- GitHub Actions (scheduled/manual): `.github/workflows/evaluation-store-retention.yml`
+  - Runs only when `WORLDS_DB_DSN` and `WORLDS_REDIS_DSN` secrets are configured (skips otherwise).
+
 ## Operational Playbook (Examples)
 
 - Regression / audit:
@@ -53,4 +61,3 @@ Purge guidance:
 - Overrides:
   - Approved overrides must include reason/actor/timestamp, and
     keep the run’s `/history` for later review.
-
