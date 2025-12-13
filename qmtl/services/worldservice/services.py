@@ -250,6 +250,36 @@ class WorldService:
             updated_values["diagnostics"] = diagnostics_map
             metrics[sid] = updated_values
 
+    def _augment_payload_metrics_with_benchmark_comparisons(self, payload: EvaluateRequest) -> None:
+        metrics = payload.metrics
+        if not metrics:
+            return
+
+        for sid, values in metrics.items():
+            if not isinstance(values, Mapping):
+                continue
+            benchmark = values.get("benchmark")
+            if not isinstance(benchmark, Mapping):
+                continue
+            benchmark_sharpe = self._coerce_float(benchmark.get("sharpe"))
+            if benchmark_sharpe is None:
+                continue
+
+            sharpe = self._extract_metric(values, "returns", "sharpe")
+            diagnostics = values.get("diagnostics")
+            diagnostics_map = dict(diagnostics) if isinstance(diagnostics, Mapping) else {}
+            extra = diagnostics_map.get("extra_metrics")
+            extra_map = dict(extra) if isinstance(extra, Mapping) else {}
+
+            extra_map.setdefault("benchmark_sharpe", benchmark_sharpe)
+            if sharpe is not None:
+                extra_map.setdefault("vs_benchmark_sharpe", sharpe - benchmark_sharpe)
+
+            diagnostics_map["extra_metrics"] = extra_map
+            updated_values = dict(values)
+            updated_values["diagnostics"] = diagnostics_map
+            metrics[sid] = updated_values
+
     @property
     def store(self) -> Storage:
         return self._store
@@ -476,6 +506,10 @@ class WorldService:
             self._augment_payload_metrics_with_series(payload)
         except Exception:  # pragma: no cover - best-effort enrichment
             logger.exception("Failed to derive advanced metrics for %s", world_id)
+        try:
+            self._augment_payload_metrics_with_benchmark_comparisons(payload)
+        except Exception:  # pragma: no cover - best-effort enrichment
+            logger.exception("Failed to derive benchmark comparisons for %s", world_id)
         try:
             await self._augment_payload_metrics_with_paper_shadow_baselines(world_id, payload)
         except Exception:  # pragma: no cover - best-effort enrichment

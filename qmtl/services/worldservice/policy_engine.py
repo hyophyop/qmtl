@@ -272,6 +272,14 @@ class PortfolioRuleConfig(BaseModel):
     owner: str | None = None
 
 
+class BenchmarkRuleConfig(BaseModel):
+    """Configuration for benchmark-relative rules (challenger vs benchmark)."""
+
+    min_vs_benchmark_sharpe: float | None = None
+    severity: str | None = None
+    owner: str | None = None
+
+
 class StressRuleConfig(BaseModel):
     """Configuration for stress-scenario based validation."""
 
@@ -321,6 +329,7 @@ class Policy(BaseModel):
     validation: ValidationConfig = Field(default_factory=ValidationConfig)
     cohort: CohortRuleConfig | None = None
     portfolio: PortfolioRuleConfig | None = None
+    benchmark: BenchmarkRuleConfig | None = None
     stress: StressRuleConfig | None = None
     paper_shadow_consistency: PaperShadowConsistencyConfig | None = None
     live_monitoring: LiveMonitoringConfig | None = None
@@ -700,6 +709,55 @@ def evaluate_portfolio_rules(
             tags=["portfolio"],
             details=details,
         )
+    return results
+
+
+def evaluate_benchmark_rules(
+    metrics: Mapping[str, Mapping[str, Any]],
+    policy: Policy,
+    *,
+    stage: str | None = None,
+) -> Dict[str, RuleResult]:
+    """Evaluate benchmark-relative rules if benchmark comparison metrics are present."""
+
+    cfg = policy.benchmark
+    if cfg is None:
+        return {}
+    severity, owner = _resolve_meta_defaults(cfg, default_severity="soft", default_owner="quant")
+    results: Dict[str, RuleResult] = {}
+
+    for sid, vals in metrics.items():
+        status = "pass"
+        reasons: list[str] = []
+        uplift = vals.get("vs_benchmark_sharpe")
+        details: Dict[str, Any] = {
+            "stage": stage,
+            "sharpe": vals.get("sharpe"),
+            "benchmark_sharpe": vals.get("benchmark_sharpe"),
+            "vs_benchmark_sharpe": uplift,
+        }
+
+        if cfg.min_vs_benchmark_sharpe is not None:
+            if uplift is None:
+                status = "warn"
+                reasons.append("benchmark_uplift_missing")
+            elif uplift < cfg.min_vs_benchmark_sharpe:
+                status = "fail"
+                reasons.append("benchmark_uplift_below_min")
+                details["min_vs_benchmark_sharpe"] = cfg.min_vs_benchmark_sharpe
+
+        reason_code = reasons[0] if reasons else "benchmark_ok"
+        reason = ", ".join(reasons) if reasons else "Benchmark comparison satisfied"
+        results[sid] = RuleResult(
+            status=status,
+            severity=severity,
+            owner=owner,
+            reason_code=reason_code,
+            reason=reason,
+            tags=["benchmark"],
+            details=details,
+        )
+
     return results
 
 
@@ -1087,6 +1145,7 @@ def evaluate_policy(
 
     cohort_results = evaluate_cohort_rules(normalized, policy, stage=stage)
     portfolio_results = evaluate_portfolio_rules(normalized, policy, stage=stage)
+    benchmark_results = evaluate_benchmark_rules(normalized, policy, stage=stage)
     stress_results = evaluate_stress_rules(normalized, policy, stage=stage)
     paper_shadow_results = evaluate_paper_shadow_consistency(normalized, policy, stage=stage)
     live_result = evaluate_live_monitoring(normalized, policy, stage=stage)
@@ -1097,6 +1156,8 @@ def evaluate_policy(
             per_rule["cohort"] = cohort_results[sid]
         if sid in portfolio_results:
             per_rule["portfolio"] = portfolio_results[sid]
+        if sid in benchmark_results:
+            per_rule["benchmark"] = benchmark_results[sid]
         if sid in stress_results:
             per_rule["stress"] = stress_results[sid]
         if sid in paper_shadow_results:
@@ -1136,6 +1197,7 @@ def evaluate_extended_layers(
 
     cohort_results = evaluate_cohort_rules(metrics_map, policy, stage=stage)
     portfolio_results = evaluate_portfolio_rules(metrics_map, policy, stage=stage)
+    benchmark_results = evaluate_benchmark_rules(metrics_map, policy, stage=stage)
     stress_results = evaluate_stress_rules(metrics_map, policy, stage=stage)
     paper_shadow_results = evaluate_paper_shadow_consistency(metrics_map, policy, stage=stage)
     live_result = evaluate_live_monitoring(metrics_map, policy, stage=stage)
@@ -1147,6 +1209,8 @@ def evaluate_extended_layers(
             per_rule["cohort"] = cohort_results[sid]
         if sid in portfolio_results:
             per_rule["portfolio"] = portfolio_results[sid]
+        if sid in benchmark_results:
+            per_rule["benchmark"] = benchmark_results[sid]
         if sid in stress_results:
             per_rule["stress"] = stress_results[sid]
         if sid in paper_shadow_results:
@@ -1654,6 +1718,7 @@ __all__ = [
     "ValidationProfile",
     "CohortRuleConfig",
     "PortfolioRuleConfig",
+    "BenchmarkRuleConfig",
     "StressRuleConfig",
     "PaperShadowConsistencyConfig",
     "LiveMonitoringConfig",
@@ -1679,6 +1744,7 @@ __all__ = [
     "recommended_stage",
     "evaluate_cohort_rules",
     "evaluate_portfolio_rules",
+    "evaluate_benchmark_rules",
     "evaluate_stress_rules",
     "evaluate_paper_shadow_consistency",
     "evaluate_live_monitoring",

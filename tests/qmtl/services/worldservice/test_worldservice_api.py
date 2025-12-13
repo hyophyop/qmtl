@@ -868,6 +868,49 @@ async def test_paper_shadow_consistency_rule_detects_drift():
 
 
 @pytest.mark.asyncio
+async def test_benchmark_metrics_and_relative_rule_are_recorded():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wbench"})
+            policy = {
+                "benchmark": {"min_vs_benchmark_sharpe": 0.0, "severity": "soft", "owner": "quant"},
+            }
+            await client.post("/worlds/wbench/policies", json={"policy": policy})
+            await client.post("/worlds/wbench/set-default", json={"version": 1})
+
+            resp = await client.post(
+                "/worlds/wbench/evaluate",
+                json={
+                    "strategy_id": "s-bench",
+                    "run_id": "run-bench-1",
+                    "stage": "backtest",
+                    "risk_tier": "low",
+                    "metrics": {
+                        "s-bench": {
+                            "returns": {"sharpe": 0.3},
+                            "benchmark": {"sharpe": 0.4, "max_drawdown": 0.1, "volatility": 0.2},
+                        }
+                    },
+                },
+            )
+            assert resp.status_code == 200
+
+            run_resp = await client.get("/worlds/wbench/strategies/s-bench/runs/run-bench-1")
+            assert run_resp.status_code == 200
+            record = run_resp.json()
+
+            assert record["metrics"]["benchmark"]["sharpe"] == pytest.approx(0.4)
+            results = record["validation"]["results"]
+            assert "benchmark" in results
+            assert results["benchmark"]["status"] == "fail"
+
+            extra = record["metrics"]["diagnostics"]["extra_metrics"]
+            assert extra["benchmark_sharpe"] == pytest.approx(0.4)
+            assert extra["vs_benchmark_sharpe"] == pytest.approx(-0.1)
+
+
+@pytest.mark.asyncio
 async def test_policy_missing_metrics_is_flagged():
     app = create_app(storage=Storage())
     async with httpx.ASGITransport(app=app) as asgi:
