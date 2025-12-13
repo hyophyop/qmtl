@@ -13,7 +13,12 @@ import json
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
-from scripts.policy_diff import _extract_metrics, _load_policy, _load_runs, _get_summary_status
+try:
+    from scripts.policy_diff import _extract_metrics, _load_policy, _load_runs, _get_summary_status
+except ModuleNotFoundError:  # pragma: no cover
+    # When executed as a file (python scripts/policy_snapshot.py), the parent
+    # directory is not on sys.path; fall back to local imports.
+    from policy_diff import _extract_metrics, _load_policy, _load_runs, _get_summary_status
 from qmtl.services.worldservice.policy_engine import Policy, RuleResult, evaluate_policy
 
 
