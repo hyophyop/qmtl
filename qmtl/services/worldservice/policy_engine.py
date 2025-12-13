@@ -280,6 +280,18 @@ class StressRuleConfig(BaseModel):
     owner: str | None = None
 
 
+class PaperShadowConsistencyConfig(BaseModel):
+    """Configuration for paper/shadow vs backtest drift detection."""
+
+    stages: List[str] | None = None  # default: ["paper", "shadow"]
+    min_sharpe_ratio: float | None = None
+    max_drawdown_ratio: float | None = None
+    max_var_p01_ratio: float | None = None
+    max_es_p01_ratio: float | None = None
+    severity: str | None = None
+    owner: str | None = None
+
+
 class LiveMonitoringConfig(BaseModel):
     """Configuration for ongoing live monitoring validation."""
 
@@ -310,6 +322,7 @@ class Policy(BaseModel):
     cohort: CohortRuleConfig | None = None
     portfolio: PortfolioRuleConfig | None = None
     stress: StressRuleConfig | None = None
+    paper_shadow_consistency: PaperShadowConsistencyConfig | None = None
     live_monitoring: LiveMonitoringConfig | None = None
 
     def model_post_init(self, __context: Any) -> None:  # type: ignore[override]
@@ -756,6 +769,104 @@ def evaluate_stress_rules(
     return results
 
 
+def evaluate_paper_shadow_consistency(
+    metrics: Mapping[str, Mapping[str, Any]],
+    policy: Policy,
+    *,
+    stage: str | None = None,
+) -> Dict[str, RuleResult]:
+    """Evaluate paper/shadow consistency against stored backtest baselines."""
+
+    cfg = policy.paper_shadow_consistency
+    if cfg is None:
+        return {}
+
+    stage_norm = _normalize_key(stage) or ""
+    allowed_raw = cfg.stages or ["paper", "shadow"]
+    allowed = {_normalize_key(s) or "" for s in allowed_raw}
+    if stage_norm and stage_norm not in allowed:
+        return {}
+
+    severity, owner = _resolve_meta_defaults(cfg, default_severity="soft", default_owner="ops")
+    results: Dict[str, RuleResult] = {}
+
+    for sid, vals in metrics.items():
+        status = "pass"
+        reasons: list[str] = []
+
+        sharpe_ratio = vals.get("paper_vs_backtest_sharpe_ratio")
+        dd_ratio = vals.get("paper_vs_backtest_dd_ratio")
+        var_ratio = vals.get("paper_vs_backtest_var_p01_ratio")
+        es_ratio = vals.get("paper_vs_backtest_es_p01_ratio")
+
+        details: Dict[str, Any] = {
+            "stage": stage,
+            "baseline_run_id": vals.get("paper_shadow_baseline_run_id"),
+            "backtest_sharpe": vals.get("backtest_sharpe"),
+            "backtest_max_drawdown": vals.get("backtest_max_drawdown"),
+            "backtest_var_p01": vals.get("backtest_var_p01"),
+            "backtest_es_p01": vals.get("backtest_es_p01"),
+            "paper_sharpe": vals.get("sharpe"),
+            "paper_max_drawdown": vals.get("max_drawdown"),
+            "paper_var_p01": vals.get("var_p01") or vals.get("returns.var_p01"),
+            "paper_es_p01": vals.get("es_p01") or vals.get("returns.es_p01"),
+            "paper_vs_backtest_sharpe_ratio": sharpe_ratio,
+            "paper_vs_backtest_dd_ratio": dd_ratio,
+            "paper_vs_backtest_var_p01_ratio": var_ratio,
+            "paper_vs_backtest_es_p01_ratio": es_ratio,
+        }
+
+        if cfg.min_sharpe_ratio is not None:
+            if sharpe_ratio is None:
+                status = "warn"
+                reasons.append("paper_shadow_sharpe_ratio_missing")
+            elif sharpe_ratio < cfg.min_sharpe_ratio:
+                status = "fail"
+                reasons.append("paper_shadow_sharpe_ratio_below_min")
+                details["min_sharpe_ratio"] = cfg.min_sharpe_ratio
+
+        if cfg.max_drawdown_ratio is not None:
+            if dd_ratio is None:
+                status = "warn"
+                reasons.append("paper_shadow_dd_ratio_missing")
+            elif dd_ratio > cfg.max_drawdown_ratio:
+                status = "fail"
+                reasons.append("paper_shadow_dd_ratio_exceeds_max")
+                details["max_drawdown_ratio"] = cfg.max_drawdown_ratio
+
+        if cfg.max_var_p01_ratio is not None:
+            if var_ratio is None:
+                status = "warn"
+                reasons.append("paper_shadow_var_ratio_missing")
+            elif var_ratio > cfg.max_var_p01_ratio:
+                status = "fail"
+                reasons.append("paper_shadow_var_ratio_exceeds_max")
+                details["max_var_p01_ratio"] = cfg.max_var_p01_ratio
+
+        if cfg.max_es_p01_ratio is not None:
+            if es_ratio is None:
+                status = "warn"
+                reasons.append("paper_shadow_es_ratio_missing")
+            elif es_ratio > cfg.max_es_p01_ratio:
+                status = "fail"
+                reasons.append("paper_shadow_es_ratio_exceeds_max")
+                details["max_es_p01_ratio"] = cfg.max_es_p01_ratio
+
+        reason_code = reasons[0] if reasons else "paper_shadow_ok"
+        reason = ", ".join(reasons) if reasons else "Paper/shadow consistency satisfied"
+        results[sid] = RuleResult(
+            status=status,
+            severity=severity,
+            owner=owner,
+            reason_code=reason_code,
+            reason=reason,
+            tags=["paper_shadow"],
+            details=details,
+        )
+
+    return results
+
+
 def evaluate_live_monitoring(
     metrics: Mapping[str, Mapping[str, Any]],
     policy: Policy,
@@ -977,6 +1088,7 @@ def evaluate_policy(
     cohort_results = evaluate_cohort_rules(normalized, policy, stage=stage)
     portfolio_results = evaluate_portfolio_rules(normalized, policy, stage=stage)
     stress_results = evaluate_stress_rules(normalized, policy, stage=stage)
+    paper_shadow_results = evaluate_paper_shadow_consistency(normalized, policy, stage=stage)
     live_result = evaluate_live_monitoring(normalized, policy, stage=stage)
 
     for sid in normalized.keys():
@@ -987,6 +1099,8 @@ def evaluate_policy(
             per_rule["portfolio"] = portfolio_results[sid]
         if sid in stress_results:
             per_rule["stress"] = stress_results[sid]
+        if sid in paper_shadow_results:
+            per_rule["paper_shadow_consistency"] = paper_shadow_results[sid]
         if live_result:
             per_rule["live_monitoring"] = live_result
 
@@ -1023,6 +1137,7 @@ def evaluate_extended_layers(
     cohort_results = evaluate_cohort_rules(metrics_map, policy, stage=stage)
     portfolio_results = evaluate_portfolio_rules(metrics_map, policy, stage=stage)
     stress_results = evaluate_stress_rules(metrics_map, policy, stage=stage)
+    paper_shadow_results = evaluate_paper_shadow_consistency(metrics_map, policy, stage=stage)
     live_result = evaluate_live_monitoring(metrics_map, policy, stage=stage)
 
     merged: Dict[str, Dict[str, RuleResult]] = {}
@@ -1034,6 +1149,8 @@ def evaluate_extended_layers(
             per_rule["portfolio"] = portfolio_results[sid]
         if sid in stress_results:
             per_rule["stress"] = stress_results[sid]
+        if sid in paper_shadow_results:
+            per_rule["paper_shadow_consistency"] = paper_shadow_results[sid]
         if live_result:
             per_rule["live_monitoring"] = live_result
         if per_rule:
@@ -1538,6 +1655,7 @@ __all__ = [
     "CohortRuleConfig",
     "PortfolioRuleConfig",
     "StressRuleConfig",
+    "PaperShadowConsistencyConfig",
     "LiveMonitoringConfig",
     "ValidationConfig",
     "SampleProfile",
@@ -1562,6 +1680,7 @@ __all__ = [
     "evaluate_cohort_rules",
     "evaluate_portfolio_rules",
     "evaluate_stress_rules",
+    "evaluate_paper_shadow_consistency",
     "evaluate_live_monitoring",
     "evaluate_extended_layers",
 ]

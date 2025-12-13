@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import asyncio
+import math
 from dataclasses import dataclass
 from copy import deepcopy
 from contextlib import AsyncExitStack, asynccontextmanager
@@ -50,6 +51,7 @@ from .schemas import (
     StrategySeries,
 )
 from . import metrics as ws_metrics
+from .metrics import parse_timestamp
 from .storage import Storage
 from .validation_checks import ensure_validation_health
 
@@ -157,6 +159,96 @@ class WorldService:
             series_returns = self._series_returns(series.get(sid))
             augmented[sid] = augment_advanced_metrics(values, returns=series_returns)
         payload.metrics = augmented
+
+    @staticmethod
+    def _coerce_float(value: Any) -> float | None:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            candidate = float(value)
+            return candidate if math.isfinite(candidate) else None
+        return None
+
+    @classmethod
+    def _extract_metric(cls, metrics: Mapping[str, Any], block: str, key: str) -> float | None:
+        direct = cls._coerce_float(metrics.get(key))
+        if direct is not None:
+            return direct
+        section = metrics.get(block)
+        if isinstance(section, Mapping):
+            return cls._coerce_float(section.get(key))
+        return None
+
+    async def _augment_payload_metrics_with_paper_shadow_baselines(
+        self,
+        world_id: str,
+        payload: EvaluateRequest,
+    ) -> None:
+        stage = (payload.stage or "").lower()
+        if stage not in {"paper", "shadow"}:
+            return
+        metrics = payload.metrics
+        if not metrics:
+            return
+
+        for sid, values in metrics.items():
+            if not isinstance(values, Mapping):
+                continue
+            runs = await self.store.list_evaluation_runs(world_id=world_id, strategy_id=sid)
+            backtests = [r for r in runs if str(r.get("stage") or "").lower() == "backtest"]
+            if not backtests:
+                continue
+
+            def _rank(run: Mapping[str, Any]) -> tuple[datetime, datetime]:
+                created = parse_timestamp(str(run.get("created_at") or "")) or datetime.min.replace(tzinfo=timezone.utc)
+                updated = parse_timestamp(str(run.get("updated_at") or "")) or created
+                return updated, created
+
+            baseline = max(backtests, key=_rank)
+            baseline_metrics = baseline.get("metrics")
+            if not isinstance(baseline_metrics, Mapping):
+                continue
+
+            base_sharpe = self._extract_metric(baseline_metrics, "returns", "sharpe")
+            base_dd = self._extract_metric(baseline_metrics, "returns", "max_drawdown")
+            base_var = self._extract_metric(baseline_metrics, "returns", "var_p01")
+            base_es = self._extract_metric(baseline_metrics, "returns", "es_p01")
+            base_dd = abs(base_dd) if base_dd is not None else None
+
+            cur_sharpe = self._extract_metric(values, "returns", "sharpe")
+            cur_dd = self._extract_metric(values, "returns", "max_drawdown")
+            cur_var = self._extract_metric(values, "returns", "var_p01")
+            cur_es = self._extract_metric(values, "returns", "es_p01")
+            cur_dd = abs(cur_dd) if cur_dd is not None else None
+
+            diagnostics = values.get("diagnostics")
+            diagnostics_map = dict(diagnostics) if isinstance(diagnostics, Mapping) else {}
+            extra = diagnostics_map.get("extra_metrics")
+            extra_map = dict(extra) if isinstance(extra, Mapping) else {}
+
+            if base_sharpe is not None:
+                extra_map.setdefault("backtest_sharpe", base_sharpe)
+            if base_dd is not None:
+                extra_map.setdefault("backtest_max_drawdown", base_dd)
+            if base_var is not None:
+                extra_map.setdefault("backtest_var_p01", base_var)
+            if base_es is not None:
+                extra_map.setdefault("backtest_es_p01", base_es)
+            extra_map.setdefault("paper_shadow_baseline_run_id", str(baseline.get("run_id") or ""))
+
+            if base_sharpe not in (None, 0.0) and cur_sharpe is not None:
+                extra_map.setdefault("paper_vs_backtest_sharpe_ratio", cur_sharpe / base_sharpe)
+            if base_dd not in (None, 0.0) and cur_dd is not None:
+                extra_map.setdefault("paper_vs_backtest_dd_ratio", cur_dd / base_dd)
+            if base_var not in (None, 0.0) and cur_var is not None:
+                extra_map.setdefault("paper_vs_backtest_var_p01_ratio", cur_var / base_var)
+            if base_es not in (None, 0.0) and cur_es is not None:
+                extra_map.setdefault("paper_vs_backtest_es_p01_ratio", cur_es / base_es)
+
+            diagnostics_map["extra_metrics"] = extra_map
+            updated_values = dict(values)
+            updated_values["diagnostics"] = diagnostics_map
+            metrics[sid] = updated_values
 
     @property
     def store(self) -> Storage:
@@ -384,6 +476,10 @@ class WorldService:
             self._augment_payload_metrics_with_series(payload)
         except Exception:  # pragma: no cover - best-effort enrichment
             logger.exception("Failed to derive advanced metrics for %s", world_id)
+        try:
+            await self._augment_payload_metrics_with_paper_shadow_baselines(world_id, payload)
+        except Exception:  # pragma: no cover - best-effort enrichment
+            logger.exception("Failed to derive paper/shadow baselines for %s", world_id)
         evaluation = await self._evaluator.determine_active(world_id, payload)
         active = list(evaluation)
         run_id, strategy_id = await self._maybe_record_evaluation_run(world_id, payload, evaluation)
