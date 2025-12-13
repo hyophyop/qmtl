@@ -12,6 +12,8 @@ from ..schemas import (
     ApplyAck,
     ApplyRequest,
     ApplyResponse,
+    CohortEvaluateRequest,
+    CohortEvaluateResponse,
     EvaluateRequest,
 )
 from ..services import WorldService
@@ -48,6 +50,12 @@ def create_activation_router(service: WorldService) -> APIRouter:
     @router.post('/worlds/{world_id}/evaluate', response_model=ApplyResponse)
     async def post_evaluate(world_id: str, payload: EvaluateRequest) -> ApplyResponse:
         return await service.evaluate(world_id, payload)
+
+    @router.post('/worlds/{world_id}/evaluate-cohort', response_model=CohortEvaluateResponse)
+    async def post_evaluate_cohort(
+        world_id: str, payload: CohortEvaluateRequest
+    ) -> CohortEvaluateResponse:
+        return await service.evaluate_cohort(world_id, payload)
 
     @router.post('/worlds/{world_id}/apply', response_model=ApplyAck)
     async def post_apply(world_id: str, payload: ApplyRequest) -> ApplyAck:

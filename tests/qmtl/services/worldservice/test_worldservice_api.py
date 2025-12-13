@@ -911,6 +911,57 @@ async def test_benchmark_metrics_and_relative_rule_are_recorded():
 
 
 @pytest.mark.asyncio
+async def test_cohort_campaign_evaluation_records_runs_for_all_candidates():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wcohort"})
+            policy = {
+                "selection": {"top_k": {"metric": "sharpe", "k": 1}},
+                "cohort": {"top_k": 1, "severity": "soft", "owner": "risk"},
+            }
+            await client.post("/worlds/wcohort/policies", json={"policy": policy})
+            await client.post("/worlds/wcohort/set-default", json={"version": 1})
+
+            resp = await client.post(
+                "/worlds/wcohort/evaluate-cohort",
+                json={
+                    "campaign_id": "camp-1",
+                    "run_id": "run-camp-1",
+                    "stage": "backtest",
+                    "risk_tier": "low",
+                    "metrics": {
+                        "s-good": {"returns": {"sharpe": 1.0}},
+                        "s-bad": {"returns": {"sharpe": 0.5}},
+                    },
+                },
+            )
+            assert resp.status_code == 200
+            payload = resp.json()
+            assert payload["campaign_id"] == "camp-1"
+            assert payload["run_id"] == "run-camp-1"
+            assert set(payload["candidates"]) == {"s-good", "s-bad"}
+            assert "s-good" in payload["active"]
+            assert "s-bad" not in payload["active"]
+
+            assert set(payload["evaluation_runs"].keys()) == {"s-good", "s-bad"}
+            for sid in ("s-good", "s-bad"):
+                run_resp = await client.get(payload["evaluation_runs"][sid])
+                assert run_resp.status_code == 200
+                record = run_resp.json()
+                assert record["run_id"] == "run-camp-1"
+                assert record["summary"]["campaign_id"] == "camp-1"
+                assert set(record["summary"]["campaign_candidates"]) == {"s-good", "s-bad"}
+                assert set(record["summary"]["active_set"]) == {"s-good"}
+                assert record["summary"]["active"] is (sid == "s-good")
+
+                results = record["validation"]["results"]
+                assert "cohort" in results
+                if sid == "s-bad":
+                    assert results["cohort"]["status"] == "fail"
+
+
+@pytest.mark.asyncio
 async def test_policy_missing_metrics_is_flagged():
     app = create_app(storage=Storage())
     async with httpx.ASGITransport(app=app) as asgi:
