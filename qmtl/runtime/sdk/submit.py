@@ -1369,9 +1369,6 @@ def _resolved_status(validation_result: Any, ws_eval: WsEvalResult | None) -> st
         # WS response didn't include an explicit decision; treat as pending.
         return "pending"
 
-    if getattr(validation_result, "activated", False):
-        return "active"
-
     if getattr(validation_result, "status", None) == ValidationStatus.FAILED:
         return "rejected"
 

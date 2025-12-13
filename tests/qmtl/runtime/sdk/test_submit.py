@@ -437,6 +437,50 @@ class TestSubmitResult:
         assert result.precheck is not None
         assert result.precheck.status == ValidationStatus.FAILED.value
 
+    def test_missing_ws_result_does_not_promote_local_activation(self):
+        class DummyMetrics:
+            sharpe = 1.3
+            max_drawdown = 0.05
+            win_ratio = 0.65
+            profit_factor = 1.4
+            car_mdd = 0.0
+            rar_mdd = 0.0
+            total_return = 0.12
+            num_trades = 15
+            correlation_avg = 0.18
+
+        class DummyValidation:
+            def __init__(self):
+                self.status = ValidationStatus.PASSED
+                self.weight = 0.15
+                self.rank = 3
+                self.contribution = 0.06
+                self.activated = True
+                self.metrics = DummyMetrics()
+                self.violations = []
+                self.improvement_hints = []
+                self.correlation_avg = 0.18
+
+        validation = DummyValidation()
+        strategy = SimpleStrategy()
+
+        result = _build_submit_result_from_validation(
+            strategy=strategy,
+            strategy_class_name="SimpleStrategy",
+            strategy_id="sid-missing-ws",
+            resolved_world="world-missing-ws",
+            mode=Mode.BACKTEST,
+            world_notice=[],
+            validation_result=validation,
+            ws_eval=None,
+            gateway_available=False,
+        )
+
+        assert result.status == "pending"
+        assert result.precheck is not None
+        assert result.precheck.activated is True
+        assert result.precheck.status == ValidationStatus.PASSED.value
+
     def test_offline_submission_stays_pending_without_ws_decision(self):
         class DummyMetrics:
             sharpe = 1.0
