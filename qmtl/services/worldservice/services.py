@@ -383,8 +383,37 @@ class WorldService:
         recommended_stage_value = (
             evaluation.recommended_stage if evaluation else None
         ) or recommended_stage(profile_hint, stage)
+
+        def _summary_status(
+            results: Mapping[str, Any] | None,
+            *,
+            fallback_active: bool,
+        ) -> str:
+            if not results:
+                return "pass" if fallback_active else "fail"
+
+            blocking_fail = False
+            any_problem = False
+            for candidate in results.values():
+                status_value = getattr(candidate, "status", None)
+                severity_value = getattr(candidate, "severity", None)
+                status = str(status_value or "").lower()
+                severity = str(severity_value or "blocking").lower()
+                if status == "fail":
+                    if severity == "blocking":
+                        blocking_fail = True
+                    else:
+                        any_problem = True
+                elif status == "warn":
+                    any_problem = True
+            if blocking_fail:
+                return "fail"
+            if any_problem:
+                return "warn"
+            return "pass"
+
         summary = {
-            "status": "pass" if active_flag else "fail",
+            "status": _summary_status(rule_results, fallback_active=active_flag),
             "active": active_flag,
             "active_set": list(evaluation.selected if evaluation else []),
         }
