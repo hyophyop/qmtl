@@ -38,14 +38,14 @@
 
 ## 차기 이슈 번들(제안)
 
-매트릭스의 “부분/미구현” 항목을 다음과 같이 **운영 단위 이슈 번들**로 쪼개는 것을 권장합니다.
+매트릭스의 “부분/미구현” 항목을 다음과 같이 **운영 단위 이슈 번들**로 쪼개는 것을 권장합니다. (트래킹: #1905)
 
-- **G1 ControlBus/큐 운영 패키징**: 토픽/컨슈머그룹/백오프·DLQ/재처리(runbook+리허설 증빙)까지 포함한 템플릿을 워커·프로듀서에 공통 적용
-- **G2 Live 모니터링 자동 생성**: 스케줄러 → Live EvaluationRun 생성 워커 연결(30/60/90일) + 실패/지연 알람 + 운영 리포트 샘플
-- **G3 Evaluation Store·회귀 자동화**: 불변 저장/보존 정책을 API·CI로 고정 + “나쁜 전략” 회귀 세트/임계 초과 실패 플래그 운영 정착
-- **G4 Portfolio/Stress 입력 소스 강화**: realized/stress 프로듀서 연결 + 해시/actor/ACL 검증 공통 모듈 + 계약 위반 차단/알람
-- **G5 SDK→WS SSOT 전환**: SDK precheck는 metrics-only로 유지하고, 룰 실행·오류 처리·오프로드를 WS 단일 진입으로 통합 테스트로 고정
-- **G6 거버넌스/운영 가시성**: override 재검토 큐·승인 SLA, Invariant 1(policy_version 호환) 보강, Validation Report 템플릿/산출물 정의
+- **G1 ControlBus/큐 운영 패키징** (#1906): 토픽/컨슈머그룹/백오프·DLQ/재처리(runbook+리허설 증빙)까지 포함한 템플릿을 워커·프로듀서에 공통 적용
+- **G2 Live 모니터링 자동 생성** (#1907): 스케줄러 → Live EvaluationRun 생성 워커 연결(30/60/90일) + 실패/지연 알람 + 운영 리포트 샘플
+- **G3 Evaluation Store·회귀 자동화** (#1908): 불변 저장/보존 정책을 API·CI로 고정 + “나쁜 전략” 회귀 세트/임계 초과 실패 플래그 운영 정착
+- **G4 Portfolio/Stress 입력 소스 강화** (#1909): realized/stress 프로듀서 연결 + 해시/actor/ACL 검증 공통 모듈 + 계약 위반 차단/알람
+- **G5 SDK→WS SSOT 전환** (#1910): SDK precheck는 metrics-only로 유지하고, 룰 실행·오류 처리·오프로드를 WS 단일 진입으로 통합 테스트로 고정
+- **G6 거버넌스/운영 가시성** (#1911): override 재검토 큐·승인 SLA, Invariant 1(policy_version 호환) 보강, Validation Report 템플릿/산출물 정의
 
 ## 남은 주요 갭
 1) **스트리밍·운영 배포 정착**
