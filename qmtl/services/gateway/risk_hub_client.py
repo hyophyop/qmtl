@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from collections.abc import Sequence
 from typing import Any, Mapping, cast
 
 import httpx
@@ -28,6 +29,8 @@ class RiskHubClient:
     actor: str = "gateway"
     stage: str | None = None
     ttl_sec: int = 10
+    allowed_actors: Sequence[str] | None = None
+    allowed_stages: Sequence[str] | None = None
 
     async def publish_snapshot(self, world_id: str, payload: Mapping[str, Any]) -> dict[str, Any]:
         """POST a snapshot to /risk-hub/worlds/{world_id}/snapshots."""
@@ -126,6 +129,8 @@ class RiskHubClient:
                 actor=self.actor,
                 stage=self.stage,
                 ttl_sec_default=self.ttl_sec,
+                allowed_actors=self.allowed_actors,
+                allowed_stages=self.allowed_stages,
             )
         except TypeError:
             # Preserve legacy fallback only for non-JSON-serializable payloads.

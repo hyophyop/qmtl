@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from qmtl.services.worldservice.validation_checks import (
@@ -578,6 +580,40 @@ class TestValidationHealthGaps:
         # ensure_validation_health로 올바르게 계산된 경우
         health_gaps_for_run = [g for g in report.validation_health_gaps if g["run_id"] == "run-healthy"]
         assert len(health_gaps_for_run) == 0
+
+
+def test_invariant3_override_rereview_due_date_and_overdue_flag():
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    override_ts = now - timedelta(days=40)
+    override_raw = override_ts.isoformat().replace("+00:00", "Z")
+    world = {"id": "world-prod"}
+    run = {
+        "world_id": "world-prod",
+        "strategy_id": "strat-override",
+        "run_id": "override-live",
+        "stage": "live",
+        "summary": {
+            "status": "warn",
+            "override_status": "approved",
+            "override_reason": "temporary risk waiver",
+            "override_actor": "risk",
+            "override_timestamp": override_raw,
+        },
+        "validation": {"results": {"performance": {"status": "warn"}}},
+        "metrics": ensure_validation_health(_full_metrics(), {"performance": {"status": "warn"}}),
+        "created_at": override_raw,
+    }
+
+    report = check_validation_invariants(world, [run])
+
+    assert not report.ok
+    assert len(report.approved_overrides) == 1
+    entry = report.approved_overrides[0]
+    assert entry["review_window_days"] == 30
+    expected_due = (override_ts + timedelta(days=30)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    assert entry["review_due_at"] == expected_due
+    assert entry["review_overdue"] is True
+    assert entry["missing_fields"] == []
 
 
 class TestInvariantReportOkProperty:

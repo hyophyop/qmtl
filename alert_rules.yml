@@ -184,3 +184,19 @@ prometheus:
           annotations:
             summary: Risk hub snapshots routed to DLQ
             runbook: docs/operations/risk_signal_hub_runbook.html
+        - alert: LiveMonitoringNoRuns
+          expr: (sum(increase(live_monitoring_run_total[6h])) or vector(0)) < 1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: No live monitoring runs observed for 6 hours
+            runbook: docs/operations/world_validation_observability.html
+        - alert: LiveMonitoringFailures
+          expr: sum(increase(live_monitoring_run_total{status="failure"}[10m])) > 0
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: Live monitoring worker failures detected
+            runbook: docs/operations/world_validation_observability.html

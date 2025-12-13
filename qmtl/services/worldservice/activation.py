@@ -213,6 +213,7 @@ class ActivationEventPublisher:
             provenance={
                 "source": "worldservice",
                 "reason": "activation_update",
+                "actor": "worldservice",
                 "stage": "live",
             },
         )

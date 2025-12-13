@@ -50,7 +50,7 @@ def test_normalize_and_validate_snapshot_rejects_bad_weights():
         "weights": {"s1": 0.5, "s2": 0.4},
     }
     with pytest.raises(ValueError, match="sum"):
-        normalize_and_validate_snapshot("w", payload)
+        normalize_and_validate_snapshot("w", payload, actor="gateway")
 
 
 def test_normalize_and_validate_snapshot_enforces_allowlist():
@@ -102,7 +102,7 @@ def test_normalize_and_validate_snapshot_enforces_stage_allowlist():
         "as_of": "2025-01-01T00:00:00Z",
         "version": "v1",
         "weights": {"s1": 1.0},
-        "provenance": {"stage": "prod"},
+        "provenance": {"actor": "gateway", "stage": "prod"},
     }
     with pytest.raises(ValueError, match="not allowed"):
         normalize_and_validate_snapshot(
@@ -110,4 +110,3 @@ def test_normalize_and_validate_snapshot_enforces_stage_allowlist():
             payload,
             allowed_stages=["staging"],
         )
-
