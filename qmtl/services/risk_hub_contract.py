@@ -113,12 +113,24 @@ def normalize_and_validate_snapshot(
 
     provenance = data.get("provenance")
     provenance_map: dict[str, Any] = dict(provenance) if isinstance(provenance, Mapping) else {}
-    if actor:
-        _validate_actor(actor, allowed_actors=allowed_actors)
-        provenance_map.setdefault("actor", actor)
-    if stage:
-        _validate_stage(stage, allowed_stages=allowed_stages)
-        provenance_map.setdefault("stage", stage)
+
+    actor_value = actor or provenance_map.get("actor")
+    stage_value = stage or provenance_map.get("stage")
+
+    if allowed_actors is not None:
+        _validate_actor(str(actor_value or ""), allowed_actors=allowed_actors)
+    elif actor_value:
+        _validate_actor(str(actor_value), allowed_actors=None)
+
+    if allowed_stages is not None:
+        _validate_stage(str(stage_value or ""), allowed_stages=allowed_stages)
+    elif stage_value:
+        _validate_stage(str(stage_value), allowed_stages=None)
+
+    if actor_value:
+        provenance_map.setdefault("actor", str(actor_value))
+    if stage_value:
+        provenance_map.setdefault("stage", str(stage_value))
     if provenance_map:
         data["provenance"] = provenance_map
 
