@@ -43,11 +43,12 @@
 
 - `.github/workflows/policy-diff-regression.yml`
 
-기본 시나리오 세트(Good/Borderline/Bad):
+기본 시나리오 세트(Good/Borderline/Bad/Known-bad):
 
 - `operations/policy_diff/good_strategies_runs/*.json`
 - `operations/policy_diff/borderline_strategies_runs/*.json`
 - `operations/policy_diff/bad_strategies_runs/*.json`
+- `operations/policy_diff/known_bad_strategies_runs/*.json`
 
 산출물(artifact):
 
@@ -64,6 +65,7 @@
 - good: `pass_ratio=1.0`, `fail_ratio=0.0`, `unknown_ratio=0.0`
 - borderline: `pass_ratio`/`fail_ratio` 모두 `0.1~0.9`, `unknown_ratio=0.0`
 - bad: `fail_ratio>=0.5`, `unknown_ratio=0.0`
+- known_bad: `pass_ratio<=0.05`(즉, `fail|warn>=95%`), `unknown_ratio=0.0`
 
 ## 변경 로그(최소 포맷)
 

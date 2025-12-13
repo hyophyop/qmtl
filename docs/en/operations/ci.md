@@ -68,6 +68,7 @@ def test_long_running_case():
 ## Policy Diff Regression (CI/Cron)
 
 - Goal: automatically monitor the impact ratio of policy changes against the “bad strategies” regression set.
+- Additional guardrail (high-risk false-negative): enforce `pass_ratio<=0.05` (i.e. `fail|warn>=95%`) on `operations/policy_diff/known_bad_strategies_runs/*.json`.
 - Example command:
 
 ```
