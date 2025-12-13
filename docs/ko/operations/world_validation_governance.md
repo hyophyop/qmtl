@@ -27,6 +27,8 @@ approved override에는 아래 필드를 반드시 기록합니다.
 
 - 스토리지 기반(권장):  
   `uv run python scripts/generate_override_rereview_report.py --output override_queue.md`
+- GitHub Actions 스케줄(권장):  
+  `.github/workflows/override-rereview-queue.yml` (secrets 미설정 시 자동 skip + 리포트 아티팩트 업로드)
 - API 기반(월드별):  
   `GET /worlds/{world_id}/validations/invariants` → `approved_overrides` 확인
 
@@ -39,4 +41,3 @@ approved override에는 아래 필드를 반드시 기록합니다.
    - override 해제(정상화) 또는
    - override 갱신(사유/승인자/시각 갱신) 및 추가 조치 기록
 3) 반복 발생 전략/월드는 원인 분석(룰/데이터/리밸런스/리스크 신호) 및 정책/룰 보강으로 연결합니다.
-

@@ -27,6 +27,8 @@ Current defaults in code:
 
 - Storage-based (recommended):  
   `uv run python scripts/generate_override_rereview_report.py --output override_queue.md`
+- GitHub Actions schedule (recommended):  
+  `.github/workflows/override-rereview-queue.yml` (auto-skips if secrets are missing + uploads report artifacts)
 - API-based (per world):  
   `GET /worlds/{world_id}/validations/invariants` → inspect `approved_overrides`
 
@@ -39,4 +41,3 @@ Each `approved_overrides` entry includes `review_due_at`, `review_overdue`, and 
    - remove the override (normalize), or
    - renew the override (update reason/actor/timestamp) and record follow-ups
 3) For recurring overrides, feed back into policy/rules and investigate root causes (data, rebalancing, risk signals, rule design).
-
