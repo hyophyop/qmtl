@@ -24,7 +24,12 @@ from .decision import DecisionEvaluator, augment_metrics_with_linearity
 from .policy import GatingPolicy
 from .policy_engine import PolicyEvaluationResult, recommended_stage
 from .extended_validation_worker import ExtendedValidationWorker
-from .validation_metrics import augment_live_metrics, augment_portfolio_metrics, augment_stress_metrics
+from .validation_metrics import (
+    augment_advanced_metrics,
+    augment_live_metrics,
+    augment_portfolio_metrics,
+    augment_stress_metrics,
+)
 from .rebalancing import MultiWorldProportionalRebalancer, MultiWorldRebalanceContext, PositionSlice, SymbolDelta
 from .rebalancing.overlay import OverlayConfigError, OverlayPlanner
 from .run_state import ApplyRunRegistry, ApplyRunState, ApplyStage
@@ -109,6 +114,49 @@ class WorldService:
         self._decisions: Dict[str, _DecisionState] = {}
         self._extended_validation_scheduler = extended_validation_scheduler
         self._risk_hub = risk_hub
+
+    @staticmethod
+    def _series_returns(series: StrategySeries | None) -> list[float] | None:
+        if series is None:
+            return None
+        if series.returns:
+            try:
+                return [float(v) for v in series.returns]
+            except Exception:
+                return None
+        if series.pnl:
+            try:
+                return [float(v) for v in series.pnl]
+            except Exception:
+                return None
+        if series.equity and len(series.equity) >= 2:
+            returns: list[float] = []
+            prev: float | None = None
+            for point in series.equity:
+                if prev is None:
+                    prev = float(point)
+                    continue
+                current = float(point)
+                returns.append(current - prev)
+                prev = current
+            return returns
+        return None
+
+    def _augment_payload_metrics_with_series(self, payload: EvaluateRequest) -> None:
+        metrics = payload.metrics
+        if not metrics:
+            return
+        series = payload.series
+        if not series:
+            return
+
+        augmented: dict[str, dict[str, Any]] = {}
+        for sid, values in metrics.items():
+            if not isinstance(values, Mapping):
+                continue
+            series_returns = self._series_returns(series.get(sid))
+            augmented[sid] = augment_advanced_metrics(values, returns=series_returns)
+        payload.metrics = augmented
 
     @property
     def store(self) -> Storage:
@@ -332,6 +380,10 @@ class WorldService:
         )
 
     async def evaluate(self, world_id: str, payload: EvaluateRequest) -> ApplyResponse:
+        try:
+            self._augment_payload_metrics_with_series(payload)
+        except Exception:  # pragma: no cover - best-effort enrichment
+            logger.exception("Failed to derive advanced metrics for %s", world_id)
         evaluation = await self._evaluator.determine_active(world_id, payload)
         active = list(evaluation)
         run_id, strategy_id = await self._maybe_record_evaluation_run(world_id, payload, evaluation)
