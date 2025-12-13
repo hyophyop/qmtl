@@ -29,6 +29,7 @@ class PortfolioSnapshot:
     weights: Dict[str, float]
     covariance: Dict[str, float] | None = None
     covariance_ref: str | None = None
+    realized_returns: Any | None = None
     realized_returns_ref: str | None = None
     stress_ref: str | None = None
     stress: Dict[str, Any] | None = None
@@ -51,6 +52,14 @@ class PortfolioSnapshot:
             payload["covariance"] = dict(self.covariance)
         if self.covariance_ref:
             payload["covariance_ref"] = self.covariance_ref
+        if self.realized_returns is not None:
+            realized = self.realized_returns
+            if isinstance(realized, Mapping):
+                payload["realized_returns"] = dict(realized)
+            elif isinstance(realized, (list, tuple)):
+                payload["realized_returns"] = list(realized)
+            else:
+                payload["realized_returns"] = realized
         if self.realized_returns_ref:
             payload["realized_returns_ref"] = self.realized_returns_ref
         if self.stress_ref:
@@ -67,6 +76,14 @@ class PortfolioSnapshot:
 
     @classmethod
     def from_payload(cls, payload: Mapping[str, Any]) -> "PortfolioSnapshot":
+        realized = payload.get("realized_returns")
+        realized_payload: Any | None
+        if isinstance(realized, Mapping):
+            realized_payload = dict(realized)
+        elif isinstance(realized, (list, tuple)):
+            realized_payload = list(realized)
+        else:
+            realized_payload = realized
         return cls(
             world_id=str(payload["world_id"]),
             as_of=str(payload["as_of"]),
@@ -74,6 +91,7 @@ class PortfolioSnapshot:
             weights=dict(payload.get("weights") or {}),
             covariance=dict(payload.get("covariance") or {}) or None,
             covariance_ref=payload.get("covariance_ref"),
+            realized_returns=realized_payload,
             realized_returns_ref=payload.get("realized_returns_ref"),
             stress_ref=payload.get("stress_ref"),
             stress=dict(payload.get("stress") or {}) or None,

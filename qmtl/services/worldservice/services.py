@@ -490,6 +490,16 @@ class WorldService:
             if self.bus is not None:
                 try:
                     summary = record.get("summary") if isinstance(record, Mapping) else {}
+                    revision = None
+                    if isinstance(record, Mapping):
+                        rev = record.get("revision")
+                        if isinstance(rev, int):
+                            revision = rev
+                        elif isinstance(rev, str):
+                            try:
+                                revision = int(rev)
+                            except Exception:
+                                revision = None
                     await self.bus.publish_evaluation_run_updated(
                         world_id,
                         strategy_id=strategy_id,
@@ -501,6 +511,7 @@ class WorldService:
                             summary.get("recommended_stage") if isinstance(summary, Mapping) else None
                         ),
                         change_type="override",
+                        version=revision or 1,
                     )
                 except Exception:  # pragma: no cover - best-effort observability
                     logger.exception(
