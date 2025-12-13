@@ -59,6 +59,10 @@ This document defines core SLIs/SLOs and dashboard/alert criteria so the WorldSe
 - Recommended operational checks:
   - Invariant report: `GET /worlds/{world_id}/validations/invariants`
   - Sample the latest EvaluationRun and inspect `diagnostics.validation_health` (by world/stage)
+- SLO report (store-backed, recommended):
+  - Script: `uv run python scripts/report_validation_slo.py --format md --output validation_slo_report.md`
+  - GitHub Actions (scheduled/manual): `.github/workflows/validation-slo-report.yml` (auto-skips if secrets are missing; fails on threshold breaches)
+  - Signals: coverage (`metric_coverage_ratio`), rule execution (`rules_executed_ratio`), `missing_metric`/`rule_error` run ratios (+ best-effort extended delay)
 
 ## Alertmanager Rules (Example Snippet)
 
