@@ -239,6 +239,63 @@ async def test_controlbus_consumer_retries_then_succeeds():
 
 
 @pytest.mark.asyncio
+async def test_controlbus_consumer_derives_dlq_topic_from_controlbus_topic():
+    ws_metrics.reset_metrics()
+    hub = _FlakyHub(fail_times=10)
+    dlq = _StubKafkaProducer()
+
+    data = {
+        "type": "risk_snapshot_updated",
+        "data": {
+            "world_id": "w",
+            "as_of": "2025-01-01T00:00:00Z",
+            "version": "v1",
+            "weights": {"a": 1.0},
+            "provenance": {"actor": "gateway", "stage": "paper"},
+        },
+    }
+    msg = SimpleNamespace(value=json.dumps(data))
+    consumer = _StubKafkaConsumer([msg])
+
+    worker = RiskHubControlBusConsumer(
+        hub=hub,
+        consumer=consumer,
+        max_attempts=1,
+        retry_backoff_sec=0.0,
+        dlq_producer=dlq,
+        topic="controlbus",
+    )
+
+    assert worker._dlq_topic == "controlbus.dlq"
+
+    await worker.start()
+    await asyncio.sleep(0.05)
+    await worker.stop()
+
+    assert len(dlq.sent) == 1
+    sent_topic, raw, key = dlq.sent[0]
+    assert sent_topic == "controlbus.dlq"
+    assert key == b"w"
+    evt = json.loads(raw.decode())
+    assert evt["type"] == "risk_snapshot_updated_dlq"
+    assert evt["data"]["stage"] == "paper"
+    assert (
+        get_metric_value(
+            ws_metrics.risk_hub_snapshot_failed_total,
+            {"world_id": "w", "stage": "paper"},
+        )
+        == 1
+    )
+    assert (
+        get_metric_value(
+            ws_metrics.risk_hub_snapshot_dlq_total,
+            {"world_id": "w", "stage": "paper"},
+        )
+        == 1
+    )
+
+
+@pytest.mark.asyncio
 async def test_controlbus_consumer_sends_dlq_after_retries_exhausted():
     ws_metrics.reset_metrics()
     hub = _FlakyHub(fail_times=10)
