@@ -128,9 +128,9 @@ def normalize_and_validate_snapshot(
         _validate_stage(str(stage_value), allowed_stages=None)
 
     if actor_value:
-        provenance_map.setdefault("actor", str(actor_value))
+        provenance_map["actor"] = str(actor_value)
     if stage_value:
-        provenance_map.setdefault("stage", str(stage_value))
+        provenance_map["stage"] = str(stage_value)
     if provenance_map:
         data["provenance"] = provenance_map
 

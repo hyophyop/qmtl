@@ -111,3 +111,23 @@ def test_normalize_and_validate_snapshot_enforces_stage_allowlist():
             allowed_stages=["staging"],
         )
 
+
+def test_normalize_and_validate_snapshot_overrides_payload_provenance_with_validated_values():
+    payload = {
+        "as_of": "2025-01-01T00:00:00Z",
+        "version": "v1",
+        "weights": {"s1": 1.0},
+        "provenance": {"actor": "evil", "stage": "prod"},
+    }
+    out = normalize_and_validate_snapshot(
+        "w",
+        payload,
+        actor="gateway",
+        stage="staging",
+        allowed_actors=["gateway"],
+        allowed_stages=["staging"],
+    )
+
+    assert out["provenance"]["actor"] == "gateway"
+    assert out["provenance"]["stage"] == "staging"
+
