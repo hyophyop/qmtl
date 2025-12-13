@@ -402,6 +402,12 @@ class RobustnessMetrics(BaseModel):
     sharpe_second_half: float | None = None
 
 
+class BenchmarkMetrics(BaseModel):
+    sharpe: float | None = None
+    max_drawdown: float | None = None
+    volatility: float | None = None
+
+
 class ValidationHealth(BaseModel):
     metric_coverage_ratio: float | None = None
     rules_executed_ratio: float | None = None
@@ -423,6 +429,7 @@ class EvaluationMetrics(BaseModel):
     risk: RiskMetrics | None = None
     robustness: RobustnessMetrics | None = None
     diagnostics: DiagnosticsMetrics | None = None
+    benchmark: BenchmarkMetrics | None = None
 
 
 class RuleResultModel(BaseModel):
