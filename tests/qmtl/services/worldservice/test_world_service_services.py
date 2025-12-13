@@ -134,7 +134,15 @@ async def test_apply_extended_validation_records_metrics_with_scheduler(monkeypa
         def __init__(self, store):  # pragma: no cover - signature compatibility
             self.risk_hub = None
 
-        async def run(self, *, world_id: str, stage: str | None, policy_payload):  # pragma: no cover
+        async def run(  # pragma: no cover
+            self,
+            *,
+            world_id: str,
+            stage: str | None,
+            policy_payload,
+            strategy_id: str | None = None,
+            run_id: str | None = None,
+        ):
             return 0
 
     def _scheduler(coro):
@@ -175,7 +183,15 @@ async def test_apply_extended_validation_records_failure_metrics_with_scheduler(
         def __init__(self, store):  # pragma: no cover - signature compatibility
             self.risk_hub = None
 
-        async def run(self, *, world_id: str, stage: str | None, policy_payload):  # pragma: no cover
+        async def run(  # pragma: no cover
+            self,
+            *,
+            world_id: str,
+            stage: str | None,
+            policy_payload,
+            strategy_id: str | None = None,
+            run_id: str | None = None,
+        ):
             raise RuntimeError("boom")
 
     def _scheduler(coro):

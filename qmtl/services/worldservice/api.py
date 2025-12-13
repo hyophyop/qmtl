@@ -364,6 +364,7 @@ def create_app(
         rebalance_executor=rebalance_executor,
         extended_validation_scheduler=extended_validation_scheduler,
         risk_hub=risk_hub,
+        event_driven_validation=resolved_profile is DeploymentProfile.PROD,
     )
     storage_handle: StorageHandle | None = None
     compat_flag = compat_rebalance_v2

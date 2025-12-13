@@ -26,13 +26,24 @@ This document defines core SLIs/SLOs and dashboard/alert criteria so the WorldSe
   - DLQ: `increase(risk_hub_snapshot_dlq_total[5m])`
   - Dedupe/TTL: `increase(risk_hub_snapshot_dedupe_total[5m])`, `increase(risk_hub_snapshot_expired_total[5m])`
 
-### 3) Extended Validation Worker
+### 3) Validation Event Pipeline Health (EvaluationRun Events)
+
+- Consumes `evaluation_run_created`/`evaluation_run_updated`/`validation_profile_changed` and updates deep validation results in an append-only way.
+- SLI:
+  - Throughput: `rate(validation_event_processed_total[5m])`
+  - Error ratio: `rate(validation_event_failed_total[5m]) / (rate(validation_event_processed_total[5m]) + rate(validation_event_failed_total[5m]))`
+  - DLQ: `increase(validation_event_dlq_total[5m])`
+  - Dedupe/TTL: `increase(validation_event_dedupe_total[5m])`, `increase(validation_event_expired_total[5m])`
+- Operational entrypoint (example):
+  - Run worker: `uv run python scripts/validation_worker.py` (env: `WORLDS_DB_DSN`, `WORLDS_REDIS_DSN`, `CONTROLBUS_BROKERS`, `CONTROLBUS_TOPIC`)
+
+### 4) Extended Validation Worker
 
 - SLI:
   - Success/failure: `rate(extended_validation_run_total{status="success"}[5m])`, `rate(extended_validation_run_total{status=~"failure|enqueue_failed"}[5m])`
   - p95 latency: `histogram_quantile(0.95, sum(rate(extended_validation_run_latency_seconds_bucket[5m])) by (le, world_id, stage))`
 
-### 4) Live Monitoring Materialization
+### 5) Live Monitoring Materialization
 
 - SLI:
   - Run success/failure: `rate(live_monitoring_run_total{status="success"}[5m])`, `rate(live_monitoring_run_total{status="failure"}[5m])`
@@ -42,7 +53,7 @@ This document defines core SLIs/SLOs and dashboard/alert criteria so the WorldSe
   - Report generator (Markdown/JSON): `uv run python scripts/generate_live_monitoring_report.py --world <world_id> --output live_report.md`
   - GitHub Actions schedule (recommended): `.github/workflows/live-monitoring-schedule.yml` (auto-skips if secrets are missing + uploads report artifacts)
 
-### 5) Validation Health / Invariants
+### 6) Validation Health / Invariants
 
 - EvaluationRun’s `metrics.diagnostics.validation_health.metric_coverage_ratio` is recorded in the **EvaluationRun storage layer**, not Prometheus.
 - Recommended operational checks:
@@ -73,6 +84,15 @@ groups:
         annotations:
           summary: "RiskHub DLQ spike"
           description: "world={{ $labels.world_id }} stage={{ $labels.stage }}"
+
+      - alert: ValidationEventDlqSpike
+        expr: increase(validation_event_dlq_total[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Validation event DLQ spike"
+          description: "world={{ $labels.world_id }} type={{ $labels.event_type }} stage={{ $labels.stage }}"
 
       - alert: ExtendedValidationFailures
         expr: increase(extended_validation_run_total{status=~\"failure|enqueue_failed\"}[10m]) > 0
@@ -107,6 +127,7 @@ groups:
 
 - RiskHub freshness: `risk_hub_snapshot_lag_seconds` (by world_id)
 - Snapshot pipeline health: processed/failed/retry/dlq/dedupe/expired
+- Validation event pipeline: processed/failed/retry/dlq/dedupe/expired
 - Extended validation: success/failure, p95 latency
 - Live monitoring: run success/failure, updated strategies
 - Invariants/health: `/validations/invariants` results (recommended to collect periodically via an ops script/external poller)

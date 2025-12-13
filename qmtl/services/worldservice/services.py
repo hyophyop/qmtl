@@ -97,6 +97,7 @@ class WorldService:
         model_cards: ModelCardRegistry | None = None,
         extended_validation_scheduler: Callable[[Awaitable[int]], Any] | None = None,
         risk_hub: Any | None = None,
+        event_driven_validation: bool = False,
     ) -> None:
         self.bus = bus
         self.rebalance_executor = rebalance_executor
@@ -119,6 +120,7 @@ class WorldService:
         self._decisions: Dict[str, _DecisionState] = {}
         self._extended_validation_scheduler = extended_validation_scheduler
         self._risk_hub = risk_hub
+        self._event_driven_validation = bool(event_driven_validation)
 
     @staticmethod
     def _series_returns(series: StrategySeries | None) -> list[float] | None:
@@ -569,11 +571,12 @@ class WorldService:
                 if url is not None:
                     urls[strategy_id] = url
 
-            await self._apply_extended_validation(
-                world_id=world_id,
-                stage=stage,
-                policy_payload=payload.policy,
-            )
+            if not self._event_driven_validation:
+                await self._apply_extended_validation(
+                    world_id=world_id,
+                    stage=stage,
+                    policy_payload=payload.policy,
+                )
         except Exception:  # pragma: no cover - defensive best-effort
             logger.exception("Failed to record cohort evaluation runs for %s", world_id)
 
@@ -728,11 +731,14 @@ class WorldService:
                 strategy_id=strategy_id,
                 run_id=run_id,
             )
-            await self._apply_extended_validation(
-                world_id=world_id,
-                stage=stage,
-                policy_payload=payload.policy,
-            )
+            if not self._event_driven_validation:
+                await self._apply_extended_validation(
+                    world_id=world_id,
+                    stage=stage,
+                    policy_payload=payload.policy,
+                    strategy_id=strategy_id,
+                    run_id=run_id,
+                )
         except Exception:  # pragma: no cover - defensive best-effort
             logger.exception("Failed to record evaluation run for %s/%s", world_id, strategy_id)
 
@@ -817,6 +823,8 @@ class WorldService:
         world_id: str,
         stage: str | None,
         policy_payload: Any | None,
+        strategy_id: str | None = None,
+        run_id: str | None = None,
     ) -> None:
         """Apply cohort/portfolio/stress/live layers via the extended validation worker."""
 
@@ -827,7 +835,13 @@ class WorldService:
         async def _run_with_metrics() -> int:
             start = ws_metrics.monotonic_seconds()
             try:
-                result = await worker.run(world_id=world_id, stage=stage, policy_payload=policy_payload)
+                result = await worker.run(
+                    world_id=world_id,
+                    stage=stage,
+                    policy_payload=policy_payload,
+                    strategy_id=strategy_id,
+                    run_id=run_id,
+                )
             except Exception:
                 ws_metrics.record_extended_validation_run(
                     world_id,
