@@ -1,0 +1,18 @@
+# Validation policy / rules ownership
+#
+# NOTE: CODEOWNERS review is enforced only when the repository enables
+# "Require review from Code Owners" (branch protection / rulesets).
+
+/docs/**/world/sample_policy.yml @hyophyop
+/operations/policy_diff/** @hyophyop
+/scripts/policy_diff.py @hyophyop
+/scripts/policy_diff_batch.py @hyophyop
+/scripts/policy_snapshot.py @hyophyop
+/scripts/policy_snapshot_diff.py @hyophyop
+
+/qmtl/services/worldservice/policy_engine.py @hyophyop
+/qmtl/services/worldservice/validation_checks.py @hyophyop
+/qmtl/services/worldservice/validation_metrics.py @hyophyop
+/qmtl/services/worldservice/extended_validation_worker.py @hyophyop
+
+/.github/workflows/policy-diff-regression.yml @hyophyop

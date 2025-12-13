@@ -76,6 +76,7 @@ nav:
       - Neo4j Migrations: operations/neo4j_migrations.md
       - Monitoring: operations/monitoring.md
       - World Validation Observability: operations/world_validation_observability.md
+      - Independent Validation: operations/independent_validation.md
       - World Validation Governance: operations/world_validation_governance.md
       - Validation Report: operations/validation_report.md
       - Core Loop Golden Signals: operations/core_loop_golden_signals.md
@@ -198,6 +199,7 @@ plugins:
             Operations: 운영
             "Core Loop Golden Signals": "Core Loop 골든 시그널"
             "World Validation Observability": "World Validation 운영 가시성"
+            "Independent Validation": "독립 검증"
             "World Validation Governance": "World Validation 거버넌스"
             "Validation Report": "Validation Report"
             "Rebalancing Schema Coordination": "리밸런싱 스키마 조율"
