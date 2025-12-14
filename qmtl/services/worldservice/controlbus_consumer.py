@@ -71,7 +71,8 @@ class RiskHubControlBusConsumer:
         retry_backoff_sec: float = DEFAULT_RISK_HUB_RETRY_BACKOFF_SEC,
         dlq_topic: str | None = DEFAULT_RISK_HUB_DLQ_TOPIC,
         dlq_producer: KafkaProducerLike | None = None,
-        ttl_sec_default: int = 10,
+        ttl_sec_default: int = 900,
+        ttl_sec_max: int = 86400,
         allowed_actors: Sequence[str] | None = None,
         allowed_stages: Sequence[str] | None = None,
         brokers: Iterable[str] | None = None,
@@ -100,6 +101,7 @@ class RiskHubControlBusConsumer:
         self._dlq_producer: KafkaProducerLike | None = dlq_producer
         self._dlq_started = False
         self._ttl_sec_default = int(ttl_sec_default)
+        self._ttl_sec_max = int(ttl_sec_max)
         self._allowed_actors = list(allowed_actors) if allowed_actors is not None else None
         self._allowed_stages = list(allowed_stages) if allowed_stages is not None else None
 
@@ -311,6 +313,7 @@ class RiskHubControlBusConsumer:
                 world_id,
                 data,
                 ttl_sec_default=self._ttl_sec_default,
+                ttl_sec_max=self._ttl_sec_max,
                 allowed_actors=self._allowed_actors,
                 allowed_stages=self._allowed_stages,
             )

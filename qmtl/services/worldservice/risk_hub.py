@@ -10,7 +10,11 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from qmtl.services.risk_hub_contract import stable_snapshot_hash
-from .blob_store import JsonBlobStore
+from .blob_store import BlobStore
+
+
+class RiskSnapshotConflictError(RuntimeError):
+    """Raised when a snapshot version collides with a different payload."""
 
 
 def _iso_now() -> str:
@@ -114,8 +118,10 @@ class RiskSignalHub:
         cache: Any | None = None,
         cache_ttl: int = 300,
         covariance_resolver: Any | None = None,
-        blob_store: JsonBlobStore | None = None,
+        blob_store: BlobStore | None = None,
         inline_cov_threshold: int = 100,
+        ttl_sec_default: int = 900,
+        ttl_sec_max: int = 86400,
     ) -> None:
         self._snapshots: Dict[str, List[PortfolioSnapshot]] = {}
         self._repository = repository
@@ -125,6 +131,8 @@ class RiskSignalHub:
         self._covariance_resolver = covariance_resolver
         self._blob_store = blob_store
         self._inline_cov_threshold = inline_cov_threshold
+        self._ttl_sec_default = int(ttl_sec_default)
+        self._ttl_sec_max = int(ttl_sec_max)
         self._logger = logging.getLogger(__name__)
 
     def bind_repository(self, repository: Any | None) -> None:
@@ -141,8 +149,8 @@ class RiskSignalHub:
         """Attach a resolver for covariance_ref → covariance materialization."""
         self._covariance_resolver = resolver
 
-    def bind_blob_store(self, store: JsonBlobStore | None) -> None:
-        """Attach a blob store to offload large covariance payloads."""
+    def bind_blob_store(self, store: BlobStore | None) -> None:
+        """Attach a blob store to offload large payloads (covariance/returns/stress)."""
         self._blob_store = store
 
     async def resolve_blob_ref(self, ref: str) -> Any | None:
@@ -164,20 +172,33 @@ class RiskSignalHub:
             self._logger.exception("Failed to resolve blob ref=%s", ref)
             return None
 
-    async def upsert_snapshot(self, snapshot: PortfolioSnapshot) -> None:
+    async def upsert_snapshot(self, snapshot: PortfolioSnapshot) -> bool:
         self._validate_snapshot(snapshot)
         if snapshot.ttl_sec is None:
-            snapshot.ttl_sec = 10
+            snapshot.ttl_sec = self._ttl_sec_default
+        ttl_value = int(snapshot.ttl_sec)
+        if ttl_value <= 0:
+            raise ValueError("ttl_sec must be positive")
+        if ttl_value > self._ttl_sec_max:
+            raise ValueError(f"ttl_sec must be <= {self._ttl_sec_max}")
+
         snapshot = self._maybe_offload_covariance(snapshot)
+        snapshot = self._maybe_offload_auxiliary(snapshot)
         snapshot = self._with_hash(snapshot)
-        self._cache_snapshot(snapshot)
+
+        if self._expired(snapshot):
+            raise ValueError("snapshot is expired")
+
+        deduped = await self._enforce_version_idempotency(snapshot)
+        deduped = self._cache_snapshot(snapshot) or deduped
         await self._cache_latest(snapshot)
         if self._repository is None:
-            return
+            return deduped
         try:
             await self._repository.upsert(snapshot.world_id, snapshot.to_dict())  # type: ignore[union-attr]
         except Exception:
             self._logger.exception("Failed to persist risk snapshot for %s", snapshot.world_id)
+        return deduped
 
     async def latest_snapshot(self, world_id: str) -> Optional[PortfolioSnapshot]:
         cached_snap = await self._cached_latest(world_id)
@@ -200,6 +221,32 @@ class RiskSignalHub:
         except Exception:
             self._logger.exception("Failed to load latest risk snapshot for %s", world_id)
         return None
+
+    async def get_snapshot(
+        self,
+        world_id: str,
+        *,
+        version: str | None = None,
+        as_of: str | None = None,
+    ) -> Optional[PortfolioSnapshot]:
+        if version:
+            for snap in reversed(self._snapshots.get(world_id, [])):
+                if snap.version == version and not self._expired(snap):
+                    return await self._maybe_materialize_covariance(snap)
+            if self._repository is not None:
+                getter = getattr(self._repository, "get", None)
+                if getter is not None:
+                    payload = await getter(world_id, version)
+                    if payload:
+                        snap = PortfolioSnapshot.from_payload(payload)
+                        self._cache_snapshot(snap)
+                        if not self._expired(snap):
+                            return await self._maybe_materialize_covariance(snap)
+            return None
+
+        if as_of:
+            return await self.snapshot_for_as_of(world_id, as_of)
+        return await self.latest_snapshot(world_id)
 
     async def list_snapshots(self, world_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         entries = self._snapshots.get(world_id, [])
@@ -228,15 +275,21 @@ class RiskSignalHub:
                 return await self._maybe_materialize_covariance(snap)
         return None
 
-    def _cache_snapshot(self, snapshot: PortfolioSnapshot) -> None:
+    def _cache_snapshot(self, snapshot: PortfolioSnapshot) -> bool:
         entries = self._snapshots.setdefault(snapshot.world_id, [])
-        # Replace same version if already cached
-        entries = [s for s in entries if s.version != snapshot.version]
+        existing = next((s for s in entries if s.version == snapshot.version), None)
+        if existing is not None:
+            if (existing.hash or "") == (snapshot.hash or ""):
+                return True
+            raise RiskSnapshotConflictError(
+                f"snapshot version collision for world_id={snapshot.world_id} version={snapshot.version}"
+            )
         entries.append(snapshot)
         entries.sort(key=lambda s: (s.as_of, s.version))
         if self._max_cached is not None and len(entries) > self._max_cached:
             entries = entries[-self._max_cached :]
         self._snapshots[snapshot.world_id] = entries
+        return False
 
     def _validate_snapshot(self, snapshot: PortfolioSnapshot) -> None:
         if not snapshot.world_id:
@@ -341,6 +394,52 @@ class RiskSignalHub:
                 )
         return snapshot
 
+    def _maybe_offload_auxiliary(self, snapshot: PortfolioSnapshot) -> PortfolioSnapshot:
+        if self._blob_store is None or self._inline_cov_threshold is None:
+            return snapshot
+
+        payload = snapshot.to_dict()
+        version = str(payload.get("version") or "snapshot")
+        changed = False
+
+        realized = payload.get("realized_returns")
+        if payload.get("realized_returns_ref") is None and realized is not None:
+            if isinstance(realized, Mapping) and len(realized) > self._inline_cov_threshold:
+                ref = self._blob_store.write(f"{version}-realized", realized)
+                payload["realized_returns_ref"] = ref
+                payload.pop("realized_returns", None)
+                changed = True
+
+        stress = payload.get("stress")
+        if payload.get("stress_ref") is None and isinstance(stress, Mapping):
+            if len(stress) > self._inline_cov_threshold:
+                ref = self._blob_store.write(f"{version}-stress", stress)
+                payload["stress_ref"] = ref
+                payload.pop("stress", None)
+                changed = True
+
+        return PortfolioSnapshot.from_payload(payload) if changed else snapshot
+
+    async def _enforce_version_idempotency(self, snapshot: PortfolioSnapshot) -> bool:
+        if self._repository is None:
+            return False
+        getter = getattr(self._repository, "get", None)
+        if getter is None:
+            return False
+        try:
+            existing = await getter(snapshot.world_id, snapshot.version)
+        except Exception:
+            return False
+        if not existing:
+            return False
+        existing_hash = str(existing.get("hash") or "")
+        incoming_hash = str(snapshot.hash or "")
+        if existing_hash and existing_hash == incoming_hash:
+            return True
+        raise RiskSnapshotConflictError(
+            f"snapshot version collision for world_id={snapshot.world_id} version={snapshot.version}"
+        )
+
     @staticmethod
     def _parse_iso(value: str | None) -> datetime | None:
         if not value:
@@ -357,4 +456,4 @@ class RiskSignalHub:
             return None
 
 
-__all__ = ["RiskSignalHub", "PortfolioSnapshot", "stable_snapshot_hash"]
+__all__ = ["RiskSignalHub", "PortfolioSnapshot", "RiskSnapshotConflictError", "stable_snapshot_hash"]

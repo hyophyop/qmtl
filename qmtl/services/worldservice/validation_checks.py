@@ -71,17 +71,35 @@ def _rules_executed_ratio(
     return min(1.0, executed / expected_rules)
 
 
+def _validation_error_count(rule_results: Mapping[str, Any] | None) -> int:
+    """Count rule evaluation errors (reason_code == 'rule_error')."""
+
+    if not rule_results:
+        return 0
+    count = 0
+    for result in rule_results.values():
+        reason_code: Any = None
+        if isinstance(result, Mapping):
+            reason_code = result.get("reason_code")
+        else:
+            reason_code = getattr(result, "reason_code", None)
+        if str(reason_code or "").lower() == "rule_error":
+            count += 1
+    return count
+
+
 def compute_validation_health(
     metrics: Mapping[str, Any] | None,
     rule_results: Mapping[str, Any] | None,
     *,
     expected_rules: int = DEFAULT_RULE_COUNT,
-) -> dict[str, float]:
-    """Derive validation health ratios from metrics and executed rules."""
+) -> dict[str, float | int]:
+    """Derive validation health signals from metrics and executed rules."""
 
     return {
         "metric_coverage_ratio": _metric_coverage_ratio(metrics),
         "rules_executed_ratio": _rules_executed_ratio(rule_results, expected_rules),
+        "validation_error_count": _validation_error_count(rule_results),
     }
 
 
@@ -133,14 +151,19 @@ def _latest_live_runs(runs: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
     return [entry[1] for entry in per_strategy.values()]
 
 
-def _recorded_health(metrics: Mapping[str, Any] | None) -> dict[str, float | None]:
+def _recorded_health(metrics: Mapping[str, Any] | None) -> dict[str, float | int | None]:
     diagnostics = metrics.get("diagnostics") if isinstance(metrics, Mapping) else None
     health = diagnostics.get("validation_health") if isinstance(diagnostics, Mapping) else None
     if not isinstance(health, Mapping):
-        return {"metric_coverage_ratio": None, "rules_executed_ratio": None}
+        return {
+            "metric_coverage_ratio": None,
+            "rules_executed_ratio": None,
+            "validation_error_count": None,
+        }
     return {
         "metric_coverage_ratio": health.get("metric_coverage_ratio"),
         "rules_executed_ratio": health.get("rules_executed_ratio"),
+        "validation_error_count": health.get("validation_error_count"),
     }
 
 
@@ -299,6 +322,17 @@ def check_validation_invariants(
                     "metric": "rules_executed_ratio",
                     "expected": expected["rules_executed_ratio"],
                     "recorded": recorded["rules_executed_ratio"],
+                }
+            )
+        if recorded["validation_error_count"] != expected["validation_error_count"]:
+            validation_health_gaps.append(
+                {
+                    "world_id": world_id or run.get("world_id"),
+                    "strategy_id": run.get("strategy_id"),
+                    "run_id": run.get("run_id"),
+                    "metric": "validation_error_count",
+                    "expected": expected["validation_error_count"],
+                    "recorded": recorded["validation_error_count"],
                 }
             )
 

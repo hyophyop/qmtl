@@ -1243,7 +1243,7 @@ async def test_risk_hub_persists_snapshots_with_persistent_storage(tmp_path, fak
                 resp = await client.post(
                     "/risk-hub/worlds/persist-hub/snapshots",
                     json=snap,
-                    headers={"X-Actor": "test-suite"},
+                    headers={"X-Actor": "test-suite", "X-Stage": "paper"},
                 )
                 assert resp.status_code == 200
 

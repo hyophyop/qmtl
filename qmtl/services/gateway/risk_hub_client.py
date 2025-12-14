@@ -28,13 +28,15 @@ class RiskHubClient:
     inline_cov_threshold: int = 100
     actor: str = "gateway"
     stage: str | None = None
-    ttl_sec: int = 10
+    ttl_sec: int = 900
     allowed_actors: Sequence[str] | None = None
     allowed_stages: Sequence[str] | None = None
 
     async def publish_snapshot(self, world_id: str, payload: Mapping[str, Any]) -> dict[str, Any]:
         """POST a snapshot to /risk-hub/worlds/{world_id}/snapshots."""
 
+        if not self.stage:
+            raise ValueError("RiskHubClient requires stage (set risk_hub.stage in qmtl.yml or pass explicitly)")
         payload = self._normalize_and_validate(world_id, payload)
         payload = self._maybe_offload_covariance(payload)
         payload = self._maybe_offload_auxiliary(payload)
@@ -46,8 +48,7 @@ class RiskHubClient:
             close_client = True
         headers = {"Authorization": f"Bearer {self.auth_token}"} if self.auth_token else {}
         headers["X-Actor"] = self.actor
-        if self.stage:
-            headers["X-Stage"] = self.stage
+        headers["X-Stage"] = self.stage
         last_exc: Exception | None = None
         try:
             for attempt in range(self.retries + 1):
