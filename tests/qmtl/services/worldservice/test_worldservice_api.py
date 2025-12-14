@@ -21,7 +21,8 @@ from qmtl.services.worldservice.services import WorldService
 from qmtl.services.worldservice.storage import PersistentStorage, Storage
 from qmtl.services.worldservice.policy_engine import ValidationConfig, Policy
 from qmtl.services.worldservice.decision import DecisionEvaluator
-from qmtl.services.worldservice.risk_hub import PortfolioSnapshot
+from qmtl.services.worldservice.risk_hub import PortfolioSnapshot, RiskSignalHub
+from qmtl.services.worldservice.blob_store import JsonBlobStore
 
 
 def _iso_now() -> str:
@@ -1947,6 +1948,55 @@ async def test_risk_hub_persists_snapshots_with_persistent_storage(tmp_path, fak
         assert latest["realized_returns"] == {"s1": [0.01, -0.005]}
     finally:
         await storage_inspect.close()
+
+
+@pytest.mark.asyncio
+async def test_risk_hub_latest_supports_expand_and_stage_filter(tmp_path):
+    risk_hub = RiskSignalHub(blob_store=JsonBlobStore(tmp_path), inline_cov_threshold=0)
+    app = create_app(storage=Storage(), risk_hub=risk_hub)
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            snap_backtest = {
+                "as_of": "2025-01-01T00:00:00Z",
+                "version": "v-backtest",
+                "weights": {"s1": 1.0},
+                "realized_returns": {"s1": [0.01, -0.005]},
+            }
+            resp = await client.post(
+                "/risk-hub/worlds/wexp/snapshots",
+                json=snap_backtest,
+                headers={"X-Actor": "test-suite", "X-Stage": "backtest"},
+            )
+            assert resp.status_code == 200
+
+            snap_paper = {
+                "as_of": "2025-01-02T00:00:00Z",
+                "version": "v-paper",
+                "weights": {"s1": 1.0},
+            }
+            resp2 = await client.post(
+                "/risk-hub/worlds/wexp/snapshots",
+                json=snap_paper,
+                headers={"X-Actor": "test-suite", "X-Stage": "paper"},
+            )
+            assert resp2.status_code == 200
+
+            latest_plain = await client.get("/risk-hub/worlds/wexp/snapshots/latest", params={"stage": "backtest"})
+            assert latest_plain.status_code == 200
+            plain_payload = latest_plain.json()
+            assert plain_payload.get("version") == "v-backtest"
+            assert plain_payload.get("realized_returns") is None
+            assert plain_payload.get("realized_returns_ref")
+
+            latest_expanded = await client.get(
+                "/risk-hub/worlds/wexp/snapshots/latest",
+                params={"stage": "backtest", "expand": "true"},
+            )
+            assert latest_expanded.status_code == 200
+            payload = latest_expanded.json()
+            assert payload.get("version") == "v-backtest"
+            assert payload.get("realized_returns") == {"s1": [0.01, -0.005]}
 
 
 @pytest.mark.asyncio

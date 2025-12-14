@@ -57,8 +57,10 @@ flowchart LR
   - Idempotent retries (same `hash`) are treated as success and counted in `risk_hub_snapshot_dedupe_total`.
 - API:
   - `POST /risk-hub/worlds/{world_id}/snapshots` (write; token/headers required)
-  - `GET /risk-hub/worlds/{world_id}/snapshots/latest`
-  - `GET /risk-hub/worlds/{world_id}/snapshots` (list)
+  - `GET /risk-hub/worlds/{world_id}/snapshots/latest[?stage=...&actor=...&expand=true]`
+    - `stage`/`actor`: filter by `provenance.stage` / `provenance.actor`.
+    - `expand=true`: resolves `covariance_ref` / `realized_returns_ref` / `stress_ref` when possible and returns inline fields (`covariance`, `realized_returns`, `stress`).
+  - `GET /risk-hub/worlds/{world_id}/snapshots[?limit=...&stage=...&actor=...&expand=true]` (list)
   - `GET /risk-hub/worlds/{world_id}/snapshots/lookup?version=...|as_of=...`
 
 ---
