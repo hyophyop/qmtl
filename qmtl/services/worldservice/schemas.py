@@ -137,6 +137,12 @@ class LivePromotionPlanResponse(BaseModel):
     plan: ApplyPlan
     target_active: List[str] = Field(default_factory=list)
     current_active: List[str] = Field(default_factory=list)
+    promotion_mode: str | None = None
+    override_status: str | None = None
+    pending_manual_approval: bool = False
+    cooldown_remaining_sec: int | None = None
+    max_live_slots: int | None = None
+    canary_fraction: float | None = None
 
 
 class LivePromotionApplyRequest(BaseModel):
@@ -149,6 +155,8 @@ class LivePromotionApplyRequest(BaseModel):
 class LivePromotionAutoApplyResponse(BaseModel):
     world_id: str
     applied: bool
+    reason: str | None = None
+    cooldown_remaining_sec: int | None = None
     source_strategy_id: str | None = None
     source_run_id: str | None = None
     apply_run_id: str | None = None

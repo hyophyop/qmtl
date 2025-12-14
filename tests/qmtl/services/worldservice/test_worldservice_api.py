@@ -675,6 +675,130 @@ async def test_live_promotion_auto_apply_endpoint_applies_latest_paper_run():
 
 
 @pytest.mark.asyncio
+async def test_live_promotion_apply_enforces_max_live_slots():
+    store = Storage()
+    app = create_app(storage=store)
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wslots", "name": "Slots World"})
+            policy_resp = await client.post(
+                "/worlds/wslots/policies",
+                json={
+                    "policy": {
+                        "governance": {"live_promotion": {"mode": "manual_approval", "max_live_slots": 1}},
+                        "thresholds": {"sharpe": {"metric": "sharpe", "min": 0.0}},
+                    }
+                },
+            )
+            assert policy_resp.status_code == 200
+            default_resp = await client.post("/worlds/wslots/set-default", json={"version": 1})
+            assert default_resp.status_code == 200
+
+            await client.post("/worlds/wslots/decisions", json={"strategies": ["s-old"]})
+            await store.record_evaluation_run(
+                "wslots",
+                "s1",
+                "run-1",
+                stage="paper",
+                risk_tier="low",
+                metrics={"returns": {"sharpe": 1.0}},
+                summary={"active_set": ["s1", "s2"], "override_status": "approved"},
+            )
+
+            apply_resp = await client.post(
+                "/worlds/wslots/promotions/live/apply",
+                json={"strategy_id": "s1", "run_id": "run-1", "apply_run_id": "apply-1"},
+            )
+            assert apply_resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_live_promotion_auto_apply_respects_cooldown():
+    store = Storage()
+    app = create_app(storage=store)
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wcool", "name": "Cooldown World"})
+            policy_resp = await client.post(
+                "/worlds/wcool/policies",
+                json={
+                    "policy": {
+                        "governance": {"live_promotion": {"mode": "auto_apply", "cooldown": "10m"}},
+                        "thresholds": {"sharpe": {"metric": "sharpe", "min": 0.0}},
+                    }
+                },
+            )
+            assert policy_resp.status_code == 200
+            default_resp = await client.post("/worlds/wcool/set-default", json={"version": 1})
+            assert default_resp.status_code == 200
+
+            await client.post("/worlds/wcool/decisions", json={"strategies": ["s3"]})
+            await store.record_evaluation_run(
+                "wcool",
+                "s1",
+                "run-paper-1",
+                stage="paper",
+                risk_tier="low",
+                metrics={"returns": {"sharpe": 1.0}},
+                summary={"active_set": ["s1", "s2"], "status": "pass"},
+            )
+            await store.record_apply_stage("wcool", "prev-apply", "completed")
+
+            resp = await client.post("/worlds/wcool/promotions/live/auto-apply", json={})
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["applied"] is False
+            assert body["reason"] == "cooldown_active"
+            assert 0 < body["cooldown_remaining_sec"] <= 600
+
+            decisions = await client.get("/worlds/wcool/decisions")
+            assert decisions.status_code == 200
+            assert decisions.json()["strategies"] == ["s3"]
+
+
+@pytest.mark.asyncio
+async def test_live_promotion_auto_apply_respects_canary_fraction():
+    store = Storage()
+    app = create_app(storage=store)
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wcanary", "name": "Canary World"})
+            policy_resp = await client.post(
+                "/worlds/wcanary/policies",
+                json={
+                    "policy": {
+                        "governance": {"live_promotion": {"mode": "auto_apply", "canary_fraction": 0.0}},
+                        "thresholds": {"sharpe": {"metric": "sharpe", "min": 0.0}},
+                    }
+                },
+            )
+            assert policy_resp.status_code == 200
+            default_resp = await client.post("/worlds/wcanary/set-default", json={"version": 1})
+            assert default_resp.status_code == 200
+
+            await client.post("/worlds/wcanary/decisions", json={"strategies": ["s3"]})
+            await store.record_evaluation_run(
+                "wcanary",
+                "s1",
+                "run-paper-1",
+                stage="paper",
+                risk_tier="low",
+                metrics={"returns": {"sharpe": 1.0}},
+                summary={"active_set": ["s1", "s2"], "status": "pass"},
+            )
+
+            resp = await client.post("/worlds/wcanary/promotions/live/auto-apply", json={})
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["applied"] is False
+            assert body["reason"] == "canary_skipped"
+
+            decisions = await client.get("/worlds/wcanary/decisions")
+            assert decisions.status_code == 200
+            assert decisions.json()["strategies"] == ["s3"]
+
+
+@pytest.mark.asyncio
 async def test_ex_post_failure_record_flow_appends_history():
     app = create_app(storage=Storage())
     async with httpx.ASGITransport(app=app) as asgi:
