@@ -2000,6 +2000,93 @@ async def test_risk_hub_latest_supports_expand_and_stage_filter(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_evaluate_sources_metrics_from_latest_run_when_missing():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wsrc"})
+            await client.post("/worlds/wsrc/policies", json={"policy": {}})
+            await client.post("/worlds/wsrc/set-default", json={"version": 1})
+
+            payload = {
+                "strategy_id": "s1",
+                "run_id": "run-prev",
+                "metrics": {
+                    "s1": {
+                        "returns": {"sharpe": 1.0, "max_drawdown": 0.1},
+                        "sample": {"effective_history_years": 0.5},
+                    }
+                },
+                "stage": "backtest",
+                "risk_tier": "low",
+            }
+            resp = await client.post("/worlds/wsrc/evaluate", json=payload)
+            assert resp.status_code == 200
+
+            resp2 = await client.post(
+                "/worlds/wsrc/evaluate",
+                json={
+                    "strategy_id": "s1",
+                    "run_id": "run-missing",
+                    "metrics": {},
+                    "stage": "backtest",
+                    "risk_tier": "low",
+                },
+            )
+            assert resp2.status_code == 200
+            run_url = resp2.json().get("evaluation_run_url")
+            assert run_url
+            run_resp = await client.get(run_url)
+            assert run_resp.status_code == 200
+            recorded = run_resp.json()
+            assert recorded.get("metrics", {}).get("returns", {}).get("sharpe") == 1.0
+
+
+@pytest.mark.asyncio
+async def test_evaluate_sources_metrics_from_risk_hub_when_run_metrics_missing():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wrisk"})
+            await client.post("/worlds/wrisk/policies", json={"policy": {}})
+            await client.post("/worlds/wrisk/set-default", json={"version": 1})
+
+            snapshot = {
+                "as_of": "2025-01-01T00:00:00Z",
+                "version": "v1",
+                "weights": {"s2": 1.0},
+                "covariance": {"s1,s1": 0.04, "s2,s2": 0.01, "s1,s2": 0.005},
+            }
+            snap_resp = await client.post(
+                "/risk-hub/worlds/wrisk/snapshots",
+                json=snapshot,
+                headers={"X-Actor": "test-suite", "X-Stage": "backtest"},
+            )
+            assert snap_resp.status_code == 200
+
+            resp = await client.post(
+                "/worlds/wrisk/evaluate",
+                json={
+                    "strategy_id": "s1",
+                    "run_id": "run-risk",
+                    "metrics": {},
+                    "stage": "backtest",
+                    "risk_tier": "low",
+                },
+            )
+            assert resp.status_code == 200
+            run_url = resp.json().get("evaluation_run_url")
+            assert run_url
+            run_resp = await client.get(run_url)
+            assert run_resp.status_code == 200
+            recorded = run_resp.json()
+            risk = recorded.get("metrics", {}).get("risk", {})
+            assert risk.get("incremental_var_99") is not None
+            extra = recorded.get("metrics", {}).get("diagnostics", {}).get("extra_metrics", {})
+            assert extra.get("risk_hub_snapshot_version") == "v1"
+
+
+@pytest.mark.asyncio
 async def test_allocations_missing_snapshot_returns_empty_payload():
     bus = DummyBus()
     app = create_app(bus=bus, storage=Storage())
