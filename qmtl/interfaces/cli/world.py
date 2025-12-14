@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import json
+import os
 import sys
 from pathlib import Path
 import uuid
@@ -22,6 +24,9 @@ def cmd_world(argv: List[str]) -> int:
          - `qmtl world allocations -w <id>`
          - `qmtl world apply <id> --run-id <id> [--plan-file plan.json]`
          - `qmtl world rebalance-plan ...` / `qmtl world rebalance-apply ...`
+      3) Inspect evaluation runs / approval overrides:
+         - `qmtl world run-status <world> --strategy <sid> [--run latest]`
+         - `qmtl world live-approve <world> --strategy <sid> --run <run_id> --comment ...`
     """
     parser = argparse.ArgumentParser(
         prog="qmtl world",
@@ -29,7 +34,21 @@ def cmd_world(argv: List[str]) -> int:
     )
     parser.add_argument(
         "action",
-        choices=["list", "create", "info", "delete", "allocations", "apply", "rebalance-plan", "rebalance-apply"],
+        choices=[
+            "list",
+            "create",
+            "info",
+            "delete",
+            "status",
+            "run-status",
+            "live-approve",
+            "live-reject",
+            "live-apply",
+            "allocations",
+            "apply",
+            "rebalance-plan",
+            "rebalance-apply",
+        ],
         help=_t("Action to perform"),
     )
     parser.add_argument(
@@ -103,6 +122,42 @@ def cmd_world(argv: List[str]) -> int:
         help=_t("Optional gating policy JSON for apply requests"),
     )
     parser.add_argument(
+        "--strategy",
+        dest="strategy_id",
+        default=None,
+        help=_t("Strategy identifier (for run-status/status/live-* actions)"),
+    )
+    parser.add_argument(
+        "--run",
+        dest="evaluation_run_id",
+        default="latest",
+        help=_t("Evaluation run id (or 'latest')"),
+    )
+    parser.add_argument(
+        "--comment",
+        dest="comment",
+        default=None,
+        help=_t("Approval comment/reason for live overrides"),
+    )
+    parser.add_argument(
+        "--actor",
+        dest="actor",
+        default=None,
+        help=_t("Actor identity for approvals (default: $QMTL_ACTOR or $USER)"),
+    )
+    parser.add_argument(
+        "--plan-only",
+        dest="plan_only",
+        action="store_true",
+        help=_t("Print computed plan and exit (no apply)"),
+    )
+    parser.add_argument(
+        "--force",
+        dest="force",
+        action="store_true",
+        help=_t("Force live-apply even if run is not approved"),
+    )
+    parser.add_argument(
         "--target", "-t",
         dest="target_allocations",
         default=None,
@@ -156,8 +211,318 @@ def cmd_world(argv: List[str]) -> int:
         "apply": lambda: _world_apply(args),
         "rebalance-plan": lambda: _rebalance(args, apply=False),
         "rebalance-apply": lambda: _rebalance(args, apply=True),
+        "status": lambda: _world_status(args),
+        "run-status": lambda: _world_run_status(args),
+        "live-approve": lambda: _world_live_override(args, status="approved"),
+        "live-reject": lambda: _world_live_override(args, status="rejected"),
+        "live-apply": lambda: _world_live_apply(args),
     }
     return actions[args.action]()
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _parse_iso(ts: str | None) -> datetime:
+    if not ts:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    candidate = str(ts).strip()
+    if candidate.endswith("Z"):
+        candidate = candidate[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(candidate)
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed
+    except Exception:
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _resolve_world_id(args: argparse.Namespace) -> str | None:
+    world_id = getattr(args, "world_id", None) or getattr(args, "name", None)
+    if not world_id:
+        return None
+    return str(world_id)
+
+
+def _require_world_id(args: argparse.Namespace) -> str:
+    world_id = _resolve_world_id(args)
+    if not world_id:
+        raise ValueError("world id required")
+    return world_id
+
+
+def _require_strategy_id(args: argparse.Namespace) -> str:
+    strategy_id = args.strategy_id
+    if not strategy_id:
+        raise ValueError("strategy id required (--strategy)")
+    return str(strategy_id)
+
+
+def _resolve_actor(args: argparse.Namespace) -> str | None:
+    actor = args.actor or os.environ.get("QMTL_ACTOR") or os.environ.get("USER")
+    if actor is not None:
+        actor = str(actor).strip() or None
+    return actor
+
+
+def _pick_latest_run_id(runs: object) -> str | None:
+    if not isinstance(runs, list) or not runs:
+        return None
+    scored: list[tuple[datetime, datetime, str]] = []
+    for item in runs:
+        if not isinstance(item, dict):
+            continue
+        run_id = item.get("run_id")
+        if not run_id:
+            continue
+        created_at = _parse_iso(item.get("created_at"))
+        updated_at = _parse_iso(item.get("updated_at"))
+        scored.append((updated_at, created_at, str(run_id)))
+    if not scored:
+        return None
+    scored.sort(reverse=True)
+    return scored[0][2]
+
+
+def _world_run_status(args: argparse.Namespace) -> int:
+    try:
+        world_id = _require_world_id(args)
+        strategy_id = _require_strategy_id(args)
+    except ValueError as exc:
+        print(_t("Error: {}").format(exc), file=sys.stderr)
+        return 1
+
+    run_id = str(args.evaluation_run_id or "latest")
+    if run_id == "latest":
+        status_code, runs = http_get(f"/worlds/{world_id}/strategies/{strategy_id}/runs")
+        if status_code >= 400 or status_code == 0:
+            err = runs.get("detail") if isinstance(runs, dict) else status_code
+            print(_t("Error fetching evaluation runs: {}").format(err), file=sys.stderr)
+            return 1
+        resolved = _pick_latest_run_id(runs)
+        if not resolved:
+            print(_t("No evaluation runs found for strategy '{}'").format(strategy_id), file=sys.stderr)
+            return 1
+        run_id = resolved
+
+    status_code, record = http_get(f"/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}")
+    if status_code == 404:
+        print(_t("Evaluation run not found: {}").format(run_id), file=sys.stderr)
+        return 1
+    if status_code >= 400 or status_code == 0:
+        err = record.get("detail") if isinstance(record, dict) else status_code
+        print(_t("Error fetching evaluation run: {}").format(err), file=sys.stderr)
+        return 1
+
+    if isinstance(record, dict):
+        summary = record.get("summary") if isinstance(record.get("summary"), dict) else {}
+        validation = record.get("validation") if isinstance(record.get("validation"), dict) else {}
+        print(_t("📌 Evaluation Run"))
+        print("=" * 50)
+        print(f"World:    {world_id}")
+        print(f"Strategy: {strategy_id}")
+        print(f"Run:      {record.get('run_id')}")
+        print(f"Stage:    {record.get('stage')}")
+        print(f"Risk:     {record.get('risk_tier')}")
+        if summary:
+            print(f"Status:   {summary.get('status')}")
+            print(f"Reco:     {summary.get('recommended_stage')}")
+            print(f"Override: {summary.get('override_status')}")
+        if validation:
+            print(f"Policy:   {validation.get('policy_version')}")
+        return 0
+
+    print(record)
+    return 0
+
+
+def _world_status(args: argparse.Namespace) -> int:
+    try:
+        world_id = _require_world_id(args)
+    except ValueError as exc:
+        print(_t("Error: {}").format(exc), file=sys.stderr)
+        return 1
+
+    status_code, decide = http_get(f"/worlds/{world_id}/decide")
+    if status_code == 404:
+        print(_t("World '{}' not found").format(world_id), file=sys.stderr)
+        return 1
+    if status_code >= 400 or status_code == 0:
+        err = decide.get("detail") if isinstance(decide, dict) else status_code
+        print(_t("Error fetching world decision: {}").format(err), file=sys.stderr)
+        return 1
+
+    status_code, desc = http_get(f"/worlds/{world_id}/describe")
+    if status_code >= 400 or status_code == 0:
+        desc = {}
+
+    print(_t("🌍 World Status"))
+    print("=" * 50)
+    print(f"World:         {world_id}")
+    if isinstance(desc, dict) and "allow_live" in desc:
+        print(f"Allow live:    {bool(desc.get('allow_live'))}")
+    if isinstance(decide, dict):
+        print(f"Effective:     {decide.get('effective_mode')}")
+        print(f"Reason:        {decide.get('reason')}")
+        print(f"As of:         {decide.get('as_of')}")
+        if decide.get("dataset_fingerprint"):
+            print(f"Dataset FP:    {decide.get('dataset_fingerprint')}")
+
+    if args.strategy_id:
+        print()
+        return _world_run_status(args)
+    return 0
+
+
+def _world_live_override(args: argparse.Namespace, *, status: str) -> int:
+    try:
+        world_id = _require_world_id(args)
+        strategy_id = _require_strategy_id(args)
+    except ValueError as exc:
+        print(_t("Error: {}").format(exc), file=sys.stderr)
+        return 1
+
+    run_id = str(args.evaluation_run_id or "latest")
+    if run_id == "latest":
+        status_code, runs = http_get(f"/worlds/{world_id}/strategies/{strategy_id}/runs")
+        if status_code >= 400 or status_code == 0:
+            err = runs.get("detail") if isinstance(runs, dict) else status_code
+            print(_t("Error fetching evaluation runs: {}").format(err), file=sys.stderr)
+            return 1
+        resolved = _pick_latest_run_id(runs)
+        if not resolved:
+            print(_t("No evaluation runs found for strategy '{}'").format(strategy_id), file=sys.stderr)
+            return 1
+        run_id = resolved
+
+    payload: dict[str, Any] = {"status": status}
+    if status == "approved":
+        if not args.comment:
+            print(_t("Error: --comment is required for approvals"), file=sys.stderr)
+            return 1
+        actor = _resolve_actor(args)
+        if not actor:
+            print(_t("Error: --actor required (or set $QMTL_ACTOR/$USER)"), file=sys.stderr)
+            return 1
+        payload.update(
+            {
+                "reason": str(args.comment),
+                "actor": actor,
+                "timestamp": _utc_now_iso(),
+            }
+        )
+    else:
+        if args.comment:
+            payload["reason"] = str(args.comment)
+        actor = _resolve_actor(args)
+        if actor:
+            payload["actor"] = actor
+            payload["timestamp"] = _utc_now_iso()
+
+    status_code, record = http_post(
+        f"/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/override",
+        payload,
+    )
+    if status_code == 404:
+        print(_t("Evaluation run not found: {}").format(run_id), file=sys.stderr)
+        return 1
+    if status_code >= 400 or status_code == 0:
+        err = record.get("detail") if isinstance(record, dict) else status_code
+        print(_t("Override update failed: {}").format(err), file=sys.stderr)
+        return 1
+
+    summary = record.get("summary") if isinstance(record, dict) else None
+    if isinstance(summary, dict):
+        print(_t("✅ Override recorded"))
+        print(f"World:    {world_id}")
+        print(f"Strategy: {strategy_id}")
+        print(f"Run:      {run_id}")
+        print(f"Override: {summary.get('override_status')}")
+        return 0
+    print(_t("Override recorded"))
+    return 0
+
+
+def _world_live_apply(args: argparse.Namespace) -> int:
+    try:
+        world_id = _require_world_id(args)
+        strategy_id = _require_strategy_id(args)
+    except ValueError as exc:
+        print(_t("Error: {}").format(exc), file=sys.stderr)
+        return 1
+
+    run_id = str(args.evaluation_run_id or "latest")
+    if run_id == "latest":
+        status_code, runs = http_get(f"/worlds/{world_id}/strategies/{strategy_id}/runs")
+        if status_code >= 400 or status_code == 0:
+            err = runs.get("detail") if isinstance(runs, dict) else status_code
+            print(_t("Error fetching evaluation runs: {}").format(err), file=sys.stderr)
+            return 1
+        resolved = _pick_latest_run_id(runs)
+        if not resolved:
+            print(_t("No evaluation runs found for strategy '{}'").format(strategy_id), file=sys.stderr)
+            return 1
+        run_id = resolved
+
+    status_code, run = http_get(f"/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}")
+    if status_code >= 400 or status_code == 0 or not isinstance(run, dict):
+        err = run.get("detail") if isinstance(run, dict) else status_code
+        print(_t("Error fetching evaluation run: {}").format(err), file=sys.stderr)
+        return 1
+
+    summary = run.get("summary") if isinstance(run.get("summary"), dict) else {}
+    summary_dict: dict[str, Any] = summary if isinstance(summary, dict) else {}
+    desired = summary_dict.get("active_set")
+    if not isinstance(desired, list) or not all(isinstance(v, str) for v in desired):
+        print(_t("Error: evaluation run does not include summary.active_set"), file=sys.stderr)
+        return 1
+
+    override_status = str(summary_dict.get("override_status") or "none").lower()
+    if override_status != "approved" and not args.force:
+        print(_t("Refusing to apply without an approved override (use --force to bypass)"), file=sys.stderr)
+        print(_t("Current override_status: {}").format(override_status), file=sys.stderr)
+        return 1
+
+    status_code, current = http_get(f"/worlds/{world_id}/decisions")
+    if status_code >= 400 or status_code == 0 or not isinstance(current, dict):
+        err = current.get("detail") if isinstance(current, dict) else status_code
+        print(_t("Error fetching current decisions: {}").format(err), file=sys.stderr)
+        return 1
+    current_list = current.get("strategies")
+    if not isinstance(current_list, list):
+        current_list = []
+    current_set = {str(v) for v in current_list if str(v).strip()}
+    desired_set = {str(v) for v in desired if str(v).strip()}
+
+    plan = {
+        "activate": sorted(desired_set - current_set),
+        "deactivate": sorted(current_set - desired_set),
+    }
+
+    if args.plan_only:
+        print(json.dumps({"world_id": world_id, "strategy_id": strategy_id, "run_id": run_id, "plan": plan}, indent=2))
+        return 0
+
+    apply_run_id = args.run_id or str(uuid.uuid4())
+    status_code, resp = http_post(
+        f"/worlds/{world_id}/apply",
+        {"run_id": apply_run_id, "plan": plan},
+    )
+    if status_code >= 400 or status_code == 0:
+        err = resp.get("detail") if isinstance(resp, dict) else status_code
+        print(_t("Apply request failed: {}").format(err), file=sys.stderr)
+        return 1
+
+    print(_t("🚦 Apply request sent"))
+    print(f"World:    {world_id}")
+    print(f"Run ID:   {apply_run_id}")
+    print(f"Plan:     activate={len(plan['activate'])}, deactivate={len(plan['deactivate'])}")
+    phase = resp.get("phase") if isinstance(resp, dict) else None
+    if phase:
+        print(f"Phase:    {phase}")
+    return 0
 
 
 def _world_list() -> int:

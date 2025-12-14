@@ -343,3 +343,127 @@ def test_world_apply_generates_run_id(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "Apply request sent" in out
     assert generated_run_id in out
+
+
+def test_world_run_status_fetches_run(monkeypatch, capsys):
+    gets: list[tuple[str, dict | None]] = []
+
+    def fake_get(path, params=None):
+        gets.append((path, params))
+        if path == "/worlds/w1/strategies/s1/runs/run-1":
+            return 200, {
+                "world_id": "w1",
+                "strategy_id": "s1",
+                "run_id": "run-1",
+                "stage": "paper",
+                "risk_tier": "low",
+                "summary": {"status": "pass", "recommended_stage": "paper_only", "override_status": "approved"},
+                "validation": {"policy_version": "1"},
+            }
+        return 404, {"detail": "not found"}
+
+    monkeypatch.setattr(world, "http_get", fake_get)
+
+    exit_code = world.cmd_world(["run-status", "w1", "--strategy", "s1", "--run", "run-1"])
+
+    assert exit_code == 0
+    assert gets == [("/worlds/w1/strategies/s1/runs/run-1", None)]
+    out = capsys.readouterr().out
+    assert "Evaluation Run" in out
+    assert "run-1" in out
+
+
+def test_world_live_approve_posts_override(monkeypatch, capsys):
+    posts: list[tuple[str, dict]] = []
+
+    def fake_post(path, payload):
+        posts.append((path, payload))
+        return 200, {"summary": {"override_status": payload.get("status")}}
+
+    monkeypatch.setattr(world, "http_post", fake_post)
+    monkeypatch.setattr(world, "_utc_now_iso", lambda: "2025-01-02T03:04:05Z")
+
+    exit_code = world.cmd_world(
+        [
+            "live-approve",
+            "w1",
+            "--strategy",
+            "s1",
+            "--run",
+            "run-1",
+            "--actor",
+            "risk",
+            "--comment",
+            "approved for live",
+        ]
+    )
+
+    assert exit_code == 0
+    assert posts[0][0] == "/worlds/w1/strategies/s1/runs/run-1/override"
+    assert posts[0][1]["status"] == "approved"
+    assert posts[0][1]["reason"] == "approved for live"
+    assert posts[0][1]["actor"] == "risk"
+    assert posts[0][1]["timestamp"] == "2025-01-02T03:04:05Z"
+    out = capsys.readouterr().out
+    assert "Override recorded" in out
+
+
+def test_world_live_apply_plan_only(monkeypatch, capsys):
+    gets: list[tuple[str, dict | None]] = []
+    posts: list[tuple[str, dict]] = []
+
+    def fake_get(path, params=None):
+        gets.append((path, params))
+        if path == "/worlds/w1/strategies/s1/runs/run-1":
+            return 200, {"summary": {"active_set": ["s1", "s2"], "override_status": "approved"}}
+        if path == "/worlds/w1/decisions":
+            return 200, {"strategies": ["s2", "s3"]}
+        return 404, {"detail": "not found"}
+
+    def fake_post(path, payload):
+        posts.append((path, payload))
+        return 200, {"phase": "completed", "active": ["s1", "s2"]}
+
+    monkeypatch.setattr(world, "http_get", fake_get)
+    monkeypatch.setattr(world, "http_post", fake_post)
+
+    exit_code = world.cmd_world(["live-apply", "w1", "--strategy", "s1", "--run", "run-1", "--plan-only"])
+
+    assert exit_code == 0
+    assert posts == []
+    out = capsys.readouterr().out
+    assert '"activate": [' in out
+    assert "s1" in out
+    assert "s3" in out
+
+
+def test_world_live_apply_posts_apply(monkeypatch, capsys):
+    gets: list[tuple[str, dict | None]] = []
+    posts: list[tuple[str, dict]] = []
+
+    def fake_get(path, params=None):
+        gets.append((path, params))
+        if path == "/worlds/w1/strategies/s1/runs/run-1":
+            return 200, {"summary": {"active_set": ["s1", "s2"], "override_status": "approved"}}
+        if path == "/worlds/w1/decisions":
+            return 200, {"strategies": ["s2", "s3"]}
+        return 404, {"detail": "not found"}
+
+    def fake_post(path, payload):
+        posts.append((path, payload))
+        return 200, {"phase": "completed", "active": ["s1", "s2"]}
+
+    monkeypatch.setattr(world, "http_get", fake_get)
+    monkeypatch.setattr(world, "http_post", fake_post)
+
+    exit_code = world.cmd_world(
+        ["live-apply", "w1", "--strategy", "s1", "--run", "run-1", "--run-id", "apply-1"]
+    )
+
+    assert exit_code == 0
+    assert posts[0][0] == "/worlds/w1/apply"
+    assert posts[0][1]["run_id"] == "apply-1"
+    assert posts[0][1]["plan"]["activate"] == ["s1"]
+    assert posts[0][1]["plan"]["deactivate"] == ["s3"]
+    out = capsys.readouterr().out
+    assert "Apply request sent" in out

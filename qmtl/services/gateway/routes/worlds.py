@@ -344,6 +344,12 @@ WORLD_ROUTES: tuple[WorldRoute, ...] = (
         include_payload=True,
     ),
     WorldRoute(
+        "get",
+        "/worlds/{world_id}/decisions",
+        "get_decisions",
+        path_params=("world_id",),
+    ),
+    WorldRoute(
         "put",
         "/worlds/{world_id}/activation",
         "put_activation",

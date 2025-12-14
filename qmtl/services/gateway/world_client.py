@@ -359,6 +359,13 @@ class WorldServiceClient:
             json=payload,
         )
 
+    async def get_decisions(self, world_id: str, headers: Optional[Dict[str, str]] = None) -> Any:
+        return await self._request_json(
+            "GET",
+            f"/worlds/{world_id}/decisions",
+            headers=headers,
+        )
+
     async def post_history_metadata(
         self,
         world_id: str,
