@@ -219,48 +219,23 @@ GET /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/metrics
 
 ### 3.3 스냅샷 조회/저장 API (초안)
 
-- 목적: §3.2 메트릭 응답(정규 계약)을 기반으로,  
-  메트릭 + 요약된 시계열 정보(또는 별도 저장소 키)를 묶어 “스냅샷 객체”를 **전달·보관용 패키지** 형태의 표준 JSON으로 노출.
+목적: “평가 런 메트릭”과 별개로, **입력 SSOT** 인 `risk_signal_hub` 스냅샷(포트폴리오/리스크/커버리지)을 조회/적재한다.  
+현재 QMTL에서 `/worlds/{world_id}/snapshots/*` 경로는 **Risk Signal Hub 스냅샷(월드 단위)** 을 의미한다.
 
-- 예시 엔드포인트:
+- 예시 엔드포인트(현재 구현):
 
 ```http
-GET /worlds/{world_id}/snapshots/{snapshot_id}
+POST /worlds/{world_id}/snapshots
+GET  /worlds/{world_id}/snapshots/latest
+GET  /worlds/{world_id}/snapshots/lookup?version=...&as_of=...
+GET  /worlds/{world_id}/snapshots?limit=10
 ```
 
-- 응답(스케치):
+- 응답: Risk Signal Hub 계약(`risk_hub_contract`)을 따른다.
 
-```json
-{
-  "snapshot_id": "alpha_world-beta_mkt_simple-2025-12-02T10:00:00Z",
-  "world_id": "alpha_world",
-  "strategy_id": "beta_mkt_simple",
-  "run_id": "2025-12-02T10:00:00Z-uuid",
-  "created_at": "2025-12-02T10:05:30Z",
-  "metrics": { "...": "..." },
-  "series_heads": {
-    "returns": [0.001, -0.0005, ...],
-    "equity": [10000.0, 10010.0, ...],
-    "pnl": [0.0, 10.0, ...]
-  },
-  "meta": {
-    "pnl_source": "account_simulated_from_signals",
-    "auto_returns": true,
-    "tags": ["beta-factory", "sandbox"]
-  },
-  "storage_refs": {
-    "full_returns_series": "s3://.../returns.parquet",
-    "full_pnl_series": "s3://.../pnl.parquet"
-  }
-}
-```
-
-- 이 객체를 그대로 파일로 저장하면, 각 프로젝트가 별도의 스냅샷 스키마를 설계할 필요 없이 **WS 표준 포맷**을 재사용할 수 있다.
-
-!!! note "메트릭 API vs 스냅샷 API 역할 분리"
-    - `/runs/{run_id}/metrics`는 WS가 관리하는 **정규 평가 결과 계약(SSOT)** 이며, 정책/게이팅·대시보드·알고리즘적 소비(예: 리밸런싱 엔진)는 이 응답을 기준으로 삼는다.
-    - `/snapshots/{snapshot_id}`는 동일한 평가 결과에 **series head·스토리지 참조·메타데이터를 덧붙인 전달/보관용 봉투(envelope)** 로,  
-      CLI·툴·외부 분석 파이프라인이 `.qmtl_snapshots/*.json`을 읽을 때 사용하는 것을 1차 목표로 한다.
+!!! note "평가 런 메트릭 vs Risk Hub 스냅샷"
+    - `/runs/{run_id}/metrics`는 “전략 평가 결과(returns/sample/risk 등)”의 SSOT다.
+    - `/worlds/{world_id}/snapshots/*`는 “입력/관측 스냅샷(risk_signal_hub)”의 SSOT다.
 
 !!! note "기존 `/worlds/{id}/evaluate` API와의 관계"
     - 초기 구현에서는 `/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/metrics`가 내부적으로 기존 `/worlds/{world_id}/evaluate` 호출(또는 동일한 정책 엔진)을 래핑해 **동일한 평가 결과를 정규화된 스키마로 노출**하는 형태를 권장한다.
@@ -274,33 +249,28 @@ GET /worlds/{world_id}/snapshots/{snapshot_id}
 sequenceDiagram
     participant User
     participant SDK as Runner/SDK
-    participant GW as Gateway
     participant WS as WorldService
 
     User->>SDK: Runner.submit(MyStrategy, world="alpha_world")
-    SDK->>GW: POST /strategies (submit)
-    GW->>WS: POST /worlds/{world}/strategies/{strategy}/runs (create run or enqueue)
-    WS-->>GW: 202 Accepted + run_id
-    GW-->>SDK: 202 Ack + { evaluation_run_id, ... }
-    SDK-->>User: SubmitResult(evaluation_run_id=..., links=...)
+    SDK->>WS: POST /worlds/{world}/evaluate (with run_id)
+    WS-->>SDK: 200 + { evaluation_run_id, evaluation_run_url }
+    SDK-->>User: SubmitResult(evaluation_run_id=..., evaluation_run_url=...)
 
     User->>SDK: SDK.poll_evaluation(evaluation_run_id)
     SDK->>WS: GET /worlds/{world}/strategies/{strategy}/runs/{run}
-    WS-->>SDK: status=evaluated + links.metrics/snapshot
+    WS-->>SDK: status + links.metrics/history
 
     SDK->>WS: GET /worlds/{world}/strategies/{strategy}/runs/{run}/metrics
     WS-->>SDK: evaluation metrics
 
-    SDK->>WS: GET /worlds/{world}/snapshots/{snapshot_id}
-    WS-->>SDK: snapshot JSON
-    SDK-->>User: (optional) write snapshot JSON to .qmtl_snapshots/...
+    SDK->>WS: GET /worlds/{world}/snapshots/latest
+    WS-->>SDK: risk_signal_hub snapshot (optional input SSOT)
 ```
 
 CLI 예시(아이디어):
 
-- `qmtl submit strategies.beta_factory.beta_mkt_simple:Strategy --world alpha_world --snapshot`
-- `qmtl world run-status --world alpha_world --strategy beta_mkt_simple --run latest`
-- `qmtl world snapshot --world alpha_world --strategy beta_mkt_simple --run latest --output .qmtl_snapshots/alpha_world-beta_mkt_simple-latest.json`
+- `qmtl submit strategies.beta_factory.beta_mkt_simple:Strategy --world alpha_world`
+- `qmtl world run-status alpha_world --strategy beta_mkt_simple --run latest --metrics`
 
 ## 5. 로컬 PnL 헬퍼와의 관계
 
