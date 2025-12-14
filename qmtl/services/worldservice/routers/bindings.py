@@ -44,4 +44,10 @@ def create_bindings_router(service: WorldService) -> APIRouter:
         strategies = await store.get_decisions(world_id)
         return BindingsResponse(strategies=strategies)
 
+    @router.get('/worlds/{world_id}/decisions', response_model=BindingsResponse)
+    async def get_decisions(world_id: str) -> BindingsResponse:
+        store = service.store
+        strategies = await store.get_decisions(world_id)
+        return BindingsResponse(strategies=strategies)
+
     return router

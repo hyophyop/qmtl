@@ -40,7 +40,7 @@ status: draft
 ```
 
 - 소규모 조직에서도 **기술로 리스크를 통제**할 수 있도록,  
-  **월드의 “검증” 단계를 고도화**하고, live 승격은 기본적으로 **명시적인 apply/운영자 승인**을 요구하는 방향을 기본값으로 한다.
+  **월드의 “검증” 단계를 고도화**하고, live 승격은 기본값으로 **명시적인 apply/운영자 승인**을 요구하되 월드별 거버넌스 정책으로 opt‑in 자동 승격도 허용한다.
 
 ### 0.2 비범위
 
@@ -189,6 +189,8 @@ status: draft
 
 **목표:** World 정책과 Evaluation Run을 이용해 “backtest 캠페인 → paper 캠페인 → (선택적) live 캠페인”을 자동·반복적으로 관리할 수 있는 기반을 만든다.
 
+여기서 `paper_campaign`은 운영 관점의 **dryrun(페이퍼 런)** 단계로, live 적용 전 “실전과 유사한 조건에서의 관찰/검증”을 위해 존재한다.
+
 ### 해야 할 일
 
 1. **정책 DSL에 캠페인 윈도우 도입**
@@ -233,6 +235,17 @@ status: draft
 
 **목표:** 소규모 조직에서도 “기술로 리스크를 통제”할 수 있을 만큼 강한 검증 단계를 만들고, live 승격은 기본적으로 운영/거버넌스 단계에 남겨 둔다.
 
+### 선행조건 (Risk Signal Hub 입력 SSOT)
+
+Phase 5의 “강한 검증/리스크 컷/스트레스”는 입력 데이터가 흔들리면 곧바로 불안정해진다. 따라서 아래 조건을 Phase 5 착수(또는 최소한 Phase 5의 blocking 룰 도입) 전제 조건으로 둔다.
+
+- **프로듀서 커버리지 최소 기준**: 월드의 핵심 실행 경로(최소 rebalancing/activation, 가능하면 live 모니터링 경로)가 `risk_signal_hub`에 스냅샷을 지속적으로 적재한다.
+- **신선도/결측 가시화**: `risk_hub_snapshot_lag_seconds`, `risk_hub_snapshot_missing_total` 지표로 stale/missing이 관측 가능하고, 알람/런북 경로가 준비되어 있다.
+- **스테이지 라벨 안정화**: 스냅샷은 `X-Stage`/`provenance.stage`를 통해 stage 라벨이 항상 존재하며(backtest/paper/live 등), dedupe/알람이 `unknown`에 과도하게 몰리지 않는다.
+- **fail-closed 합의**: 스냅샷이 missing/expired일 때 Phase 5 검증은 “보수적 강등(주문 게이트/승격 차단)”으로 수렴한다.
+
+관련: [Risk Signal Hub 아키텍처](../architecture/risk_signal_hub.md), [운영 런북](../operations/risk_signal_hub_runbook.md)
+
 ### 해야 할 일
 
 1. **월드 검증 단계 고도화**
@@ -248,14 +261,70 @@ status: draft
      - WS/Exit Engine/모니터링이 동일한 `version/hash/as_of` 스냅샷을 공유하도록 설계한다.
      - 관련: [Risk Signal Hub 아키텍처](../architecture/risk_signal_hub.md)
 
-2. **live 승격 거버넌스 옵션**
+2. **live 승격 거버넌스 정책 (월드별)**
 
-   - 정책/월드 설정에 다음과 같은 옵션을 추가한다.
-     - `live_auto_apply: false` (기본값)
-     - `live_requires_manual_approval: true`
-   - 이렇게 하면:
-     - 시스템은 **backtest/paper 캠페인까지 자동으로 후보를 추려 주고**,  
-     - live 전환은 항상 `/apply` 또는 별도 “승인 플로우”를 통해서만 일어난다.
+   - World 정책 DSL에 `governance.live_promotion` 블록을 도입해, 월드마다 live 승격 방식을 고정한다.
+   - 중요한 불변조건: `governance.live_promotion`는 **“live 전환을 어떻게 실행할지”**만 결정한다.  
+     즉 `auto_apply`로 설정하더라도, Phase 4의 `paper_campaign`(= dryrun)과 Phase 5의 `validation` 게이트는 **생략되지 않는다**.
+   - 최소 스키마(예시):
+
+     ```yaml
+     governance:
+       live_promotion:
+         mode: manual_approval  # disabled | manual_approval | auto_apply
+     ```
+
+   - `mode`의 의미(WS 관점):
+     - `disabled`: live 승격을 **절대 수행하지 않는다**. (후보 선정/리포트는 가능)
+     - `manual_approval` (기본값): backtest/paper 캠페인(dryrun)과 `validation`을 통과한 전략에 대해, WS는 `pending_live_approval` 상태를 남긴다. 운영자가 `/apply` 또는 승인 API/CLI로 명시적으로 승인해야 live 적용이 일어난다.
+     - `auto_apply`: backtest/paper 캠페인(dryrun)과 `validation`을 통과한 전략에 대해, WS가 승격 조건을 만족하면 **자동으로 apply**한다. 단, 아래 fail‑closed 조건 및 가드레일을 만족하지 못하면 자동 승격은 차단되어야 한다.
+
+   - 승인/감사(Audit) 요구사항(권장):
+     - `manual_approval` 모드에서는 “누가/언제/무엇을/왜”가 남도록 승인 레코드를 1급으로 둔다.
+       - 예: `approval_request_id`, `requested_at`, `approved_at`, `approved_by`, `comment`, `decision_reason`
+     - `auto_apply` 모드에서도 동일한 수준의 적용 로그(자동 결정 사유 포함)가 남아야 한다.
+
+   - 가드레일(권장, 이름은 조정 가능):
+     - `cooldown`: 최근 승격 이후 재승격 최소 대기 시간
+     - `max_live_slots`: 동시에 live로 올릴 수 있는 전략 수 상한
+     - `canary_fraction`: 자동 승격을 “전체”가 아니라 일부에만 적용하는 비율/슬롯
+     - `approvers`: 승인 가능한 주체(역할/계정) 목록
+
+   - fail‑closed 규칙(필수):
+     - `risk_signal_hub` 스냅샷이 missing/expired/stale이거나, `as_of`/`dataset_fingerprint`가 요구 조건을 만족하지 못하면
+       - 승격은 `disabled`처럼 **항상 차단**하고, 후보/리포트에는 차단 사유를 노출한다.
+
+   - CLI/툴 연계(필수):
+     - 운영자가 “현재 상태를 보고 → 승인을 남기고(옵션) → apply를 실행”할 수 있어야 한다.
+     - 최소 CLI 서피스(예시, 이름은 조정 가능):
+       - 상태 조회:
+         - `qmtl world status <world> [--strategy <sid>]`  
+           (캠페인 phase, 최근 evaluation run, `validation` 통과 여부, `governance.live_promotion.mode`, `pending_live_approval` 여부/사유 요약)
+         - `qmtl world run-status --world <world> --strategy <sid> --run <id|latest>`  
+           (상태/메트릭/스냅샷 링크; 관련 설계: `design/worldservice_evaluation_runs_and_metrics_api.md`)
+       - 승인/거부(= `manual_approval` 모드에서만 활성):
+         - `qmtl world live approve --world <world> --strategy <sid> --run <run_id> --comment ...`
+         - `qmtl world live reject --world <world> --strategy <sid> --run <run_id> --comment ...`
+       - 적용:
+         - `qmtl world apply <world> --run-id <uuid> --plan-file <plan.json>` (기존)
+         - (권장) `qmtl world live apply --world <world> --strategy <sid> --run <run_id> --run-id <uuid>`  
+           (WS가 계산한 “승격 플랜”을 조회→검증→2‑phase apply로 위임)
+     - `auto_apply` 모드에서도, 위 명령은 “현재 상태/최근 자동 적용 내역(감사 로그)”을 조회하는 읽기 전용 기능으로 유용하다.
+
+   - API 연계(필수):
+     - 조회:
+       - `GET /worlds/{world}/strategies/{strategy}/runs/{run}` (상태)
+       - `GET /worlds/{world}/strategies/{strategy}/runs/{run}/metrics` (평가/검증 결과)
+       - `GET /worlds/{world}/decide` + `GET /worlds/{world}/activation` (현재 effective_mode/activation 스냅샷)
+     - 승인(수동 승인 모드):
+       - `POST /worlds/{world}/promotions/live/approve` (idempotent; actor/reason/timestamp 포함)
+       - `POST /worlds/{world}/promotions/live/reject` (idempotent; actor/reason/timestamp 포함)
+     - 적용:
+       - 최종 적용은 `POST /worlds/{id}/apply` (2‑phase apply)로 수렴시키되,
+         “evaluation run → activation plan” 변환 결과(= promote/demote, activate/deactivate)가
+         CLI/운영자가 검토 가능한 형태로 제공되어야 한다(예: `GET /worlds/{world}/promotions/live/plan?strategy_id=...&run_id=...`).
+     - RBAC:
+       - 승인/적용은 operator‑only(또는 별도 role)로 제한하고, 모든 호출은 감사 로그로 남긴다.
 
 3. **운영자 친화적 리포트**
 
@@ -287,10 +356,10 @@ status: draft
    - 예를 들어 Evaluation Run을 제대로 도입하지 않은 상태에서 캠페인 오케스트레이션을 구현하면,
      - 디버깅이 어렵고, WS/Runner 간 책임 경계가 모호해지기 좋다.
 
-4. **live 자동 승격은 항상 마지막에, 그리고 기본은 off.**
+4. **live 자동 승격은 항상 마지막에, 그리고 기본은 `manual_approval`.**
    - 이 문서는 **소규모 조직이 기술로 리스크를 제어할 수 있는 기반**을 제공하려는 것이지,
      - “사람 손을 완전히 떼는 live 자동화”를 지향하지 않는다.
-   - live 자동 승격이 필요하더라도, 충분한 기간의 검증/캠페인·모니터링이 갖춰진 뒤,  
-     제한된 환경에서만 opt‑in 하도록 계획한다.
+   - live 자동 승격이 필요하더라도, 충분한 기간의 검증/캠페인·모니터링이 갖춰진 뒤,
+     월드별 거버넌스 정책(`governance.live_promotion.mode=auto_apply`)로 제한된 환경에서만 opt‑in 하도록 계획한다.
 
 이 로드맵 하나만으로도 “Core Loop를 월드 중심으로 고도화한다”는 목적과 방향성을 잃지 않고, 각 단계에서 해야 할 일을 판단할 수 있어야 한다. 세부 API·스키마는 관련 설계 문서(`architecture/*.md`, `world/*.md`, `design/worldservice_evaluation_runs_and_metrics_api.md`)를 함께 참고하되, **“지금 이 변경이 전체 그림에서 어느 Phase인지”**는 항상 이 문서를 기준으로 정한다.

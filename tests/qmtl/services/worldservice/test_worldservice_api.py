@@ -512,6 +512,20 @@ async def test_evaluation_run_override_flow():
 
 
 @pytest.mark.asyncio
+async def test_world_decisions_get_endpoint_returns_active_strategies():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wdec", "name": "Decision World"})
+            set_resp = await client.post("/worlds/wdec/decisions", json={"strategies": ["s1", "s2"]})
+            assert set_resp.status_code == 200
+
+            get_resp = await client.get("/worlds/wdec/decisions")
+            assert get_resp.status_code == 200
+            assert get_resp.json()["strategies"] == ["s1", "s2"]
+
+
+@pytest.mark.asyncio
 async def test_ex_post_failure_record_flow_appends_history():
     app = create_app(storage=Storage())
     async with httpx.ASGITransport(app=app) as asgi:
