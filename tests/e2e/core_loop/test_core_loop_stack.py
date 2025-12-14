@@ -51,17 +51,13 @@ def _world_id_candidates(world_id: str) -> set[str]:
     return {world_id, world_id.replace("_", "-"), world_id.replace("-", "_")}
 
 
-def _submit(strategy: str, *, world: str, mode: str | None = None) -> dict:
+def _submit(strategy: str, *, world: str) -> dict:
     cmd = ["qmtl", "submit", strategy, "--world", world]
-    if mode:
-        cmd.extend(["--mode", mode])
     return _submit_raw(cmd)
 
 
-def _submit_json(strategy: str, *, world: str, mode: str | None = None) -> tuple[dict, dict]:
+def _submit_json(strategy: str, *, world: str) -> tuple[dict, dict]:
     cmd = ["qmtl", "submit", strategy, "--world", world, "--output", "json"]
-    if mode:
-        cmd.extend(["--mode", mode])
     result = _submit_raw(cmd)
     try:
         payload = json.loads(result["stdout"])
@@ -103,7 +99,6 @@ def test_submit_default_safe_downgrades_when_missing_as_of(core_loop_world_id: s
     result = _submit(
         "core_loop_demo_strategy:CoreLoopDemoStrategy",
         world=core_loop_world_id,
-        mode="backtest",
     )
 
     # When running without as_of/dataset in backtest, CLI prints a safe mode warning
@@ -116,7 +111,6 @@ def test_submit_reports_downgrade_reason(core_loop_world_id: str, monkeypatch: p
     result = _submit(
         "core_loop_demo_strategy:CoreLoopDemoStrategy",
         world=core_loop_world_id,
-        mode="backtest",
     )
 
     # SubmitResult repr should include downgrade flags for contract visibility
@@ -130,7 +124,6 @@ def test_submit_json_includes_ws_envelope(core_loop_world_id: str, monkeypatch: 
     payload, result = _submit_json(
         "core_loop_demo_strategy:CoreLoopDemoStrategy",
         world=core_loop_world_id,
-        mode="backtest",
     )
 
     # Contract: JSON output keeps WS envelope separate and mirrors downgrade flags.
@@ -153,7 +146,6 @@ def test_submit_json_includes_allocation(core_loop_world_id: str, monkeypatch: p
     payload, result = _submit_json(
         "core_loop_demo_strategy:CoreLoopDemoStrategy",
         world=core_loop_world_id,
-        mode="backtest",
     )
 
     allocation = payload.get("allocation")
@@ -175,7 +167,6 @@ def test_submit_to_apply_flow(core_loop_world_id: str, core_loop_stack: CoreLoop
     payload, _ = _submit_json(
         "core_loop_demo_strategy:CoreLoopDemoStrategy",
         world=core_loop_world_id,
-        mode="backtest",
     )
     allocation = payload.get("allocation") or {}
     assert allocation.get("world_id") in _world_id_candidates(core_loop_world_id)
@@ -301,13 +292,12 @@ def test_inproc_stack_sets_service_env(core_loop_stack: CoreLoopStackHandle):
 
 @pytest.mark.asyncio
 async def test_world_data_preset_autowires_seamless_provider(core_loop_world_id: str):
-    from qmtl.runtime.sdk import Mode, Runner
+    from qmtl.runtime.sdk import Runner
     from tests.e2e.core_loop.worlds.core_loop_demo_strategy import CoreLoopDemoStrategy
 
     result = Runner.submit(
         CoreLoopDemoStrategy,
         world=core_loop_world_id,
-        mode=Mode.BACKTEST,
         auto_validate=False,
     )
     strategy = result.strategy

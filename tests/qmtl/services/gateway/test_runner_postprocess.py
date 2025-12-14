@@ -80,7 +80,7 @@ def runner_harness():
 
 
 def test_offline_run_invokes_history_service(runner_harness):
-    result = Runner.submit(DummyStrategy, mode="backtest")
+    Runner.submit(DummyStrategy)
     try:
         history = runner_harness["history"]
         assert len(history.warmup_calls) == 1
@@ -92,7 +92,7 @@ def test_offline_run_invokes_history_service(runner_harness):
         strategy = history.write_calls[0]
         assert getattr(strategy, "compute_context") == {
             "world_id": "__default__",
-            "mode": "backtest",
+            "execution_domain": "backtest",
         }
         # In offline/backtest without gateway, tag_query_manager may be absent.
         assert getattr(strategy, "tag_query_manager", None) in (None, getattr(strategy, "tag_query_manager", None))
@@ -101,7 +101,7 @@ def test_offline_run_invokes_history_service(runner_harness):
 
 
 def test_trade_order_dispatch_routes_through_services(runner_harness):
-    result = Runner.submit(DummyStrategy, mode="backtest")
+    Runner.submit(DummyStrategy)
     try:
         history = runner_harness["history"]
         assert len(history.write_calls) == 1

@@ -79,15 +79,6 @@ def cmd_submit(argv: List[str]) -> int:
         ),
     )
     parser.add_argument(
-        "--mode", "-m",
-        choices=["backtest", "paper", "live"],
-        default="backtest",
-        help=_t(
-            "Execution mode (backtest|paper|live). WS effective_mode is authoritative; "
-            "missing/legacy tokens are normalized to compute-only (backtest)."
-        ),
-    )
-    parser.add_argument(
         "--preset", "-p",
         choices=["sandbox", "conservative", "moderate", "aggressive"],
         default=None,
@@ -137,13 +128,12 @@ def cmd_submit(argv: List[str]) -> int:
 
 
 def _submit_and_print_result(strategy_cls, args: argparse.Namespace, overrides: dict[str, float]) -> int:
-    from qmtl.runtime.sdk import Runner, Mode
+    from qmtl.runtime.sdk import Runner
 
     try:
         result = Runner.submit(
             strategy_cls,
             world=args.world,
-            mode=Mode(args.mode),
             preset=args.preset,
             preset_mode=args.preset_mode,
             preset_version=args.preset_version,
@@ -175,7 +165,6 @@ def _print_submission_result(result) -> None:
     print(f"Strategy ID: {result.strategy_id}")
     print(f"Status:      {result.status}")
     print(f"World:       {result.world}")
-    print(f"Mode:        {result.mode.value}")
     if getattr(result, "downgraded", False) or getattr(result, "safe_mode", False):
         reason = getattr(result, "downgrade_reason", None) or "unspecified"
         print(f"Safe mode:   downgraded ({reason})")

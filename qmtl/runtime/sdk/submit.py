@@ -10,8 +10,7 @@ Phase 2 Enhancements:
 - Real contribution/weight/rank feedback
 
 Phase 3 Enhancements:
-- ExecutionDomain unified to single Mode concept
-- Uses qmtl.runtime.sdk.mode for mode utilities
+- Removes user-facing mode selection; WorldService is authoritative
 """
 
 from __future__ import annotations
@@ -34,7 +33,6 @@ if TYPE_CHECKING:
     from .gateway_client import GatewayClient
     from .services import RunnerServices
 
-from .mode import Mode, mode_to_execution_domain
 from .services import get_global_services
 from .world_data import (
     WorldDataSelection,
@@ -46,9 +44,7 @@ from qmtl.services.worldservice.shared_schemas import ActivationEnvelope, Decisi
 
 logger = logging.getLogger(__name__)
 
-# Re-export Mode for backward compatibility
 __all__ = [
-    "Mode",
     "SubmitResult",
     "AllocationSnapshot",
     "PrecheckResult",
@@ -57,6 +53,10 @@ __all__ = [
     "submit",
     "submit_async",
 ]
+
+
+DEFAULT_SUBMIT_EXECUTION_DOMAIN = "backtest"
+DEFAULT_SUBMIT_STAGE = "backtest"
 
 
 @dataclass
@@ -166,7 +166,6 @@ class SubmitResult:
     strategy_id: str
     status: str  # "pending" | "validating" | "active" | "rejected"
     world: str
-    mode: Mode
     downgraded: bool = False
     downgrade_reason: str | None = None
     safe_mode: bool = False
@@ -210,7 +209,6 @@ class SubmitResult:
                 return model.dict()
             return model
 
-        mode_value = self.mode.value if hasattr(self.mode, "value") else str(self.mode)
         metrics_dump = self.metrics.to_dict()
         decision_dump = _dump_model(self.decision)
         activation_dump = _dump_model(self.activation)
@@ -228,7 +226,6 @@ class SubmitResult:
             "strategy_id": self.strategy_id,
             "status": self.status,
             "world": self.world,
-            "mode": mode_value,
             "downgraded": self.downgraded,
             "downgrade_reason": self.downgrade_reason,
             "safe_mode": self.safe_mode,
@@ -253,7 +250,6 @@ class SubmitResult:
             "strategy_id": self.strategy_id,
             "world": self.world,
             "status": self.status,
-            "mode": mode_value,
             "decision": decision_dump,
             "activation": activation_dump,
             "allocation": allocation_dump,
@@ -492,7 +488,6 @@ async def submit_async(
     strategy_cls: type["Strategy"] | "Strategy",
     *,
     world: str | None = None,
-    mode: Mode | str = Mode.BACKTEST,
     preset: str | None = None,
     preset_mode: str | None = None,
     preset_version: str | None = None,
@@ -519,9 +514,6 @@ async def submit_async(
     world : str, optional
         Target world for the strategy. Uses QMTL_DEFAULT_WORLD env var
         or "__default__" if not specified.
-    mode : Mode | str
-        Execution mode: "backtest", "paper", or "live".
-        Default is "backtest" for validation.
     preset : str, optional
         Policy preset to use for validation (sandbox/conservative/moderate/aggressive).
         Uses QMTL_DEFAULT_PRESET env var or "sandbox" if not specified.
@@ -556,15 +548,12 @@ async def submit_async(
     >>> print(result.contribution)  # 0.023 (2.3% contribution)
     >>> print(result.metrics.sharpe)  # 1.85
     
-    >>> result = await Runner.submit_async(MyStrategy, world="prod", mode="live")
-    >>> for hint in result.improvement_hints:
-    ...     print(hint)
+    >>> result = await Runner.submit_async(MyStrategy, world="prod")
     """
-    mode = _normalize_mode_value(mode)
     resolved_world = _normalize_world_id(world or _get_default_world())
     resolved_preset = preset or _get_default_preset()
     gateway_url = _get_gateway_url(resolved_world)
-    execution_domain = mode_to_execution_domain(mode)
+    execution_domain = DEFAULT_SUBMIT_EXECUTION_DOMAIN
     services = get_global_services()
     strategy, strategy_class_name = _strategy_from_input(strategy_cls)
     world_ctx: WorldContext | None = None
@@ -583,7 +572,7 @@ async def submit_async(
         return result
     setattr(strategy, "compute_context", {
         "world_id": resolved_world,
-        "mode": mode.value,
+        "execution_domain": execution_domain,
     })
 
     async def _finalize_with_allocation(result: SubmitResult) -> SubmitResult:
@@ -645,7 +634,6 @@ async def submit_async(
             compute_context=compute_context,
             resolved_world=resolved_world,
             gateway_url=gateway_url,
-            mode=mode,
             gateway_available=gateway_available,
             policy_payload=world_ctx.policy_payload,
         )
@@ -664,7 +652,6 @@ async def submit_async(
                     strategy=strategy,
                     strategy_id=bootstrap_out.strategy_id,
                     resolved_world=resolved_world,
-                    mode=mode,
                     gateway_available=gateway_available,
                     world_notice=world_ctx.world_notice,
                 )
@@ -676,7 +663,6 @@ async def submit_async(
                     strategy_class_name=strategy_class_name,
                     strategy_id=bootstrap_out.strategy_id,
                     resolved_world=resolved_world,
-                    mode=mode,
                     world_notice=world_ctx.world_notice,
                     auto_returns_requested=bool(auto_returns),
                     auto_returns_hints=auto_returns_hints,
@@ -689,7 +675,6 @@ async def submit_async(
             resolved_world=resolved_world,
             resolved_preset=world_ctx.resolved_preset,
             backtest_returns=backtest_returns,
-            mode=mode,
             services=services,
             gateway_url=gateway_url,
             gateway_available=gateway_available,
@@ -700,7 +685,6 @@ async def submit_async(
                 strategy_class_name=strategy_class_name,
                 strategy_id=bootstrap_out.strategy_id,
                 resolved_world=resolved_world,
-                mode=mode,
                 world_notice=world_ctx.world_notice,
                 validation_result=validation_result,
                 ws_eval=ws_eval,
@@ -720,17 +704,11 @@ async def submit_async(
                 strategy_id=fallback_id,
                 status="rejected",
                 world=resolved_world,
-                mode=mode,
                 rejection_reason=str(e),
                 improvement_hints=fallback_notice + _get_improvement_hints(e),
                 strategy=strategy if "strategy" in locals() else None,
             )
         )
-
-
-def _normalize_mode_value(mode: Mode | str) -> Mode:
-    return Mode(mode.lower()) if isinstance(mode, str) else mode
-
 
 def _strategy_from_input(strategy_cls: type["Strategy"] | "Strategy") -> tuple["Strategy", str]:
     if isinstance(strategy_cls, type):
@@ -987,7 +965,6 @@ async def _bootstrap_strategy(
     compute_context: Any,
     resolved_world: str,
     gateway_url: str,
-    mode: Mode,
     gateway_available: bool,
     policy_payload: dict[str, Any] | None,
 ) -> BootstrapOutcome:
@@ -1016,10 +993,10 @@ async def _bootstrap_strategy(
             context=compute_context,
             world_id=resolved_world,
             gateway_url=gateway_url,
-            meta={"mode": mode.value},
+            meta={},
             offline=False,
             kafka_available=services.kafka_factory.available,
-            trade_mode="simulate" if mode != Mode.LIVE else "live",
+            trade_mode="simulate",
             schema_enforcement="fail",
             feature_plane=services.feature_plane,
             gateway_context=None,
@@ -1038,15 +1015,6 @@ async def _bootstrap_strategy(
                 force_offline=True,
             )
         raise
-
-    if mode != Mode.BACKTEST and not bootstrap_result.offline_mode:
-        await _configure_activation(
-            services=services,
-            strategy_id=bootstrap_result.strategy_id,
-            gateway_url=gateway_url,
-            world_id=resolved_world,
-            offline_mode=bootstrap_result.offline_mode,
-        )
 
     return BootstrapOutcome(
         strategy_id=bootstrap_result.strategy_id,
@@ -1088,7 +1056,6 @@ def _basic_result(
     strategy: "Strategy",
     strategy_id: str | None,
     resolved_world: str,
-    mode: Mode,
     gateway_available: bool,
     world_notice: list[str],
 ) -> SubmitResult:
@@ -1096,7 +1063,6 @@ def _basic_result(
         strategy_id=_strategy_id_or_fallback(strategy_id, strategy),
         status="pending" if not gateway_available else "active",
         world=resolved_world,
-        mode=mode,
         contribution=None,
         weight=None,
         rank=None,
@@ -1112,7 +1078,6 @@ def _reject_due_to_no_returns(
     strategy_class_name: str,
     strategy_id: str | None,
     resolved_world: str,
-    mode: Mode,
     world_notice: list[str],
     auto_returns_requested: bool,
     auto_returns_hints: Sequence[str] | None = None,
@@ -1121,7 +1086,7 @@ def _reject_due_to_no_returns(
     improvement_hints = world_notice + [
         "Ensure your strategy populates returns/equity/pnl during warmup",
         "Pass pre-computed returns via Runner.submit(..., returns=...)",
-        "Verify history data is available for the selected world/mode",
+        "Verify history data is available for the selected world",
     ]
     if auto_returns_requested:
         improvement_hints.append(
@@ -1133,7 +1098,6 @@ def _reject_due_to_no_returns(
         strategy_id=strategy_id or f"no_returns_{id(strategy)}",
         status="rejected",
         world=resolved_world,
-        mode=mode,
         rejection_reason=(
             "No returns produced for validation; provide pre-computed "
             "returns or ensure the strategy populates returns/equity/pnl."
@@ -1151,7 +1115,6 @@ async def _run_validation_and_ws_eval(
     resolved_world: str,
     resolved_preset: str | None,
     backtest_returns: Sequence[float],
-    mode: Mode,
     services: "RunnerServices",
     gateway_url: str,
     gateway_available: bool,
@@ -1184,7 +1147,7 @@ async def _run_validation_and_ws_eval(
         preset=resolved_preset,
         client=services.gateway_client,
         evaluation_run_id=evaluation_run_id,
-        stage=mode.value,
+        stage=DEFAULT_SUBMIT_STAGE,
         risk_tier=DEFAULT_EVALUATION_RISK_TIER,
     )
     if ws_eval.error:
@@ -1219,7 +1182,6 @@ def _build_submit_result_from_validation(
     strategy_class_name: str,
     strategy_id: str | None,
     resolved_world: str,
-    mode: Mode,
     world_notice: list[str],
     validation_result: Any,
     ws_eval: WsEvalResult | None,
@@ -1232,7 +1194,6 @@ def _build_submit_result_from_validation(
             strategy=strategy,
             strategy_id=strategy_id,
             resolved_world=resolved_world,
-            mode=mode,
             world_notice=world_notice,
             validation_result=validation_result,
             ws_eval=ws_eval,
@@ -1243,7 +1204,6 @@ def _build_submit_result_from_validation(
             strategy_class_name=strategy_class_name,
             strategy_id=strategy_id,
             resolved_world=resolved_world,
-            mode=mode,
             world_notice=world_notice,
             validation_result=validation_result,
             ws_eval=ws_eval,
@@ -1253,7 +1213,6 @@ def _build_submit_result_from_validation(
         strategy=strategy,
         strategy_id=strategy_id,
         resolved_world=resolved_world,
-        mode=mode,
         world_notice=world_notice,
         validation_result=validation_result,
         ws_eval=ws_eval,
@@ -1265,7 +1224,6 @@ def _build_passed_result(
     strategy: "Strategy",
     strategy_id: str | None,
     resolved_world: str,
-    mode: Mode,
     world_notice: list[str],
     validation_result: Any,
     ws_eval: WsEvalResult | None,
@@ -1275,7 +1233,6 @@ def _build_passed_result(
         strategy=strategy,
         strategy_id=strategy_id,
         resolved_world=resolved_world,
-        mode=mode,
         world_notice=world_notice,
         validation_result=validation_result,
         ws_eval=ws_eval,
@@ -1298,7 +1255,6 @@ def _build_passed_result(
         strategy_id=_strategy_id_or_fallback(strategy_id, strategy),
         status=status,
         world=resolved_world,
-        mode=mode,
         contribution=contribution,
         weight=weight,
         rank=rank,
@@ -1321,7 +1277,6 @@ def _ws_rejection_result(
     strategy: "Strategy",
     strategy_id: str | None,
     resolved_world: str,
-    mode: Mode,
     world_notice: list[str],
     validation_result: Any,
     ws_eval: WsEvalResult | None,
@@ -1337,7 +1292,6 @@ def _ws_rejection_result(
         strategy_id=_strategy_id_or_fallback(strategy_id, strategy, prefix="rejected"),
         status="rejected",
         world=resolved_world,
-        mode=mode,
         rejection_reason="WorldService evaluation rejected strategy",
         improvement_hints=world_notice + validation_result.improvement_hints,
         threshold_violations=ws_reject_violations,
@@ -1406,7 +1360,6 @@ def _build_failed_result(
     strategy_class_name: str,
     strategy_id: str | None,
     resolved_world: str,
-    mode: Mode,
     world_notice: list[str],
     validation_result: Any,
     ws_eval: WsEvalResult | None,
@@ -1418,7 +1371,6 @@ def _build_failed_result(
             strategy_class_name=strategy_class_name,
             strategy_id=strategy_id,
             resolved_world=resolved_world,
-            mode=mode,
             world_notice=world_notice,
             validation_result=validation_result,
             ws_eval=ws_eval,
@@ -1430,7 +1382,6 @@ def _build_failed_result(
             strategy_class_name=strategy_class_name,
             strategy_id=strategy_id,
             resolved_world=resolved_world,
-            mode=mode,
             world_notice=world_notice,
             validation_result=validation_result,
             ws_eval=ws_eval,
@@ -1440,7 +1391,6 @@ def _build_failed_result(
         strategy=strategy,
         strategy_id=strategy_id,
         resolved_world=resolved_world,
-        mode=mode,
         world_notice=world_notice,
         validation_result=validation_result,
         ws_eval=ws_eval,
@@ -1453,7 +1403,6 @@ def _ws_accepts_after_fail(
     strategy_class_name: str,
     strategy_id: str | None,
     resolved_world: str,
-    mode: Mode,
     world_notice: list[str],
     validation_result: Any,
     ws_eval: WsEvalResult,
@@ -1473,7 +1422,6 @@ def _ws_accepts_after_fail(
         strategy_id=_strategy_id_or_fallback(strategy_id, strategy, prefix="ws_accepted"),
         status="active",
         world=resolved_world,
-        mode=mode,
         contribution=ws_eval.contribution,
         weight=ws_eval.weight,
         rank=ws_eval.rank,
@@ -1499,7 +1447,6 @@ def _pending_after_failed_validation(
     strategy_class_name: str,
     strategy_id: str | None,
     resolved_world: str,
-    mode: Mode,
     world_notice: list[str],
     validation_result: Any,
     ws_eval: WsEvalResult | None,
@@ -1520,13 +1467,7 @@ def _pending_after_failed_validation(
         strategy_id=_strategy_id_or_fallback(strategy_id, strategy, prefix="pending"),
         status="pending",
         world=resolved_world,
-        mode=mode,
-        metrics=StrategyMetrics(
-            sharpe=validation_result.metrics.sharpe,
-        max_drawdown=validation_result.metrics.max_drawdown,
-        win_rate=validation_result.metrics.win_ratio,
-        profit_factor=validation_result.metrics.profit_factor,
-        ) if ws_eval else _base_metrics_from_validation(validation_result),
+        metrics=_base_metrics_from_validation(validation_result),
         strategy=strategy,
         improvement_hints=world_notice + [
             f"Local validation failed but WS evaluation unavailable ({ws_error_msg}); strategy submitted as pending "
@@ -1549,7 +1490,6 @@ def _reject_after_failed_validation(
     strategy: "Strategy",
     strategy_id: str | None,
     resolved_world: str,
-    mode: Mode,
     world_notice: list[str],
     validation_result: Any,
     ws_eval: WsEvalResult | None,
@@ -1562,7 +1502,6 @@ def _reject_after_failed_validation(
         strategy_id=_strategy_id_or_fallback(strategy_id, strategy, prefix="rejected"),
         status="rejected",
         world=resolved_world,
-        mode=mode,
         rejection_reason=rejection_reason,
         improvement_hints=world_notice + validation_result.improvement_hints,
         threshold_violations=final_thresholds,
@@ -1617,7 +1556,6 @@ def _build_error_result(
     strategy: "Strategy",
     strategy_id: str | None,
     resolved_world: str,
-    mode: Mode,
     world_notice: list[str],
     validation_result: Any,
     ws_eval: WsEvalResult | None,
@@ -1627,7 +1565,6 @@ def _build_error_result(
         strategy_id=_strategy_id_or_fallback(strategy_id, strategy, prefix="error"),
         status="rejected",
         world=resolved_world,
-        mode=mode,
         rejection_reason=validation_result.error_message or "Validation error",
         improvement_hints=world_notice + validation_result.improvement_hints,
         strategy=strategy,
@@ -1829,37 +1766,10 @@ def _prepare_strategy(strategy_cls: type["Strategy"]) -> "Strategy":
     return strategy
 
 
-async def _configure_activation(
-    *,
-    services: "RunnerServices",
-    strategy_id: str | None,
-    gateway_url: str | None,
-    world_id: str,
-    offline_mode: bool,
-) -> None:
-    """Configure activation manager and trade dispatcher for live modes."""
-    if gateway_url and not offline_mode:
-        try:
-            activation_manager = services.ensure_activation_manager(
-                gateway_url=gateway_url,
-                world_id=world_id,
-                strategy_id=strategy_id,
-            )
-            services.trade_dispatcher.set_activation_manager(activation_manager)
-            await activation_manager.start()
-            return
-        except Exception:
-            logger.warning(
-                "Activation manager failed to start; proceeding with gates OFF by default"
-            )
-    services.trade_dispatcher.set_activation_manager(services.activation_manager)
-
-
 def submit(
     strategy_cls: type["Strategy"],
     *,
     world: str | None = None,
-    mode: Mode | str = Mode.BACKTEST,
     preset: str | None = None,
     preset_mode: str | None = None,
     preset_version: str | None = None,
@@ -1879,8 +1789,6 @@ def submit(
         Strategy class to submit.
     world : str, optional
         Target world for the strategy.
-    mode : Mode | str
-        Execution mode: "backtest", "paper", or "live".
     preset : str, optional
         Policy preset for validation and world policy application.
     preset_mode : str, optional
@@ -1904,13 +1812,10 @@ def submit(
     --------
     >>> result = Runner.submit(MyStrategy)
     >>> print(result.status)
-    
-    >>> result = Runner.submit(MyStrategy, world="prod", mode="live")
     """
     return _run_coroutine_blocking(submit_async(
         strategy_cls,
         world=_normalize_world_id(world or _get_default_world()),
-        mode=mode,
         preset=preset,
         preset_mode=preset_mode,
         preset_version=preset_version,

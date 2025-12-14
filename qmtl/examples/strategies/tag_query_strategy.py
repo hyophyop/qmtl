@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import cast
 
 import pandas as pd
-from qmtl.runtime.sdk import Mode, Runner, Strategy
+from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import MatchMode, Node, TagQueryNode
 
 
@@ -48,6 +48,6 @@ class TagQueryStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    # v2 API: Submit with paper mode for real-time tag resolution
-    result = Runner.submit(TagQueryStrategy, world="tag_query_demo", mode=Mode.PAPER)
+    # v2 API: submit to WorldService; stage/mode is governed by world policy
+    result = Runner.submit(TagQueryStrategy, world="tag_query_demo")
     print(f"Strategy submitted: {result.status}")

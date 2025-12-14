@@ -86,12 +86,12 @@ Sample lines:
 {% raw %}
 - L28: from qmtl.runtime.sdk import Runner
 - L31: Runner.submit(strategy, world="demo")
-- L41: qmtl submit strategy.py --mode backtest --world demo
-- L47: qmtl submit strategy.py --mode paper --world demo
-- L48: qmtl submit strategy.py --mode live  # live execution
+- L41: qmtl submit strategy.py --world demo
+- L47: qmtl submit strategy.py --world demo
+- L48: qmtl submit strategy.py --world demo  # stage is world-governed
 - L76: from qmtl.runtime.brokerage.simple import PerShareFeeModel, VolumeShareSlippageModel
 - L82: from qmtl.runtime.brokerage import PerShareFeeModel, VolumeShareSlippageModel
-- L87: - [x] `Runner.backtest` / `Runner.dryrun` / `Runner.live` / `Runner.run` / `Runner.offline` 호출을 `Runner.submit(..., mode=...)`로 교체
+- L87: - [x] `Runner.backtest` / `Runner.dryrun` / `Runner.live` / `Runner.run` / `Runner.offline` 호출을 `Runner.submit(...)`로 교체
 {% endraw %}
 
 ## /Users/munseungjin/workspace/research/qmtl/docs/ko/reference/CHANGELOG.md

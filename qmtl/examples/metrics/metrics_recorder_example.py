@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import Node, StreamInput
 from qmtl.runtime.sdk.event_service import EventRecorderService
 from qmtl.runtime.sdk import metrics
@@ -37,6 +37,6 @@ class RecorderStrategy(Strategy):
 
 if __name__ == "__main__":
     metrics.start_metrics_server(port=8000)
-    # v2 API: Submit with paper mode
-    result = Runner.submit(RecorderStrategy, world="metrics_recorder", mode=Mode.PAPER)
+    # v2 API: submit to WorldService; stage/mode is governed by world policy
+    result = Runner.submit(RecorderStrategy, world="metrics_recorder")
     print(f"Strategy submitted: {result.status}")

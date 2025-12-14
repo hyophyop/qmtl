@@ -32,8 +32,8 @@ last_modified: 2025-08-21
 최소 품질 점수를 강제하려면 `validate_backtest_data(strategy, fail_on_quality_threshold=0.8)`를 사용하세요.
 
 러너 통합:
-- 로컬 백테스트의 경우 `Runner.submit(MyStrategy, mode=Mode.BACKTEST)`를 사용하고, 설정 또는 사전 점검 단계에서 검증을 호출합니다.
-- WS 우선 실행의 경우 `Runner.submit(MyStrategy, world="name", mode=Mode.PAPER)`를 사용하고, 필요하면 검증을 별도의 프리플라이트 단계로 유지합니다.
+- 로컬 백테스트의 경우 `Runner.submit(MyStrategy)`를 사용하고, 설정 또는 사전 점검 단계에서 검증을 호출합니다.
+- WS 우선 실행의 경우 `Runner.submit(MyStrategy, world="name")`를 사용하고, 필요하면 검증을 별도의 프리플라이트 단계로 유지합니다.
 
 ## 예시
 

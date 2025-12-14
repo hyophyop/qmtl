@@ -78,38 +78,26 @@ A **World** is the portfolio context where strategies operate together.
 
 ---
 
-## 3. Mode
+## 3. Stage (World-governed)
 
-**Mode** represents the execution environment for a strategy.
+QMTL exposes a single submission surface: `Runner.submit(strategy, world=...)`.
+Execution stage (backtest/paper/live) is a WorldService decision (`effective_mode`
+and world policy), not a client-side flag.
 
-| Mode | Description | Order Execution |
-|------|-------------|-----------------|
-| `backtest` | Simulation with historical data | ❌ |
-| `paper` | Real-time data, virtual orders | Simulated |
-| `live` | Real-time data, real orders | ✅ |
+| Stage | Meaning |
+|------|---------|
+| `backtest` | Historical validation / metrics computation |
+| `paper` | Real-time observation (orders gated/simulated) |
+| `live` | Real orders (requires governance/approval) |
 
 ```python
-# Backtest (default)
-Runner.submit(MyStrategy, world="demo", mode=Mode.BACKTEST)
+from qmtl.sdk import Runner
 
-# Paper trading
-Runner.submit(MyStrategy, world="demo", mode=Mode.PAPER)
-
-# Live trading (requires policy approval)
-Runner.submit(MyStrategy, world="demo", mode=Mode.LIVE)
+Runner.submit(MyStrategy, world="demo")
 ```
 
-**Safety Design:**
-- Default is always `backtest` (no accidental live trading)
-- `live` activates only after passing world policy validation
-- Auto-demotion to `backtest` if performance falls below threshold
-
-!!! warning "Mode Transitions are System-Decided"
-    Even if a user requests `mode=Mode.LIVE`, if world policy criteria 
-    (Sharpe threshold, minimum trading days, etc.) aren't met, the system 
-    automatically demotes to `backtest`.
-    
-    This is the core of "the system handles it."
+!!! warning "Stage is System-Decided"
+    Promotion to paper/live is governed by world policy and operator workflows.
 
 ---
 

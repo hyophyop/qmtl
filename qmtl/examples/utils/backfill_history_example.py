@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import Node, StreamInput
 from qmtl.runtime.io import QuestDBHistoryProvider, BinanceFetcher
 
@@ -33,11 +33,10 @@ class BackfillHistoryStrategy(Strategy):
 
 
 def main() -> None:
-    # v2 API: Submit with paper mode for history backfill
+    # v2 API: submit to WorldService; stage is governed by world policy
     result = Runner.submit(
         BackfillHistoryStrategy,
         world="backfill_history",
-        mode=Mode.PAPER,
     )
     print(f"Strategy submitted: {result.status}")
 

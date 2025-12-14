@@ -96,12 +96,11 @@ class MyStrategy(Strategy):
 ### 전략 제출
 
 ```python
-from qmtl.sdk import Runner, Mode
+from qmtl.sdk import Runner
 
 result = Runner.submit(
     MyStrategy,
     world="my_portfolio",
-    mode=Mode.BACKTEST
 )
 ```
 
@@ -124,7 +123,7 @@ if result.status == "valid":
 
 | 상태 | 의미 | 다음 행동 |
 |------|------|----------|
-| `valid` | 정책 기준 충족, 활성화 대기/완료 | 다음 모드(paper/live) 시도 |
+| `valid` | 정책 기준 충족, 활성화 대기/완료 | 캠페인/승격 후보 여부 확인 |
 | `invalid` | 정책 기준 미달 | `improvement_hints` 참고하여 개선 |
 | `pending` | 평가 진행 중 | 잠시 후 재조회 |
 
@@ -144,7 +143,7 @@ for hint in result.improvement_hints:
 예시 힌트들:
 
 ```
-💡 Sharpe Ratio가 1.2입니다. 1.5 이상이면 Paper 모드 승격 가능합니다.
+💡 Sharpe Ratio가 1.2입니다. 1.5 이상이면 Paper 단계 승격 후보가 될 수 있습니다.
 💡 최대 낙폭이 -15%입니다. -10% 이내로 개선을 권장합니다.
 💡 기존 전략들과 상관계수가 0.85입니다. 0.7 이하면 분산 효과가 높아집니다.
 💡 백테스트 기간이 14일입니다. 최소 30일 이상을 권장합니다.
@@ -204,8 +203,8 @@ flowchart TD
     D -->|valid| E[활성화됨]
     D -->|invalid| F[improvement_hints 확인]
     
-    E --> G{더 높은 모드?}
-    G -->|Yes| H[Paper/Live 제출]
+    E --> G{승격 후보?}
+    G -->|Yes| H[월드 주도 paper/live 캠페인]
     G -->|No| I[모니터링]
     
     H --> D
@@ -262,13 +261,13 @@ print(result.metrics.get("correlation_with_portfolio"))
 ```
 사용자 집중:
 1. 전략 코드 작성
-2. Runner.submit(world=..., mode=...)
+2. Runner.submit(world=...)
 3. 결과와 improvement_hints 확인
 4. 필요 시 개선 후 재제출
 ```
 
-- 모드 전환은 월드 정책이 결정합니다. 원하는 모드(`backtest`/`paper`/`live`)로 제출하면, 기준 미달 시 WorldService가 안전한 compute-only로 강등하거나 활성화를 차단합니다.
-- 성과/정책 위반 시 강등은 자동이며, 상위 모드로 올리려면 해당 모드로 제출이 필요합니다.
+- 단계 전환은 월드 정책과 운영자 워크플로가 결정합니다. WorldService는 paper/live 캠페인을 자동으로 진행하거나 승인/적용 단계를 요구할 수 있습니다.
+- 성과/정책 위반 시 강등은 자동이며, 승격은 WorldService 거버넌스(클라이언트 플래그가 아님)로 제어됩니다.
 - 알림/스트림: ControlBus 스트림은 SDK 내부용입니다. 사용자용 구독 헬퍼는 아직 정식 제공되지 않으므로 당분간 CLI/REST로 상태를 조회하세요.
 
 ---

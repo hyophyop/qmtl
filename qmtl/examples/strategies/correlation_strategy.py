@@ -1,7 +1,7 @@
 """Correlation strategy example - QMTL v2.0."""
 
 import pandas as pd
-from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import Node, TagQueryNode, MatchMode
 
 class CorrelationStrategy(Strategy):
@@ -32,6 +32,6 @@ class CorrelationStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    # v2 API: Submit with paper mode for real-time data with simulated orders
-    result = Runner.submit(CorrelationStrategy, world="correlation_demo", mode=Mode.PAPER)
+    # v2 API: submit to WorldService; stage/mode is governed by world policy
+    result = Runner.submit(CorrelationStrategy, world="correlation_demo")
     print(f"Strategy submitted: {result.status}")

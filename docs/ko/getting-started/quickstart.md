@@ -22,7 +22,7 @@ last_modified: 2025-12-01
 `my_strategy.py` 파일을 생성합니다:
 
 ```python
-from qmtl.sdk import Strategy, StreamInput, Node, Runner, Mode
+from qmtl.sdk import Strategy, StreamInput, Node, Runner
 import pandas as pd
 
 class MomentumStrategy(Strategy):
@@ -62,7 +62,6 @@ if __name__ == "__main__":
     result = Runner.submit(
         MomentumStrategy,
         world="quickstart_demo",
-        mode=Mode.BACKTEST
     )
     print(result)
 ```
@@ -82,7 +81,6 @@ python my_strategy.py
   "strategy_id": "momentum_btc_1m_abc123",
   "status": "valid",              # valid | invalid | pending | rejected
   "world": "quickstart_demo",
-  "mode": "backtest",
   "downgraded": false,            # 안전기본 강등 여부 (필요 시 compute-only로 전환)
   "downgrade_reason": null,       # 예: backtest 필수 입력 누락 시 "missing_as_of"
   "safe_mode": false,             # True면 주문 게이트 OFF 상태
@@ -104,7 +102,7 @@ python my_strategy.py
 CLI에서도 동일하게 `--output json` 플래그로 WS/Precheck가 분리된 결과를 받을 수 있습니다:
 
 ```bash
-qmtl submit strategies.momentum:MomentumStrategy --world quickstart_demo --mode backtest --output json
+qmtl submit strategies.momentum:MomentumStrategy --world quickstart_demo --output json
 ```
 
 ---
@@ -170,19 +168,12 @@ def compute_signal(view):
     return pd.DataFrame({"signal": signal})
 ```
 
-### B. Paper 모드로 승격
+### B. Paper/Live는 월드가 관리
 
-백테스트 성과가 기준을 충족하면 원하는 모드로 다시 제출합니다:
+전략을 제출한 뒤 Paper/Live 캠페인으로의 진행은 월드 정책/거버넌스에 의해 결정됩니다. 클라이언트에서 `mode` 플래그로 단계를 요청하지 않습니다.
 
-```python
-result = Runner.submit(
-    MomentumStrategy,
-    world="quickstart_demo",
-    mode=Mode.PAPER  # 실시간 데이터로 가상 거래
-)
-```
-
-월드 정책이 활성화를 결정하며, 기준 미달 시 안전 모드로 강등할 수 있습니다. 정책 위반 시 강등은 자동입니다.
+- 월드/캠페인 상태 확인: `qmtl world status quickstart_demo`
+- live 후보 조회(운영자): `qmtl world live-candidates quickstart_demo`
 
 ### C. 성과 모니터링
 
@@ -198,9 +189,6 @@ result = Runner.submit(
 ```bash
 # 파일 직접 제출
 qmtl submit my_strategy.py --world quickstart_demo
-
-# 모드 지정
-qmtl submit my_strategy.py --world quickstart_demo --mode paper
 ```
 
 ### 상태 확인

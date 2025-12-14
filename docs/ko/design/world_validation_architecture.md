@@ -1133,7 +1133,7 @@ class RuleResult(BaseModel):
 ### 13.1 새 전략의 최초 backtest 제출
 
 1. 개발자는 Model Card를 작성하고, 전략 코드를 준비한다.
-2. `Runner.submit(MyStrategy, world="demo", mode="backtest")` 호출:
+2. `Runner.submit(MyStrategy, world="demo")` 호출:
    - SDK가 히스토리 warmup → backtest → returns/metrics 추출.
    - WorldService에 EvaluationRun이 생성되고, v1 코어 validation 프로파일이 적용된다.
 3. ValidationRule들이 EvaluationMetrics를 평가하여 `RuleResult` 집합과 `summary.status`/`recommended_stage`를 생성한다.

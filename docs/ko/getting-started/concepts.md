@@ -74,37 +74,24 @@ class MyStrategy(Strategy):
 
 ---
 
-## 3. 모드 (Mode)
+## 3. 단계 (Stage, WorldService 관리)
 
-**모드**는 전략이 실행되는 환경을 나타냅니다.
+QMTL은 `Runner.submit(strategy, world=...)` 단일 제출 표면을 제공합니다. 실행 단계(backtest/paper/live)는 클라이언트 플래그가 아니라 WorldService의 결정(`effective_mode` + 월드 정책)입니다.
 
-| 모드 | 설명 | 주문 발행 |
-|------|------|----------|
-| `backtest` | 과거 데이터로 시뮬레이션 | ❌ |
-| `paper` | 실시간 데이터, 가상 주문 | 시뮬레이션 |
-| `live` | 실시간 데이터, 실제 주문 | ✅ |
+| 단계 | 의미 |
+|------|------|
+| `backtest` | 과거 데이터 기반 검증/지표 계산 |
+| `paper` | 실시간 관찰 단계(주문 게이트/시뮬레이션) |
+| `live` | 실거래 단계(거버넌스/승인 필요) |
 
 ```python
-# 백테스트 (기본값)
-Runner.submit(MyStrategy, world="demo", mode=Mode.BACKTEST)
+from qmtl.sdk import Runner
 
-# 페이퍼 트레이딩
-Runner.submit(MyStrategy, world="demo", mode=Mode.PAPER)
-
-# 실거래 (정책 통과 필요)
-Runner.submit(MyStrategy, world="demo", mode=Mode.LIVE)
+Runner.submit(MyStrategy, world="demo")
 ```
 
-**안전 설계:**
-- 기본값은 항상 `backtest` (실수로 실거래 불가)
-- `live`는 월드 정책 검증을 통과해야만 활성화
-- 성과가 기준 미달이면 자동으로 `backtest`로 강등
-
-!!! warning "모드 전환은 시스템이 결정"
-    사용자가 `mode=Mode.LIVE`를 요청해도, 월드 정책(Sharpe 기준, 최소 거래일 등)을 
-    충족하지 않으면 시스템이 자동으로 `backtest`로 강등합니다.
-    
-    이것이 "시스템이 알아서 한다"의 핵심입니다.
+!!! warning "단계 전환은 월드가 결정"
+    Paper/Live 승격은 월드 정책과 운영자 워크플로에 의해 결정됩니다.
 
 ---
 

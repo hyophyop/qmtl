@@ -31,7 +31,7 @@ Runner.submit(
 ### CLI (권장)
 
 ```bash
-qmtl submit strategy.py --world my-world --mode paper
+qmtl submit strategy.py --world my-world
 ```
 
 ### Python API
@@ -40,7 +40,6 @@ qmtl submit strategy.py --world my-world --mode paper
 Runner.submit(
     StrategyCls,
     world="my-world",
-    mode="paper",
 )
 ```
 

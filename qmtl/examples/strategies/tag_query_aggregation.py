@@ -7,7 +7,7 @@ from typing import cast
 import pandas as pd
 
 from qmtl.runtime.io import QuestDBRecorder
-from qmtl.runtime.sdk import Mode, Runner, Strategy
+from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.event_service import EventRecorderService
 from qmtl.runtime.sdk.node import MatchMode, Node, TagQueryNode
 
@@ -49,6 +49,6 @@ class TagQueryAggregationStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    # v2 API: Submit with paper mode for tag resolution
-    result = Runner.submit(TagQueryAggregationStrategy, world="tag_query_agg", mode=Mode.PAPER)
+    # v2 API: submit to WorldService; stage/mode is governed by world policy
+    result = Runner.submit(TagQueryAggregationStrategy, world="tag_query_agg")
     print(f"Strategy submitted: {result.status}")

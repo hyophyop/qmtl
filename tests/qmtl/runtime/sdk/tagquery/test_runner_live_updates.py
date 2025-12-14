@@ -145,7 +145,7 @@ async def test_live_auto_subscribes(monkeypatch, fake_redis):
 
     monkeypatch.setattr(Runner.services(), "kafka_factory", DummyFactory())
 
-    result = await Runner.submit_async(TQStrategy, world="tq_live_updates", mode="paper")
+    result = await Runner.submit_async(TQStrategy, world="tq_live_updates")
     strat = result.strategy
     assert strat is not None
     try:

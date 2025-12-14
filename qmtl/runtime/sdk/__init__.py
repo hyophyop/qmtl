@@ -5,10 +5,9 @@ QMTL v2.0 provides a simplified API for strategy development.
 Primary API (what users need):
   Runner      Submit and run strategies
   Strategy    Base class for strategy definition
-  Mode        Execution mode (backtest | paper | live)
 
 Example:
-    from qmtl.runtime.sdk import Runner, Strategy, Mode
+    from qmtl.runtime.sdk import Runner, Strategy
 
     class MyStrategy(Strategy):
         def setup(self):
@@ -32,10 +31,9 @@ from typing import Any, Mapping
 # =============================================================================
 
 __all__ = [
-    # Core API (3 essentials)
+    # Core API
     "Runner",
     "Strategy",
-    "Mode",
     # Result types
     "SubmitResult",
     "StrategyMetrics",
@@ -49,7 +47,6 @@ _PUBLIC_API: Mapping[str, tuple[str, str]] = {
     # Core API
     "Runner": ("qmtl.runtime.sdk.runner", "Runner"),
     "Strategy": ("qmtl.runtime.sdk.strategy", "Strategy"),
-    "Mode": ("qmtl.runtime.sdk.mode", "Mode"),
     # Result types
     "SubmitResult": ("qmtl.runtime.sdk.submit", "SubmitResult"),
     "StrategyMetrics": ("qmtl.runtime.sdk.submit", "StrategyMetrics"),
@@ -58,13 +55,6 @@ _PUBLIC_API: Mapping[str, tuple[str, str]] = {
 # Extended API - available but not advertised in __all__
 # Users can import these directly from submodules
 _EXTENDED_API: Mapping[str, tuple[str, str | None]] = {
-    # Mode utilities
-    "mode_to_execution_domain": ("qmtl.runtime.sdk.mode", "mode_to_execution_domain"),
-    "execution_domain_to_mode": ("qmtl.runtime.sdk.mode", "execution_domain_to_mode"),
-    "effective_mode_to_mode": ("qmtl.runtime.sdk.mode", "effective_mode_to_mode"),
-    "is_orders_enabled": ("qmtl.runtime.sdk.mode", "is_orders_enabled"),
-    "is_real_time_data": ("qmtl.runtime.sdk.mode", "is_real_time_data"),
-    "normalize_mode": ("qmtl.runtime.sdk.mode", "normalize_mode"),
     # Policy presets
     "PolicyPreset": ("qmtl.runtime.sdk.presets", "PolicyPreset"),
     "get_preset": ("qmtl.runtime.sdk.presets", "get_preset"),

@@ -55,7 +55,7 @@ QMTL 문서 허브에 오신 것을 환영합니다.
 
 | 섹션 | 설명 |
 |------|------|
-| [시작하기](getting-started/index.md) | 핵심 개념 (Strategy, World, Mode), 10분 퀵스타트, 개발 워크플로 |
+| [시작하기](getting-started/index.md) | 핵심 개념 (Strategy, World, 단계), 10분 퀵스타트, 개발 워크플로 |
 | [아키텍처](architecture/README.md) | 시스템 설계, 컴포넌트 명세 |
 | [가이드](guides/README.md) | 단계별 튜토리얼 |
 | [레퍼런스](reference/README.md) | API, 스키마, 설정 상세 |

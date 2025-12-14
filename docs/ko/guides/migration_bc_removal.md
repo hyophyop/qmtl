@@ -18,17 +18,17 @@ last_modified: 2025-09-04
 **변경 후 (단일 API)**
 
 ```python
-from qmtl.runtime.sdk import Runner, Mode
+from qmtl.runtime.sdk import Runner
 
-result = Runner.submit(MyStrategy, world="demo", mode=Mode.LIVE, preset="moderate")
-print(result.status, result.world, result.mode)
+result = Runner.submit(MyStrategy, world="demo", preset="moderate")
+print(result.status, result.world)
 ```
 
 ## CLI
 
 ```bash
 # 전략 제출 (프리셋 정책 포함)
-qmtl submit my_strategy.py --world demo --mode live --preset aggressive
+qmtl submit my_strategy.py --world demo --preset aggressive
 
 # 월드 생성/조회 (정책 프리셋 적용 및 설명)
 qmtl world create demo --policy conservative
@@ -74,11 +74,11 @@ from qmtl.runtime.brokerage import PerShareFeeModel, VolumeShareSlippageModel
 
 ## 체크리스트
 
-- [ ] 모든 `Runner.backtest` / `Runner.dryrun` / `Runner.live` / `Runner.run` / `Runner.offline` 호출을 `Runner.submit(..., mode=...)`로 교체
-- [ ] CLI는 레거시 `service sdk run/offline` 대신 `qmtl submit --mode <backtest|paper|live> [--preset <name>]` 사용
+- [ ] 모든 `Runner.backtest` / `Runner.dryrun` / `Runner.live` / `Runner.run` / `Runner.offline` 호출을 `Runner.submit(...)`로 교체
+- [ ] CLI는 레거시 `service sdk run/offline` 대신 `qmtl submit [--preset <name>]` 사용
 - [ ] 월드 정책은 `qmtl world create --policy <preset>` 또는 `POST /worlds/{id}/policies`(preset/override 지원)로 설정
 - [ ] `qmtl world info` 또는 `GET /worlds/{id}/describe`로 적용 정책 확인 (preset, version, human-readable 포함)
-- [ ] Gateway `/strategies` 요청에서 `run_type` 제거 후 `mode`와 `world` 조합 사용
+- [ ] Gateway `/strategies` 요청에서 `run_type`/클라이언트 모드 선택 제거 후 `world_id` + WS 거버넌스(`effective_mode`)를 사용
 - [ ] 브로커리지 헬퍼는 `qmtl.runtime.brokerage`에서 임포트(`.simple` 경로 사용 금지)
 
 {{ nav_links() }}

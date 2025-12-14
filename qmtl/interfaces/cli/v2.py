@@ -140,7 +140,7 @@ def _command_tables(admin: bool = False) -> tuple[dict[str, CommandHandler], dic
         "tools": "Tools integrated into main commands. Use 'qmtl submit' instead",
         "project": "Use 'qmtl init' for project creation",
         "run": "Use 'qmtl submit' instead",
-        "offline": "Use 'qmtl submit --mode backtest' instead",
+        "offline": "Use 'qmtl submit' instead",
     }
     if admin:
         commands = {

@@ -6,7 +6,7 @@ Demonstrates the simplified Runner.submit() API for strategy submission.
 import argparse
 import pandas as pd
 from qmtl.runtime.io import QuestDBHistoryProvider, QuestDBRecorder
-from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import Node, StreamInput
 from qmtl.runtime.sdk.event_service import EventRecorderService
 
@@ -45,13 +45,11 @@ class GeneralStrategy(Strategy):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--world", "-w", help="Target world")
-    parser.add_argument("--mode", "-m", choices=["backtest", "paper", "live"], default="backtest")
     args = parser.parse_args()
 
-    # v2 API: Single entry point for all execution modes
+    # v2 API: single entry point; stage/mode is WorldService-governed
     result = Runner.submit(
         GeneralStrategy,
         world=args.world,
-        mode=Mode(args.mode),
     )
     print(f"Strategy submitted: {result.status}")

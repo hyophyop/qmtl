@@ -19,7 +19,7 @@ WorldService are unreachable the strategy remains in the safe baseline
 (compute-only, order gate OFF). `Runner.submit()` runs locally without the
 Gateway; tag-based nodes start with an empty queue list in that mode.
 
-See [Migration: Removing Legacy Modes and Backward Compatibility](../guides/migration_bc_removal.md) for guidance on updating code that previously used `Runner.backtest` or CLI `--mode`.
+See [Migration: Removing Legacy Modes and Backward Compatibility](../guides/migration_bc_removal.md) for guidance on updating code that previously used legacy entry points.
 
 ## My tests sometimes hang or leak resources. How can I prevent that?
 

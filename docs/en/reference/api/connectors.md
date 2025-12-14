@@ -153,7 +153,7 @@ connectors:
   ws_url: wss://gateway/ws
 ```
 
-Example strategy: `qmtl/examples/strategies/dryrun_live_switch_strategy.py` reads these settings to switch between dryrun and live domains.
+Example strategy: `qmtl/examples/strategies/dryrun_live_switch_strategy.py` reads these settings to wire optional broker/WebSocket integrations.
 
 ## Usage with Runner
 

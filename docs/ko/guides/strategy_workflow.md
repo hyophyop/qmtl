@@ -44,7 +44,7 @@ class DemoStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    Runner.submit(DemoStrategy, world="demo_world", mode="backtest", data_preset="ohlcv.binance.spot.1m")
+    Runner.submit(DemoStrategy, world="demo_world", data_preset="ohlcv.binance.spot.1m")
 ```
 
 ## 2. 제출과 결과 읽기(WS SSOT)
@@ -52,14 +52,13 @@ if __name__ == "__main__":
 ```bash
 uv run qmtl submit strategies.demo:DemoStrategy \
   --world demo_world \
-  --mode backtest \
   --data-preset ohlcv.binance.spot.1m \
   --output json
 ```
 
 - **WS 봉투 = 단일 진실(SSOT)**: `ws.decision`/`ws.activation`은 WorldService 스키마 그대로 직렬화됩니다. CLI 텍스트의 `🌐 WorldService decision (SSOT)`와 동일합니다.
 - **precheck 분리**: 로컬 ValidationPipeline 결과는 `precheck`에만 위치합니다.
-- **default-safe**: 모드/도메인이 모호하거나 `as_of`가 없으면 compute-only(backtest)로 강등되고 `downgraded/safe_mode`가 최상단에 표시됩니다.
+- **default-safe**: `as_of`/dataset 메타가 누락되면 compute-only로 강등되고 `downgraded/safe_mode`가 최상단에 표시됩니다.
 - 계약 스위트(`tests/e2e/core_loop`)가 위 스키마/강등 규칙을 고정합니다.
 
 ## 3. 데이터 preset 온램프
@@ -70,7 +69,7 @@ uv run qmtl submit strategies.demo:DemoStrategy \
 
 ## 4. Core Loop 흐름 점검 체크리스트
 
-- 제출: `Runner.submit(..., world=..., mode=backtest|paper|live)`만 사용합니다. legacy `offline/sandbox`는 모두 `backtest`로 정규화됩니다.
+- 제출: `Runner.submit(..., world=..., data_preset=...)` 단일 표면만 사용합니다.
 - 결과: `SubmitResult.ws.*`가 WS 봉투와 동일해야 하며 `precheck`는 참고용입니다.
 - 활성화/배포: WS가 권한을 가집니다. 활성/가중치/TTL/etag는 WS 응답을 그대로 사용하고, 모호할 때는 compute-only로 강등합니다.
 - 자본 배분: `qmtl world allocations|rebalance-*` 명령으로 월드 단위 비중을 확인·적용합니다.
@@ -83,7 +82,7 @@ uv run qmtl submit strategies.demo:DemoStrategy \
 
 ## 부록 — 레거시/백테스트 전용 경로
 
-- 월드가 없는 로컬 실험은 `Runner.submit(..., mode="backtest")`로 수행하세요. 이 경로는 Core Loop 계약에서 보조 흐름으로 취급되며, WS/활성/큐 결정 규칙을 우회하지 않습니다.
+- 월드가 없는 로컬 실험은 `Runner.submit(...)`로 수행하세요. 이 경로는 Core Loop 계약에서 보조 흐름으로 취급되며, WS/활성/큐 결정 규칙을 우회하지 않습니다.
 - TagQuery/WebSocket 세부 동작, 테스트 모드 시간 예산, backfill 팁 등은 [sdk_tutorial.md](sdk_tutorial.md)와 [operations/e2e_testing.md](../operations/e2e_testing.md)에서 확인할 수 있습니다.
 
 {{ nav_links() }}
