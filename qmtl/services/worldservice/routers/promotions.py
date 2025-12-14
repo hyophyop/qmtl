@@ -12,6 +12,7 @@ from ..schemas import (
     EvaluationRunModel,
     LivePromotionApproveRequest,
     LivePromotionApplyRequest,
+    LivePromotionAutoApplyResponse,
     LivePromotionPlanResponse,
     LivePromotionRejectRequest,
 )
@@ -20,6 +21,21 @@ from ..services import WorldService
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _parse_iso(ts: str) -> datetime:
+    candidate = str(ts or "").strip()
+    if not candidate:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if candidate.endswith("Z"):
+        candidate = candidate[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(candidate)
+    except Exception:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
 
 def _extract_live_promotion_mode(policy: object) -> str | None:
@@ -176,5 +192,56 @@ def create_promotions_router(service: WorldService) -> APIRouter:
         if updated is None:
             raise HTTPException(status_code=404, detail="evaluation run not found")
         return EvaluationRunModel(**updated)
+
+    @router.post(
+        "/worlds/{world_id}/promotions/live/auto-apply",
+        response_model=LivePromotionAutoApplyResponse,
+    )
+    async def post_live_promotion_auto_apply(world_id: str) -> LivePromotionAutoApplyResponse:
+        mode = await _get_live_promotion_mode(service, world_id)
+        mode_normalized = str(mode or "").lower()
+        if mode_normalized != "auto_apply":
+            raise HTTPException(status_code=409, detail="live promotion auto-apply is not enabled by policy")
+
+        runs = await service.store.list_evaluation_runs(world_id=world_id)
+        if not runs:
+            return LivePromotionAutoApplyResponse(world_id=world_id, applied=False)
+
+        def _rank(run: dict) -> tuple[datetime, datetime]:
+            created = _parse_iso(str(run.get("created_at") or ""))
+            updated = _parse_iso(str(run.get("updated_at") or "")) or created
+            return updated, created
+
+        # Choose the freshest paper-stage evaluation run as the source of truth.
+        paper_runs: list[dict] = [
+            r
+            for r in runs
+            if isinstance(r, dict) and str(r.get("stage") or "").lower() == "paper"
+        ]
+        candidate_runs = paper_runs or [r for r in runs if isinstance(r, dict)]
+        if not candidate_runs:
+            return LivePromotionAutoApplyResponse(world_id=world_id, applied=False)
+
+        source = max(candidate_runs, key=_rank)
+        strategy_id = str(source.get("strategy_id") or "")
+        run_id = str(source.get("run_id") or "")
+        if not strategy_id or not run_id:
+            return LivePromotionAutoApplyResponse(world_id=world_id, applied=False)
+
+        plan_resp = await get_live_promotion_plan(world_id, strategy_id=strategy_id, run_id=run_id)
+        apply_run_id = f"auto-live-{run_id}-{_utc_now_iso().replace(':', '').replace('-', '')}"
+        apply_payload = ApplyRequest(
+            run_id=apply_run_id,
+            plan=plan_resp.plan,
+        )
+        await service.apply(world_id, apply_payload, gating=None)
+        return LivePromotionAutoApplyResponse(
+            world_id=world_id,
+            applied=True,
+            source_strategy_id=strategy_id,
+            source_run_id=run_id,
+            apply_run_id=apply_run_id,
+            plan=plan_resp.plan,
+        )
 
     return router

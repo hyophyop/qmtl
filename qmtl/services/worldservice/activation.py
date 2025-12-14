@@ -57,7 +57,8 @@ class ActivationEventPublisher:
                 payload=event_payload,
                 version=version,
             )
-        await self._publish_snapshot(world_id, version_hint=str(data.get("ts") or version))
+        ts = str(data.get("ts") or "")
+        await self._publish_snapshot(world_id, version_hint=f"{ts}-{version}" if ts else str(version))
         return data
 
     async def update_activation_state(
@@ -95,7 +96,8 @@ class ActivationEventPublisher:
                 requires_ack=requires_ack,
                 sequence=sequence,
             )
-        await self._publish_snapshot(world_id, version_hint=str(data.get("ts") or version))
+        ts = str(data.get("ts") or "")
+        await self._publish_snapshot(world_id, version_hint=f"{ts}-{version}" if ts else str(version))
         return data
 
     async def freeze_world(
