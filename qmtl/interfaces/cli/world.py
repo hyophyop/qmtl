@@ -402,7 +402,14 @@ def _world_status(args: argparse.Namespace) -> int:
         print(_t("🚦 Live Promotion"))
         print("=" * 50)
         print(f"Mode:          {plan_resp.get('promotion_mode')}")
+        if plan_resp.get("eligible") is not None:
+            print(f"Eligible:      {bool(plan_resp.get('eligible'))}")
         print(f"Pending:       {bool(plan_resp.get('pending_manual_approval'))}")
+        blocked = plan_resp.get("blocked_reasons")
+        if isinstance(blocked, list) and blocked:
+            rendered = ", ".join(str(v) for v in blocked if str(v).strip())
+            if rendered:
+                print(f"Blocked:       {rendered}")
         if plan_resp.get("cooldown_remaining_sec") is not None:
             print(f"Cooldown sec:  {plan_resp.get('cooldown_remaining_sec')}")
         if plan_resp.get("max_live_slots") is not None:

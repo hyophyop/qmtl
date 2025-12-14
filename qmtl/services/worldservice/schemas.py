@@ -140,6 +140,8 @@ class LivePromotionPlanResponse(BaseModel):
     promotion_mode: str | None = None
     override_status: str | None = None
     pending_manual_approval: bool = False
+    eligible: bool = False
+    blocked_reasons: List[str] = Field(default_factory=list)
     cooldown_remaining_sec: int | None = None
     max_live_slots: int | None = None
     canary_fraction: float | None = None

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
+import inspect
 import re
 
 from fastapi import APIRouter, HTTPException
@@ -47,6 +48,7 @@ class LivePromotionGovernance:
     cooldown: str | None
     max_live_slots: int | None
     canary_fraction: float | None
+    approvers: list[str] | None
 
 
 def _extract_live_promotion_mode(policy: object) -> str | None:
@@ -77,12 +79,13 @@ def _extract_live_promotion_governance(policy: object) -> LivePromotionGovernanc
         governance = policy.governance
         live_promotion = governance.live_promotion if governance else None
         if live_promotion is None:
-            return LivePromotionGovernance(None, None, None, None)
+            return LivePromotionGovernance(None, None, None, None, None)
         return LivePromotionGovernance(
             mode=str(live_promotion.mode),
             cooldown=live_promotion.cooldown,
             max_live_slots=live_promotion.max_live_slots,
             canary_fraction=live_promotion.canary_fraction,
+            approvers=list(live_promotion.approvers) if live_promotion.approvers is not None else None,
         )
     if isinstance(policy, dict):
         def _coerce_int(value: object) -> int | None:
@@ -103,21 +106,26 @@ def _extract_live_promotion_governance(policy: object) -> LivePromotionGovernanc
 
         governance = policy.get("governance")
         if not isinstance(governance, dict):
-            return LivePromotionGovernance(None, None, None, None)
+            return LivePromotionGovernance(None, None, None, None, None)
         live_promotion = governance.get("live_promotion")
         if not isinstance(live_promotion, dict):
-            return LivePromotionGovernance(None, None, None, None)
+            return LivePromotionGovernance(None, None, None, None, None)
         mode = live_promotion.get("mode")
         cooldown = live_promotion.get("cooldown")
         max_live_slots = live_promotion.get("max_live_slots")
         canary_fraction = live_promotion.get("canary_fraction")
+        approvers = live_promotion.get("approvers")
+        approver_list: list[str] | None = None
+        if isinstance(approvers, list):
+            approver_list = [str(v) for v in approvers if str(v).strip()]
         return LivePromotionGovernance(
             mode=str(mode) if mode is not None else None,
             cooldown=str(cooldown) if cooldown is not None else None,
             max_live_slots=_coerce_int(max_live_slots),
             canary_fraction=_coerce_float(canary_fraction),
+            approvers=approver_list,
         )
-    return LivePromotionGovernance(None, None, None, None)
+    return LivePromotionGovernance(None, None, None, None, None)
 
 
 async def _get_live_promotion_governance(service: WorldService, world_id: str) -> LivePromotionGovernance:
@@ -204,6 +212,87 @@ def _canary_allows(
     return _stable_fraction_score(world_id=world_id, strategy_id=strategy_id, run_id=run_id) < canary_fraction
 
 
+async def _risk_snapshot_is_fresh(service: WorldService, world_id: str) -> bool:
+    hub = getattr(service, "_risk_hub", None)
+    if hub is None:
+        return True
+    getter = getattr(hub, "latest_snapshot", None)
+    if getter is None:
+        return True
+    try:
+        snap = getter(world_id)
+        snap = await snap if inspect.isawaitable(snap) else snap
+        return snap is not None
+    except Exception:
+        return False
+
+
+def _summary_value(record: dict, key: str) -> str | None:
+    summary = record.get("summary")
+    if not isinstance(summary, dict):
+        return None
+    value = summary.get(key)
+    if value is None:
+        return None
+    return str(value)
+
+
+def _summary_status(record: dict) -> str:
+    return str(_summary_value(record, "status") or "").lower()
+
+
+async def _compute_promotion_block_reasons(
+    service: WorldService,
+    world_id: str,
+    record: dict,
+    *,
+    governance: LivePromotionGovernance,
+    override_status: str,
+    target_active: list[str],
+) -> list[str]:
+    reasons: list[str] = []
+    if str(governance.mode or "").lower() == "disabled":
+        reasons.append("promotion_disabled")
+    stage = str(record.get("stage") or "").lower()
+    if stage != "paper":
+        reasons.append("not_paper_stage")
+
+    status = _summary_status(record)
+    if status not in {"pass", "warn"}:
+        reasons.append("validation_failed")
+
+    if not await _risk_snapshot_is_fresh(service, world_id):
+        reasons.append("risk_snapshot_missing_or_expired")
+
+    cooldown_remaining = await _cooldown_remaining_seconds(service, world_id, cooldown=governance.cooldown)
+    if (cooldown_remaining or 0) > 0:
+        reasons.append("cooldown_active")
+
+    if governance.max_live_slots is not None and len(target_active) > governance.max_live_slots:
+        reasons.append("max_live_slots_exceeded")
+
+    mode_normalized = str(governance.mode or "").lower()
+    if mode_normalized == "manual_approval" and override_status != "approved":
+        reasons.append("manual_approval_required")
+
+    return reasons
+
+
+def _ensure_actor_allowed(
+    *,
+    governance: LivePromotionGovernance,
+    actor: str | None,
+) -> None:
+    if not governance.approvers:
+        return
+    actor_value = str(actor or "").strip()
+    if not actor_value:
+        raise HTTPException(status_code=422, detail="actor is required by policy")
+    allowed = {str(v).strip() for v in governance.approvers if str(v).strip()}
+    if actor_value not in allowed:
+        raise HTTPException(status_code=403, detail="actor is not allowed by policy")
+
+
 def create_promotions_router(service: WorldService) -> APIRouter:
     router = APIRouter()
 
@@ -215,9 +304,11 @@ def create_promotions_router(service: WorldService) -> APIRouter:
         world_id: str,
         payload: LivePromotionApproveRequest,
     ) -> EvaluationRunModel:
-        mode = await _get_live_promotion_mode(service, world_id)
-        if str(mode or "").lower() == "disabled":
+        governance = await _get_live_promotion_governance(service, world_id)
+        mode_normalized = str(governance.mode or "").lower()
+        if mode_normalized == "disabled":
             raise HTTPException(status_code=409, detail="live promotion is disabled by policy")
+        _ensure_actor_allowed(governance=governance, actor=payload.actor)
         override = EvaluationOverride(
             status="approved",
             reason=payload.reason,
@@ -240,9 +331,11 @@ def create_promotions_router(service: WorldService) -> APIRouter:
         world_id: str,
         payload: LivePromotionRejectRequest,
     ) -> EvaluationRunModel:
-        mode = await _get_live_promotion_mode(service, world_id)
-        if str(mode or "").lower() == "disabled":
+        governance = await _get_live_promotion_governance(service, world_id)
+        mode_normalized = str(governance.mode or "").lower()
+        if mode_normalized == "disabled":
             raise HTTPException(status_code=409, detail="live promotion is disabled by policy")
+        _ensure_actor_allowed(governance=governance, actor=payload.actor)
         override = EvaluationOverride(
             status="rejected",
             reason=payload.reason,
@@ -286,7 +379,6 @@ def create_promotions_router(service: WorldService) -> APIRouter:
         governance = await _get_live_promotion_governance(service, world_id)
         mode_normalized = str(governance.mode or "").lower()
         override_status = str(summary.get("override_status") or "none").lower()
-        pending_manual_approval = mode_normalized == "manual_approval" and override_status != "approved"
         cooldown_remaining_sec = await _cooldown_remaining_seconds(
             service,
             world_id,
@@ -297,16 +389,29 @@ def create_promotions_router(service: WorldService) -> APIRouter:
             activate=sorted(target_set - current_set),
             deactivate=sorted(current_set - target_set),
         )
+        target_active_list = sorted(target_set)
+        block_reasons = await _compute_promotion_block_reasons(
+            service,
+            world_id,
+            record,
+            governance=governance,
+            override_status=override_status,
+            target_active=target_active_list,
+        )
+        pending_manual_approval = block_reasons == ["manual_approval_required"]
+        eligible = block_reasons in ([], ["manual_approval_required"])
         return LivePromotionPlanResponse(
             world_id=world_id,
             strategy_id=strategy_id,
             run_id=run_id,
             plan=plan,
-            target_active=sorted(target_set),
+            target_active=target_active_list,
             current_active=sorted(current_set),
             promotion_mode=governance.mode,
             override_status=override_status,
             pending_manual_approval=pending_manual_approval,
+            eligible=eligible,
+            blocked_reasons=block_reasons,
             cooldown_remaining_sec=cooldown_remaining_sec,
             max_live_slots=governance.max_live_slots,
             canary_fraction=governance.canary_fraction,
@@ -320,8 +425,8 @@ def create_promotions_router(service: WorldService) -> APIRouter:
         world_id: str,
         payload: LivePromotionApplyRequest,
     ) -> EvaluationRunModel:
-        mode = await _get_live_promotion_mode(service, world_id)
-        mode_normalized = str(mode or "").lower()
+        governance = await _get_live_promotion_governance(service, world_id)
+        mode_normalized = str(governance.mode or "").lower()
         if mode_normalized == "disabled":
             raise HTTPException(status_code=409, detail="live promotion is disabled by policy")
 
@@ -342,13 +447,16 @@ def create_promotions_router(service: WorldService) -> APIRouter:
             strategy_id=payload.strategy_id,
             run_id=payload.run_id,
         )
-        max_live_slots = plan_resp.max_live_slots
-        if max_live_slots is not None and len(plan_resp.target_active) > max_live_slots:
-            raise HTTPException(status_code=409, detail="max live slots exceeded")
-
-        cooldown_remaining = plan_resp.cooldown_remaining_sec or 0
-        if cooldown_remaining > 0:
+        if "not_paper_stage" in plan_resp.blocked_reasons:
+            raise HTTPException(status_code=409, detail="promotion requires paper-stage evaluation run")
+        if "validation_failed" in plan_resp.blocked_reasons and not payload.force:
+            raise HTTPException(status_code=409, detail="promotion requires passing validation")
+        if "risk_snapshot_missing_or_expired" in plan_resp.blocked_reasons:
+            raise HTTPException(status_code=409, detail="risk snapshot missing or expired")
+        if "cooldown_active" in plan_resp.blocked_reasons:
             raise HTTPException(status_code=409, detail="cooldown active")
+        if "max_live_slots_exceeded" in plan_resp.blocked_reasons:
+            raise HTTPException(status_code=409, detail="max live slots exceeded")
 
         apply_payload = ApplyRequest(
             run_id=payload.apply_run_id,
@@ -385,9 +493,9 @@ def create_promotions_router(service: WorldService) -> APIRouter:
             for r in runs
             if isinstance(r, dict) and str(r.get("stage") or "").lower() == "paper"
         ]
-        candidate_runs = paper_runs or [r for r in runs if isinstance(r, dict)]
+        candidate_runs = paper_runs
         if not candidate_runs:
-            return LivePromotionAutoApplyResponse(world_id=world_id, applied=False, reason="no_candidate_runs")
+            return LivePromotionAutoApplyResponse(world_id=world_id, applied=False, reason="no_paper_runs")
 
         source = max(candidate_runs, key=_rank)
         strategy_id = str(source.get("strategy_id") or "")
@@ -400,6 +508,24 @@ def create_promotions_router(service: WorldService) -> APIRouter:
             )
 
         plan_resp = await get_live_promotion_plan(world_id, strategy_id=strategy_id, run_id=run_id)
+        if "validation_failed" in plan_resp.blocked_reasons:
+            return LivePromotionAutoApplyResponse(
+                world_id=world_id,
+                applied=False,
+                reason="validation_failed",
+                source_strategy_id=strategy_id,
+                source_run_id=run_id,
+                plan=plan_resp.plan,
+            )
+        if "risk_snapshot_missing_or_expired" in plan_resp.blocked_reasons:
+            return LivePromotionAutoApplyResponse(
+                world_id=world_id,
+                applied=False,
+                reason="risk_snapshot_missing_or_expired",
+                source_strategy_id=strategy_id,
+                source_run_id=run_id,
+                plan=plan_resp.plan,
+            )
         max_live_slots = plan_resp.max_live_slots
         if max_live_slots is not None and len(plan_resp.target_active) > max_live_slots:
             return LivePromotionAutoApplyResponse(
