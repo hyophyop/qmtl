@@ -551,6 +551,56 @@ async def test_live_promotion_approve_endpoint_records_override():
 
 
 @pytest.mark.asyncio
+async def test_live_promotion_apply_requires_manual_approval_by_policy():
+    store = Storage()
+    app = create_app(storage=store)
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wgov", "name": "Governed World"})
+            policy_resp = await client.post(
+                "/worlds/wgov/policies",
+                json={
+                    "policy": {
+                        "governance": {"live_promotion": {"mode": "manual_approval"}},
+                        "thresholds": {"sharpe": {"metric": "sharpe", "min": 0.0}},
+                    }
+                },
+            )
+            assert policy_resp.status_code == 200
+            default_resp = await client.post("/worlds/wgov/set-default", json={"version": 1})
+            assert default_resp.status_code == 200
+
+            await client.post("/worlds/wgov/decisions", json={"strategies": ["s-old"]})
+            await store.record_evaluation_run(
+                "wgov",
+                "s1",
+                "run-1",
+                stage="paper",
+                risk_tier="low",
+                metrics={"returns": {"sharpe": 1.0}},
+                summary={"active_set": ["s1"], "override_status": "none"},
+            )
+
+            apply_resp = await client.post(
+                "/worlds/wgov/promotions/live/apply",
+                json={"strategy_id": "s1", "run_id": "run-1", "apply_run_id": "apply-1"},
+            )
+            assert apply_resp.status_code == 409
+
+            approve_resp = await client.post(
+                "/worlds/wgov/promotions/live/approve",
+                json={"strategy_id": "s1", "run_id": "run-1", "reason": "ok", "actor": "risk"},
+            )
+            assert approve_resp.status_code == 200
+
+            apply_resp_2 = await client.post(
+                "/worlds/wgov/promotions/live/apply",
+                json={"strategy_id": "s1", "run_id": "run-1", "apply_run_id": "apply-2"},
+            )
+            assert apply_resp_2.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_live_promotion_plan_endpoint_derives_apply_plan():
     store = Storage()
     app = create_app(storage=store)

@@ -421,9 +421,12 @@ def _world_live_override(args: argparse.Namespace, *, status: str) -> int:
             payload["actor"] = actor
             payload["timestamp"] = _utc_now_iso()
 
+    endpoint = (
+        "/promotions/live/approve" if status == "approved" else "/promotions/live/reject"
+    )
     status_code, record = http_post(
-        f"/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/override",
-        payload,
+        f"/worlds/{world_id}{endpoint}",
+        {"strategy_id": strategy_id, "run_id": run_id, **payload},
     )
     if status_code == 404:
         print(_t("Evaluation run not found: {}").format(run_id), file=sys.stderr)
@@ -466,49 +469,38 @@ def _world_live_apply(args: argparse.Namespace) -> int:
             return 1
         run_id = resolved
 
-    status_code, run = http_get(f"/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}")
-    if status_code >= 400 or status_code == 0 or not isinstance(run, dict):
-        err = run.get("detail") if isinstance(run, dict) else status_code
-        print(_t("Error fetching evaluation run: {}").format(err), file=sys.stderr)
+    status_code, plan_resp = http_get(
+        f"/worlds/{world_id}/promotions/live/plan",
+        params={"strategy_id": strategy_id, "run_id": run_id},
+    )
+    if status_code >= 400 or status_code == 0 or not isinstance(plan_resp, dict):
+        err = plan_resp.get("detail") if isinstance(plan_resp, dict) else status_code
+        print(_t("Error fetching promotion plan: {}").format(err), file=sys.stderr)
         return 1
 
-    summary = run.get("summary") if isinstance(run.get("summary"), dict) else {}
-    summary_dict: dict[str, Any] = summary if isinstance(summary, dict) else {}
-    desired = summary_dict.get("active_set")
-    if not isinstance(desired, list) or not all(isinstance(v, str) for v in desired):
-        print(_t("Error: evaluation run does not include summary.active_set"), file=sys.stderr)
+    plan = plan_resp.get("plan")
+    if not isinstance(plan, dict) or not isinstance(plan.get("activate"), list) or not isinstance(plan.get("deactivate"), list):
+        print(_t("Error: invalid promotion plan response"), file=sys.stderr)
         return 1
-
-    override_status = str(summary_dict.get("override_status") or "none").lower()
-    if override_status != "approved" and not args.force:
-        print(_t("Refusing to apply without an approved override (use --force to bypass)"), file=sys.stderr)
-        print(_t("Current override_status: {}").format(override_status), file=sys.stderr)
-        return 1
-
-    status_code, current = http_get(f"/worlds/{world_id}/decisions")
-    if status_code >= 400 or status_code == 0 or not isinstance(current, dict):
-        err = current.get("detail") if isinstance(current, dict) else status_code
-        print(_t("Error fetching current decisions: {}").format(err), file=sys.stderr)
-        return 1
-    current_list = current.get("strategies")
-    if not isinstance(current_list, list):
-        current_list = []
-    current_set = {str(v) for v in current_list if str(v).strip()}
-    desired_set = {str(v) for v in desired if str(v).strip()}
-
-    plan = {
-        "activate": sorted(desired_set - current_set),
-        "deactivate": sorted(current_set - desired_set),
-    }
 
     if args.plan_only:
-        print(json.dumps({"world_id": world_id, "strategy_id": strategy_id, "run_id": run_id, "plan": plan}, indent=2))
+        print(
+            json.dumps(
+                {"world_id": world_id, "strategy_id": strategy_id, "run_id": run_id, "plan": plan},
+                indent=2,
+            )
+        )
         return 0
 
     apply_run_id = args.run_id or str(uuid.uuid4())
     status_code, resp = http_post(
-        f"/worlds/{world_id}/apply",
-        {"run_id": apply_run_id, "plan": plan},
+        f"/worlds/{world_id}/promotions/live/apply",
+        {
+            "strategy_id": strategy_id,
+            "run_id": run_id,
+            "apply_run_id": apply_run_id,
+            "force": bool(args.force),
+        },
     )
     if status_code >= 400 or status_code == 0:
         err = resp.get("detail") if isinstance(resp, dict) else status_code
@@ -518,7 +510,7 @@ def _world_live_apply(args: argparse.Namespace) -> int:
     print(_t("🚦 Apply request sent"))
     print(f"World:    {world_id}")
     print(f"Run ID:   {apply_run_id}")
-    print(f"Plan:     activate={len(plan['activate'])}, deactivate={len(plan['deactivate'])}")
+    print(f"Plan:     activate={len(plan.get('activate') or [])}, deactivate={len(plan.get('deactivate') or [])}")
     phase = resp.get("phase") if isinstance(resp, dict) else None
     if phase:
         print(f"Phase:    {phase}")

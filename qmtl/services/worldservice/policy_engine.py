@@ -4,7 +4,7 @@ import json
 import math
 from dataclasses import dataclass, field
 import statistics
-from typing import Any, Dict, Iterable, Iterator, List, Mapping, Protocol, Sequence, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Literal, Mapping, Protocol, Sequence, Tuple
 
 import yaml
 from pydantic import BaseModel, Field
@@ -318,6 +318,20 @@ class ValidationConfig(BaseModel):
     on_missing_metric: str = Field(default="fail", pattern="^(fail|warn|ignore)$")
 
 
+class LivePromotionConfig(BaseModel):
+    """World-level governance configuration for live promotion execution."""
+
+    mode: Literal["disabled", "manual_approval", "auto_apply"] = "manual_approval"
+    cooldown: str | None = None
+    max_live_slots: int | None = None
+    canary_fraction: float | None = None
+    approvers: List[str] | None = None
+
+
+class GovernanceConfig(BaseModel):
+    live_promotion: LivePromotionConfig | None = None
+
+
 class Policy(BaseModel):
     thresholds: dict[str, ThresholdRule] = Field(default_factory=dict)
     top_k: TopKRule | None = None
@@ -333,6 +347,7 @@ class Policy(BaseModel):
     stress: StressRuleConfig | None = None
     paper_shadow_consistency: PaperShadowConsistencyConfig | None = None
     live_monitoring: LiveMonitoringConfig | None = None
+    governance: GovernanceConfig | None = None
 
     def model_post_init(self, __context: Any) -> None:  # type: ignore[override]
         self._normalize_selection()
