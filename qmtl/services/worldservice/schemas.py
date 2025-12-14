@@ -139,6 +139,13 @@ class LivePromotionPlanResponse(BaseModel):
     current_active: List[str] = Field(default_factory=list)
 
 
+class LivePromotionApplyRequest(BaseModel):
+    strategy_id: str = Field(min_length=1)
+    run_id: str = Field(min_length=1)
+    apply_run_id: str = Field(min_length=1)
+    force: bool = False
+
+
 class ApplyRequest(EvaluateRequest):
     run_id: str
     plan: ApplyPlan | None = None

@@ -432,6 +432,14 @@ WORLD_ROUTES: tuple[WorldRoute, ...] = (
     ),
     WorldRoute(
         "post",
+        "/worlds/{world_id}/promotions/live/apply",
+        "post_live_promotion_apply",
+        path_params=("world_id",),
+        include_payload=True,
+        enforce_live_guard=True,
+    ),
+    WorldRoute(
+        "post",
         "/worlds/{world_id}/apply",
         "post_apply",
         path_params=("world_id",),

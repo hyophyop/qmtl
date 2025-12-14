@@ -399,8 +399,10 @@ def test_world_live_approve_posts_override(monkeypatch, capsys):
     )
 
     assert exit_code == 0
-    assert posts[0][0] == "/worlds/w1/strategies/s1/runs/run-1/override"
+    assert posts[0][0] == "/worlds/w1/promotions/live/approve"
     assert posts[0][1]["status"] == "approved"
+    assert posts[0][1]["strategy_id"] == "s1"
+    assert posts[0][1]["run_id"] == "run-1"
     assert posts[0][1]["reason"] == "approved for live"
     assert posts[0][1]["actor"] == "risk"
     assert posts[0][1]["timestamp"] == "2025-01-02T03:04:05Z"
@@ -414,10 +416,8 @@ def test_world_live_apply_plan_only(monkeypatch, capsys):
 
     def fake_get(path, params=None):
         gets.append((path, params))
-        if path == "/worlds/w1/strategies/s1/runs/run-1":
-            return 200, {"summary": {"active_set": ["s1", "s2"], "override_status": "approved"}}
-        if path == "/worlds/w1/decisions":
-            return 200, {"strategies": ["s2", "s3"]}
+        if path == "/worlds/w1/promotions/live/plan":
+            return 200, {"plan": {"activate": ["s1"], "deactivate": ["s3"]}}
         return 404, {"detail": "not found"}
 
     def fake_post(path, payload):
@@ -443,10 +443,8 @@ def test_world_live_apply_posts_apply(monkeypatch, capsys):
 
     def fake_get(path, params=None):
         gets.append((path, params))
-        if path == "/worlds/w1/strategies/s1/runs/run-1":
-            return 200, {"summary": {"active_set": ["s1", "s2"], "override_status": "approved"}}
-        if path == "/worlds/w1/decisions":
-            return 200, {"strategies": ["s2", "s3"]}
+        if path == "/worlds/w1/promotions/live/plan":
+            return 200, {"plan": {"activate": ["s1"], "deactivate": ["s3"]}}
         return 404, {"detail": "not found"}
 
     def fake_post(path, payload):
@@ -461,9 +459,9 @@ def test_world_live_apply_posts_apply(monkeypatch, capsys):
     )
 
     assert exit_code == 0
-    assert posts[0][0] == "/worlds/w1/apply"
-    assert posts[0][1]["run_id"] == "apply-1"
-    assert posts[0][1]["plan"]["activate"] == ["s1"]
-    assert posts[0][1]["plan"]["deactivate"] == ["s3"]
+    assert posts[0][0] == "/worlds/w1/promotions/live/apply"
+    assert posts[0][1]["apply_run_id"] == "apply-1"
+    assert posts[0][1]["strategy_id"] == "s1"
+    assert posts[0][1]["run_id"] == "run-1"
     out = capsys.readouterr().out
     assert "Apply request sent" in out

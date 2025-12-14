@@ -511,6 +511,19 @@ class WorldServiceClient:
             params={"strategy_id": strategy_id, "run_id": run_id},
         )
 
+    async def post_live_promotion_apply(
+        self,
+        world_id: str,
+        payload: Any,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> Any:
+        return await self._request_json(
+            "POST",
+            f"/worlds/{world_id}/promotions/live/apply",
+            headers=headers,
+            json=payload,
+        )
+
     async def post_apply(self, world_id: str, payload: Any, headers: Optional[Dict[str, str]] = None) -> Any:
         return await self._request_json(
             "POST",
