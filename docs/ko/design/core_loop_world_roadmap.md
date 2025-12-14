@@ -205,9 +205,11 @@ status: draft
          - `suggested_run_id`: (특히 `evaluate`) 재실행 시 동일 런으로 업데이트되도록 유도하는 권장 `run_id`
       - `evaluate` 액션의 `suggested_body`는 **실제 metrics를 포함하지 않는 템플릿**으로 취급한다. (`requires=["metrics"]`)
         - 초기(경량) 구현: `POST /worlds/{id}/evaluate`(및 `/evaluate-cohort`)는 요청의 `metrics`가 비어있어도, WorldService가 **가벼운 소싱 전략으로 metrics를 채운 뒤 평가**할 수 있다.
-          - 우선순위: **최근 평가 런의 metrics 재사용**(stage 일치 우선, 없으면 최근 evaluated run fallback) → `risk_signal_hub` 스냅샷 기반 입력(포트폴리오/공분산/스트레스/리턴 ref).
+          - 우선순위: **최근 평가 런의 metrics 재사용**(stage 일치 우선, 없으면 최근 evaluated run fallback) → `risk_signal_hub` 스냅샷 기반 입력(포트폴리오/공분산/스트레스/realized returns ref).
           - 효과: 외부 스케줄러/CLI는 tick의 `suggested_body`(= 템플릿)를 **그대로 제출**할 수 있다(클라이언트에서 metrics 조립 불필요).
-          - 한계: 실제 신규 backtest/paper 실행을 대체하지는 않으며, 진짜 지표 생산은 추후(리스크 허브/데이터 플레인/전용 프로듀서)로 확장한다.
+          - 보강: stage가 `paper/live/shadow`(및 `dryrun`)이고 `risk_signal_hub.realized_returns`가 있으면, WorldService는 **리턴 시계열에서 v1 core 성과 지표(returns/sample/robustness)**를 직접 계산해 metrics를 채울 수 있다.
+            - 즉 외부 엔진 없이도, “일정 주기로 evaluate 호출”만으로 **시간 경과에 따른 성과 지표 갱신**과 캠페인 윈도우 관찰이 가능하다.
+          - 한계: “새로운 backtest/리플레이 실행”을 대체하지는 않는다. (returns 생성 자체는 여전히 Runner/프로듀서 영역)
           - 목적: 외부 엔진 없이도 “캠페인 윈도우 관찰/상태 전이/승격 후보 산출”을 end-to-end로 돌릴 수 있게 한다.
     - (옵션) 외부 엔진 없이도 qmtl 내부 실행기로 운영할 수 있다.
       - 예: `qmtl world campaign-execute <world> [--execute] [--execute-evaluate]`, `qmtl world campaign-loop <world> --interval-sec 3600 [--execute] [--execute-evaluate]`
