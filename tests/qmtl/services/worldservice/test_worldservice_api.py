@@ -904,12 +904,29 @@ async def test_campaign_tick_emits_recommended_actions():
             resp = await client.post("/worlds/wtick/campaign/tick", params={})
             assert resp.status_code == 200
             body = resp.json()
+            assert body["schema_version"] == 1
             assert body["world_id"] == "wtick"
             actions = body["actions"]
             assert isinstance(actions, list)
             action_names = {a.get("action") for a in actions if isinstance(a, dict)}
             assert "evaluate" in action_names
             assert "auto_apply_live" in action_names
+
+            evaluate_action = next(a for a in actions if isinstance(a, dict) and a.get("action") == "evaluate")
+            assert evaluate_action.get("idempotency_key")
+            assert evaluate_action.get("requires") == ["metrics"]
+            assert isinstance(evaluate_action.get("suggested_run_id"), str)
+            assert str(evaluate_action["suggested_run_id"]).startswith("camp-wtick-s1-")
+            suggested_body = evaluate_action.get("suggested_body")
+            assert isinstance(suggested_body, dict)
+            assert "metrics" not in suggested_body
+            assert suggested_body.get("run_id") == evaluate_action.get("suggested_run_id")
+
+            auto_apply_action = next(a for a in actions if isinstance(a, dict) and a.get("action") == "auto_apply_live")
+            assert auto_apply_action.get("idempotency_key")
+            assert auto_apply_action.get("strategy_id") == "s2"
+            assert auto_apply_action.get("stage") == "live"
+            assert auto_apply_action.get("suggested_run_id") == "paper-1"
 
 
 @pytest.mark.asyncio

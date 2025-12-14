@@ -2,7 +2,7 @@
 title: "Core Loop × WorldService 단계별 고도화 로드맵"
 tags: [design, roadmap, core-loop, worldservice]
 author: "QMTL Team"
-last_modified: 2025-12-08
+last_modified: 2025-12-14
 status: draft
 ---
 
@@ -215,6 +215,12 @@ status: draft
      - 예: “매일 1회 `/worlds/{id}/evaluate` 호출 → 정책 기반 승격 후보 계산 → `/apply`로 반영 또는 큐에 보관”.
      - 권장: 외부 스케줄러가 “다음에 무엇을 호출해야 하는지”를 얻기 위해, WorldService가 상태를 읽고 **추천 액션을 반환하는 tick 엔드포인트**를 제공한다(사이드이펙트 없음).
        - 예: `POST /worlds/{id}/campaign/tick` → `evaluate(backtest/paper)` 또는 `promotions/live/auto-apply` 호출 권장 목록 반환
+       - tick 응답은 최소한 다음을 포함해 “경량·교체 가능”한 계약으로 유지한다.
+         - `schema_version`: 스키마 진화용 버전 필드(하위 호환 유지 전제)
+         - `idempotency_key`: 외부 스케줄러가 중복 실행을 회피/디듀프하는 키
+         - `suggested_run_id`: (특히 `evaluate`) 재실행 시 동일 런으로 업데이트되도록 유도하는 권장 `run_id`
+       - `evaluate` 액션의 `suggested_body`는 **실제 metrics를 포함하지 않는 템플릿**으로 취급한다. (`requires=["metrics"]`)  
+         즉, 평가 엔진/프로듀서가 metrics를 생성해 채운 뒤 `/evaluate`에 전달해야 하며, 더미 metrics로 승격 판단을 왜곡하지 않는다.
      - (옵션) 외부 엔진 없이도 qmtl 내부 실행기로 운영할 수 있다.
        - 예: `qmtl world campaign-execute <world> [--execute]`, `qmtl world campaign-loop <world> --interval-sec 3600 [--execute]`
    - 이후 필요 시 WorldService 내부에 간단한 주기 평가 루프를 추가할 수 있다.

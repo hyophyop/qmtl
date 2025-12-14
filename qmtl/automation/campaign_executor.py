@@ -181,6 +181,20 @@ class CampaignExecutor:
                                 )
                             )
                             continue
+                        metrics = suggested_body.get("metrics")
+                        if not isinstance(metrics, Mapping) or not metrics:
+                            results.append(
+                                ExecutionResult(
+                                    action=action,
+                                    method=method,
+                                    path=path,
+                                    status_code=None,
+                                    ok=True,
+                                    skipped=True,
+                                    reason="missing_metrics",
+                                )
+                            )
+                            continue
                         body = self._materialize_evaluate_payload(suggested_body, strategy_id=sid)
                     else:
                         body = {str(k): v for k, v in suggested_body.items() if v is not None}
