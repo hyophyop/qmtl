@@ -511,6 +511,21 @@ class WorldServiceClient:
             params={"strategy_id": strategy_id, "run_id": run_id},
         )
 
+    async def get_live_promotion_candidates(
+        self,
+        world_id: str,
+        *,
+        limit: int = 20,
+        include_plan: bool = False,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> Any:
+        return await self._request_json(
+            "GET",
+            f"/worlds/{world_id}/promotions/live/candidates",
+            headers=headers,
+            params={"limit": limit, "include_plan": include_plan},
+        )
+
     async def post_live_promotion_apply(
         self,
         world_id: str,

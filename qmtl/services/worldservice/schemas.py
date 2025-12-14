@@ -165,6 +165,26 @@ class LivePromotionAutoApplyResponse(BaseModel):
     plan: ApplyPlan | None = None
 
 
+class LivePromotionCandidate(BaseModel):
+    strategy_id: str
+    run_id: str
+    created_at: str | None = None
+    updated_at: str | None = None
+    status: str | None = None
+    override_status: str | None = None
+    pending_manual_approval: bool = False
+    eligible: bool = False
+    blocked_reasons: List[str] = Field(default_factory=list)
+    target_active: List[str] = Field(default_factory=list)
+    plan: ApplyPlan | None = None
+
+
+class LivePromotionCandidatesResponse(BaseModel):
+    world_id: str
+    promotion_mode: str | None = None
+    candidates: List[LivePromotionCandidate] = Field(default_factory=list)
+
+
 class ApplyRequest(EvaluateRequest):
     run_id: str
     plan: ApplyPlan | None = None

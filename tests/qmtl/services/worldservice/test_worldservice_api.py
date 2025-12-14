@@ -709,6 +709,81 @@ async def test_live_promotion_auto_apply_endpoint_applies_latest_paper_run():
 
 
 @pytest.mark.asyncio
+async def test_live_promotion_candidates_endpoint_lists_latest_per_strategy():
+    store = Storage()
+    app = create_app(storage=store)
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wcand", "name": "Candidates World"})
+            policy_resp = await client.post(
+                "/worlds/wcand/policies",
+                json={
+                    "policy": {
+                        "governance": {"live_promotion": {"mode": "manual_approval"}},
+                        "thresholds": {"sharpe": {"metric": "sharpe", "min": 0.0}},
+                    }
+                },
+            )
+            assert policy_resp.status_code == 200
+            default_resp = await client.post("/worlds/wcand/set-default", json={"version": 1})
+            assert default_resp.status_code == 200
+            await _post_risk_snapshot(client, world_id="wcand")
+
+            await client.post("/worlds/wcand/decisions", json={"strategies": ["s-old"]})
+            await store.record_evaluation_run(
+                "wcand",
+                "s1",
+                "run-older",
+                stage="paper",
+                risk_tier="low",
+                metrics={"returns": {"sharpe": 1.0}},
+                summary={"active_set": ["s1"], "status": "pass", "override_status": "none"},
+                created_at="2025-01-01T00:00:00Z",
+                updated_at="2025-01-01T00:00:00Z",
+            )
+            await store.record_evaluation_run(
+                "wcand",
+                "s1",
+                "run-latest",
+                stage="paper",
+                risk_tier="low",
+                metrics={"returns": {"sharpe": 1.1}},
+                summary={"active_set": ["s1", "s2"], "status": "pass", "override_status": "none"},
+                created_at="2025-01-02T00:00:00Z",
+                updated_at="2025-01-02T00:00:00Z",
+            )
+            await store.record_evaluation_run(
+                "wcand",
+                "s2",
+                "run-fail",
+                stage="paper",
+                risk_tier="low",
+                metrics={"returns": {"sharpe": -1.0}},
+                summary={"active_set": ["s2"], "status": "fail", "override_status": "none"},
+            )
+
+            resp = await client.get(
+                "/worlds/wcand/promotions/live/candidates",
+                params={"limit": 10, "include_plan": "true"},
+            )
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["world_id"] == "wcand"
+            assert body["promotion_mode"] == "manual_approval"
+            candidates = body["candidates"]
+            assert isinstance(candidates, list)
+            # s1 should be present (latest run only); s2 is filtered out due to fail status.
+            assert len(candidates) == 1
+            assert candidates[0]["strategy_id"] == "s1"
+            assert candidates[0]["run_id"] == "run-latest"
+            assert candidates[0]["pending_manual_approval"] is True
+            assert candidates[0]["eligible"] is True
+            assert candidates[0]["blocked_reasons"] == ["manual_approval_required"]
+            assert candidates[0]["plan"]["activate"] == ["s1", "s2"]
+            assert candidates[0]["plan"]["deactivate"] == ["s-old"]
+
+
+@pytest.mark.asyncio
 async def test_live_promotion_apply_enforces_max_live_slots():
     store = Storage()
     app = create_app(storage=store)
