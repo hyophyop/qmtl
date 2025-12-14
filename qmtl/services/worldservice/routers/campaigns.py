@@ -8,7 +8,13 @@ from typing import Any, Mapping
 from fastapi import APIRouter, HTTPException
 
 from ..policy_engine import Policy
-from ..schemas import CampaignStatusResponse, CampaignStrategyStatus, CampaignWindowStatus
+from ..schemas import (
+    CampaignStatusResponse,
+    CampaignStrategyStatus,
+    CampaignTickAction,
+    CampaignTickResponse,
+    CampaignWindowStatus,
+)
 from ..services import WorldService
 
 
@@ -310,6 +316,9 @@ def create_campaigns_router(service: WorldService) -> APIRouter:
                 CampaignStrategyStatus(
                     strategy_id=sid,
                     phase=phase,
+                    latest_backtest_run_id=str((backtest_latest or {}).get("run_id") or "") or None,
+                    latest_paper_run_id=str((paper_latest or {}).get("run_id") or "") or None,
+                    latest_live_run_id=str((live_latest or {}).get("run_id") or "") or None,
                     backtest=backtest_window,
                     paper=paper_window,
                     sample_days=sample_days,
@@ -335,6 +344,131 @@ def create_campaigns_router(service: WorldService) -> APIRouter:
             config=config,
             strategies=statuses,
         )
+
+    @router.post(
+        "/worlds/{world_id}/campaign/tick",
+        response_model=CampaignTickResponse,
+    )
+    async def post_campaign_tick(
+        world_id: str,
+        *,
+        strategy_id: str | None = None,
+    ) -> CampaignTickResponse:
+        """Emit recommended external-scheduler actions for Phase 4 campaigns.
+
+        This endpoint is intentionally side-effect free: it does not call /evaluate
+        nor /apply. It only computes a suggested next step based on recorded runs.
+        """
+
+        status = await get_campaign_status(world_id, strategy_id=strategy_id)
+
+        policy_obj = await service.store.get_default_policy(world_id)
+        governance_mode: str | None = None
+        if isinstance(policy_obj, Policy):
+            governance_mode = (
+                str(policy_obj.governance.live_promotion.mode)
+                if policy_obj.governance and policy_obj.governance.live_promotion
+                else None
+            )
+        elif isinstance(policy_obj, dict):
+            gov = policy_obj.get("governance") if isinstance(policy_obj.get("governance"), dict) else {}
+            lp = gov.get("live_promotion") if isinstance(gov.get("live_promotion"), dict) else {}
+            mode = lp.get("mode")
+            governance_mode = str(mode) if mode is not None else None
+
+        actions: list[CampaignTickAction] = []
+        for strat in status.strategies:
+            sid = strat.strategy_id
+            if strat.phase == "backtest_campaign":
+                if strat.promotable_to_paper:
+                    actions.append(
+                        CampaignTickAction(
+                            action="evaluate",
+                            strategy_id=sid,
+                            stage="paper",
+                            reason="promotable_to_paper",
+                            suggested_method="POST",
+                            suggested_endpoint=f"/worlds/{world_id}/evaluate",
+                            suggested_body={
+                                "strategy_id": sid,
+                                "stage": "paper",
+                                "risk_tier": "low",
+                                "metrics": {"<strategy_id>": {"returns": {"sharpe": 0.0}}},
+                            },
+                        )
+                    )
+                else:
+                    actions.append(
+                        CampaignTickAction(
+                            action="evaluate",
+                            strategy_id=sid,
+                            stage="backtest",
+                            reason="continue_backtest_campaign",
+                            suggested_method="POST",
+                            suggested_endpoint=f"/worlds/{world_id}/evaluate",
+                            suggested_body={
+                                "strategy_id": sid,
+                                "stage": "backtest",
+                                "risk_tier": "low",
+                                "metrics": {"<strategy_id>": {"returns": {"sharpe": 0.0}}},
+                            },
+                        )
+                    )
+                continue
+
+            if strat.phase == "paper_campaign":
+                if strat.promotable_to_live:
+                    if str(governance_mode or "").lower() == "auto_apply":
+                        actions.append(
+                            CampaignTickAction(
+                                action="auto_apply_live",
+                                reason="promotable_to_live",
+                                suggested_method="POST",
+                                suggested_endpoint=f"/worlds/{world_id}/promotions/live/auto-apply",
+                            )
+                        )
+                    else:
+                        run_id = strat.latest_paper_run_id or ""
+                        if not run_id:
+                            run_id = "latest"
+                        actions.append(
+                            CampaignTickAction(
+                                action="manual_approval_required",
+                                strategy_id=sid,
+                                reason="promotable_to_live",
+                                suggested_method="GET",
+                                suggested_endpoint=f"/worlds/{world_id}/promotions/live/plan",
+                                suggested_params={"strategy_id": sid, "run_id": run_id},
+                            )
+                        )
+                else:
+                    actions.append(
+                        CampaignTickAction(
+                            action="evaluate",
+                            strategy_id=sid,
+                            stage="paper",
+                            reason="continue_paper_campaign",
+                            suggested_method="POST",
+                            suggested_endpoint=f"/worlds/{world_id}/evaluate",
+                            suggested_body={
+                                "strategy_id": sid,
+                                "stage": "paper",
+                                "risk_tier": "low",
+                                "metrics": {"<strategy_id>": {"returns": {"sharpe": 0.0}}},
+                            },
+                        )
+                    )
+                continue
+
+            actions.append(
+                CampaignTickAction(
+                    action="observe_live",
+                    strategy_id=sid,
+                    reason="already_in_live_campaign",
+                )
+            )
+
+        return CampaignTickResponse(world_id=world_id, generated_at=_utc_now_iso(), actions=actions)
 
     return router
 
