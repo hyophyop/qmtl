@@ -42,60 +42,15 @@ class FakeCampaignExecutor(CampaignExecutor):
                 },
             )
 
-        if path == "/worlds/w/strategies/s1/runs":
-            return (
-                200,
-                [
-                    {
-                        "world_id": "w",
-                        "strategy_id": "s1",
-                        "run_id": "eval-prev",
-                        "stage": "backtest",
-                        "status": "evaluated",
-                        "created_at": "2025-01-01T00:00:00Z",
-                        "updated_at": "2025-01-01T00:00:10Z",
-                    }
-                ],
-            )
-
-        if path == "/worlds/w/strategies/s1/runs/eval-prev/metrics":
-            return (
-                200,
-                {
-                    "metrics": {
-                        "returns": {"sharpe": 1.2, "max_drawdown": 0.1},
-                        "sample": {"effective_history_years": 0.5},
-                    }
-                },
-            )
-
-        if path == "/risk-hub/worlds/w/snapshots/latest":
-            assert params is not None
-            assert params.get("expand") is True
-            assert params.get("stage") == "backtest"
-            return (
-                200,
-                {
-                    "world_id": "w",
-                    "as_of": "2025-01-01T00:00:00Z",
-                    "version": "snap-1",
-                    "weights": {"s2": 1.0},
-                    "covariance": {
-                        "s1,s1": 0.04,
-                        "s2,s2": 0.01,
-                        "s1,s2": 0.005,
-                    },
-                    "provenance": {"actor": "test-suite", "stage": "backtest"},
-                },
-            )
-
         if path == "/worlds/w/evaluate":
+            assert json_body is not None
+            assert "metrics" not in json_body
             return 200, {"active": ["s1"], "evaluation_run_id": "camp-w-s1-backtest-20250101"}
 
         raise AssertionError(f"unexpected request: {method} {path} params={params} json={json_body}")
 
 
-def test_campaign_executor_executes_evaluate_with_sourced_metrics() -> None:
+def test_campaign_executor_executes_evaluate_without_client_metrics() -> None:
     exe = FakeCampaignExecutor()
     cfg = CampaignRunConfig(world_id="w", strategy_id="s1", execute=True, execute_evaluate=True)
 
@@ -105,52 +60,61 @@ def test_campaign_executor_executes_evaluate_with_sourced_metrics() -> None:
     assert results and results[0].ok is True
     assert results[0].skipped is False
 
-    # Ensure the evaluate call includes metrics keyed by strategy_id.
+    # Ensure the executor does not attempt to build metrics client-side.
     evaluate_calls = [c for c in exe.calls if c[0] == "POST" and c[1] == "/worlds/w/evaluate"]
     assert len(evaluate_calls) == 1
     _, _, _, body = evaluate_calls[0]
     assert body is not None
-    metrics = body.get("metrics")
-    assert isinstance(metrics, dict)
-    assert metrics.get("s1", {}).get("returns", {}).get("sharpe") == 1.2
-    assert metrics.get("s1", {}).get("risk", {}).get("incremental_var_99") is not None
+    assert "metrics" not in body
+    assert body.get("strategy_id") == "s1"
+    assert body.get("stage") == "backtest"
+    assert body.get("risk_tier") == "low"
+    assert body.get("run_id") == "camp-w-s1-backtest-20250101"
 
 
-def test_campaign_executor_skips_evaluate_when_no_metrics_source() -> None:
-    class NoMetricsExecutor(FakeCampaignExecutor):
-        def _request(self, method: str, path: str, *, params=None, json_body=None):
-            if path == "/worlds/w/strategies/s1/runs":
-                return 200, []
-            if path == "/risk-hub/worlds/w/snapshots/latest":
-                return 404, {"detail": "snapshot not found"}
-            return super()._request(method, path, params=params, json_body=json_body)
-
-    exe = NoMetricsExecutor()
-    cfg = CampaignRunConfig(world_id="w", strategy_id="s1", execute=True, execute_evaluate=True)
+def test_campaign_executor_skips_evaluate_when_execute_evaluate_disabled() -> None:
+    exe = FakeCampaignExecutor()
+    cfg = CampaignRunConfig(world_id="w", strategy_id="s1", execute=True, execute_evaluate=False)
 
     _, results = exe.execute_tick(cfg)
 
     assert results and results[0].skipped is True
-    assert results[0].reason == "missing_metrics_source"
+    assert results[0].reason == "execute_evaluate_disabled"
+    assert not [c for c in exe.calls if c[0] == "POST" and c[1] == "/worlds/w/evaluate"]
 
 
-def test_campaign_executor_falls_back_to_risk_hub_when_run_metrics_missing() -> None:
-    class RiskHubOnlyExecutor(FakeCampaignExecutor):
+def test_campaign_executor_gates_evaluate_cohort_when_execute_evaluate_disabled() -> None:
+    class CohortTickExecutor(FakeCampaignExecutor):
         def _request(self, method: str, path: str, *, params=None, json_body=None):
-            if path == "/worlds/w/strategies/s1/runs":
-                return 200, []
+            if path == "/worlds/w/campaign/tick":
+                return (
+                    200,
+                    {
+                        "actions": [
+                            {
+                                "action": "evaluate_cohort",
+                                "stage": "backtest",
+                                "suggested_method": "POST",
+                                "suggested_endpoint": "/worlds/w/evaluate-cohort",
+                                "suggested_body": {
+                                    "campaign_id": "c1",
+                                    "run_id": "cohort-run",
+                                    "candidates": ["s1"],
+                                    "stage": "backtest",
+                                    "risk_tier": "low",
+                                },
+                            }
+                        ]
+                    },
+                )
+            if path == "/worlds/w/evaluate-cohort":
+                raise AssertionError("evaluate-cohort should be gated when execute_evaluate is disabled")
             return super()._request(method, path, params=params, json_body=json_body)
 
-    exe = RiskHubOnlyExecutor()
-    cfg = CampaignRunConfig(world_id="w", strategy_id="s1", execute=True, execute_evaluate=True)
+    exe = CohortTickExecutor()
+    cfg = CampaignRunConfig(world_id="w", execute=True, execute_evaluate=False)
 
     _, results = exe.execute_tick(cfg)
 
-    assert results and results[0].ok is True
-    evaluate_calls = [c for c in exe.calls if c[0] == "POST" and c[1] == "/worlds/w/evaluate"]
-    assert len(evaluate_calls) == 1
-    _, _, _, body = evaluate_calls[0]
-    assert body is not None
-    metrics = body.get("metrics")
-    assert isinstance(metrics, dict)
-    assert metrics.get("s1", {}).get("risk", {}).get("incremental_var_99") is not None
+    assert results and results[0].skipped is True
+    assert results[0].reason == "execute_evaluate_disabled"
