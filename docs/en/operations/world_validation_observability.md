@@ -51,7 +51,9 @@ This document defines core SLIs/SLOs and dashboard/alert criteria so the WorldSe
 - Operational entrypoints (examples):
   - Live run generator (cron/daemon): `uv run python scripts/live_monitoring_worker.py --interval-seconds 3600`
   - Report generator (Markdown/JSON): `uv run python scripts/generate_live_monitoring_report.py --world <world_id> --output live_report.md`
-  - GitHub Actions schedule (recommended): `.github/workflows/live-monitoring-schedule.yml` (auto-skips if secrets are missing + uploads report artifacts)
+  - GitHub Actions schedule (recommended): `.github/workflows/live-monitoring-schedule.yml`
+    - Current: manual-only (`workflow_dispatch`) during pre-deployment development (scheduled runs can be reintroduced after deployment)
+    - Auto-skips if secrets are missing + uploads report artifacts
 
 ### 6) Validation Health / Invariants
 
