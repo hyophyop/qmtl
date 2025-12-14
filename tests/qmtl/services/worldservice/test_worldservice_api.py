@@ -631,6 +631,50 @@ async def test_live_promotion_plan_endpoint_derives_apply_plan():
 
 
 @pytest.mark.asyncio
+async def test_live_promotion_auto_apply_endpoint_applies_latest_paper_run():
+    store = Storage()
+    app = create_app(storage=store)
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wauto", "name": "Auto World"})
+            policy_resp = await client.post(
+                "/worlds/wauto/policies",
+                json={
+                    "policy": {
+                        "governance": {"live_promotion": {"mode": "auto_apply"}},
+                        "thresholds": {"sharpe": {"metric": "sharpe", "min": 0.0}},
+                    }
+                },
+            )
+            assert policy_resp.status_code == 200
+            default_resp = await client.post("/worlds/wauto/set-default", json={"version": 1})
+            assert default_resp.status_code == 200
+
+            await client.post("/worlds/wauto/decisions", json={"strategies": ["s3"]})
+            await store.record_evaluation_run(
+                "wauto",
+                "s1",
+                "run-paper-1",
+                stage="paper",
+                risk_tier="low",
+                metrics={"returns": {"sharpe": 1.0}},
+                summary={"active_set": ["s1", "s2"], "status": "pass"},
+            )
+
+            resp = await client.post("/worlds/wauto/promotions/live/auto-apply", json={})
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["applied"] is True
+            assert body["source_run_id"] == "run-paper-1"
+            assert body["plan"]["activate"] == ["s1", "s2"]
+            assert body["plan"]["deactivate"] == ["s3"]
+
+            decisions = await client.get("/worlds/wauto/decisions")
+            assert decisions.status_code == 200
+            assert decisions.json()["strategies"] == ["s1", "s2"]
+
+
+@pytest.mark.asyncio
 async def test_ex_post_failure_record_flow_appends_history():
     app = create_app(storage=Storage())
     async with httpx.ASGITransport(app=app) as asgi:

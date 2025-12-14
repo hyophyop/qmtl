@@ -157,17 +157,15 @@ async def _execute_world_call(
                 },
             )
 
-    args: list[Any] = [path_params[param] for param in config.path_params]
-
+    call_kwargs: dict[str, Any] = {param: path_params[param] for param in config.path_params}
     for query_param in config.query_params:
-        args.append(request.query_params.get(query_param, ""))
-
+        call_kwargs[query_param] = request.query_params.get(query_param, "")
     if config.include_payload:
-        args.append(payload)
+        call_kwargs["payload"] = payload
 
     async def _call(client: WorldServiceClient, headers: dict[str, str]) -> Any:
         method = getattr(client, config.client_method)
-        return await method(*args, headers=headers)
+        return await method(**call_kwargs, headers=headers)
 
     response_builder = config.response_builder
     if response_builder is None and config.stale_response:
@@ -434,6 +432,14 @@ WORLD_ROUTES: tuple[WorldRoute, ...] = (
         "post",
         "/worlds/{world_id}/promotions/live/apply",
         "post_live_promotion_apply",
+        path_params=("world_id",),
+        include_payload=True,
+        enforce_live_guard=True,
+    ),
+    WorldRoute(
+        "post",
+        "/worlds/{world_id}/promotions/live/auto-apply",
+        "post_live_promotion_auto_apply",
         path_params=("world_id",),
         include_payload=True,
         enforce_live_guard=True,

@@ -146,6 +146,15 @@ class LivePromotionApplyRequest(BaseModel):
     force: bool = False
 
 
+class LivePromotionAutoApplyResponse(BaseModel):
+    world_id: str
+    applied: bool
+    source_strategy_id: str | None = None
+    source_run_id: str | None = None
+    apply_run_id: str | None = None
+    plan: ApplyPlan | None = None
+
+
 class ApplyRequest(EvaluateRequest):
     run_id: str
     plan: ApplyPlan | None = None
