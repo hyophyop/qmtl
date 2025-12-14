@@ -311,20 +311,22 @@ Phase 5의 “강한 검증/리스크 컷/스트레스”는 입력 데이터가
 	           (WS가 계산한 “승격 플랜”을 조회→검증→2‑phase apply로 위임)
      - `auto_apply` 모드에서도, 위 명령은 “현재 상태/최근 자동 적용 내역(감사 로그)”을 조회하는 읽기 전용 기능으로 유용하다.
 
-   - API 연계(필수):
-     - 조회:
-       - `GET /worlds/{world}/strategies/{strategy}/runs/{run}` (상태)
-       - `GET /worlds/{world}/strategies/{strategy}/runs/{run}/metrics` (평가/검증 결과)
-       - `GET /worlds/{world}/decide` + `GET /worlds/{world}/activation` (현재 effective_mode/activation 스냅샷)
-     - 승인(수동 승인 모드):
-       - `POST /worlds/{world}/promotions/live/approve` (idempotent; actor/reason/timestamp 포함)
-       - `POST /worlds/{world}/promotions/live/reject` (idempotent; actor/reason/timestamp 포함)
-     - 적용:
-       - 최종 적용은 `POST /worlds/{id}/apply` (2‑phase apply)로 수렴시키되,
-         “evaluation run → activation plan” 변환 결과(= promote/demote, activate/deactivate)가
-         CLI/운영자가 검토 가능한 형태로 제공되어야 한다(예: `GET /worlds/{world}/promotions/live/plan?strategy_id=...&run_id=...`).
-     - RBAC:
-       - 승인/적용은 operator‑only(또는 별도 role)로 제한하고, 모든 호출은 감사 로그로 남긴다.
+	   - API 연계(필수):
+	     - 조회:
+	       - `GET /worlds/{world}/strategies/{strategy}/runs/{run}` (상태)
+	       - `GET /worlds/{world}/strategies/{strategy}/runs/{run}/metrics` (평가/검증 결과)
+	       - `GET /worlds/{world}/decide` + `GET /worlds/{world}/activation` (현재 effective_mode/activation 스냅샷)
+	     - 승인(수동 승인 모드):
+	       - `POST /worlds/{world}/promotions/live/approve` (idempotent; actor/reason/timestamp 포함)
+	       - `POST /worlds/{world}/promotions/live/reject` (idempotent; actor/reason/timestamp 포함)
+	     - 적용:
+	       - 최종 적용은 `POST /worlds/{id}/apply` (2‑phase apply)로 수렴시키되,
+	         “evaluation run → activation plan” 변환 결과(= promote/demote, activate/deactivate)가
+	         CLI/운영자가 검토 가능한 형태로 제공되어야 한다(예: `GET /worlds/{world}/promotions/live/plan?strategy_id=...&run_id=...`).
+	       - `governance.live_promotion.mode=auto_apply`의 초기 구현은 “외부 스케줄러가 호출하는 자동 적용 엔드포인트”로 시작할 수 있다.
+	         - 예: `POST /worlds/{world}/promotions/live/auto-apply`
+	     - RBAC:
+	       - 승인/적용은 operator‑only(또는 별도 role)로 제한하고, 모든 호출은 감사 로그로 남긴다.
 
 3. **운영자 친화적 리포트**
 
