@@ -24,7 +24,7 @@ from decimal import Decimal
 from threading import Thread
 from dataclasses import dataclass, field
 from math import isfinite
-from typing import TYPE_CHECKING, Any, Coroutine, Sequence, SupportsFloat
+from typing import TYPE_CHECKING, Any, Coroutine, Mapping, Sequence, SupportsFloat
 
 import httpx
 
@@ -41,6 +41,7 @@ from .world_data import (
     resolve_world_data_selection,
 )
 from qmtl.services.worldservice.shared_schemas import ActivationEnvelope, DecisionEnvelope
+from qmtl.foundation.common.compute_context import canonicalize_world_mode, build_worldservice_compute_context
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,44 @@ __all__ = [
 
 DEFAULT_SUBMIT_EXECUTION_DOMAIN = "backtest"
 DEFAULT_SUBMIT_STAGE = "backtest"
+
+
+def _resolve_effective_mode(
+    decision: DecisionEnvelope | None, world_description: dict[str, Any] | None
+) -> str | None:
+    if decision and decision.effective_mode:
+        return decision.effective_mode
+    if isinstance(world_description, dict):
+        candidate = world_description.get("effective_mode") or world_description.get("mode")
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate
+    return None
+
+
+def _resolve_stage_from_mode(effective_mode: str | None) -> str:
+    canonical = canonicalize_world_mode(effective_mode)
+    if canonical in {"paper", "live", "shadow"}:
+        return canonical
+    return DEFAULT_SUBMIT_STAGE
+
+
+def _build_compute_context_from_world(
+    *,
+    world_id: str,
+    decision: DecisionEnvelope | None,
+    world_description: dict[str, Any] | None,
+    default_domain: str,
+):
+    from qmtl.foundation.common.compute_key import ComputeContext
+
+    payload: Mapping[str, Any] = (
+        decision.model_dump() if decision is not None else world_description or {}
+    )
+    context = build_worldservice_compute_context(world_id, payload)
+    if not context.execution_domain:
+        context = context.with_overrides(execution_domain=default_domain)
+    stage = _resolve_stage_from_mode(_resolve_effective_mode(decision, world_description))
+    return context, stage
 
 
 @dataclass
@@ -554,10 +593,12 @@ async def submit_async(
     resolved_preset = preset or _get_default_preset()
     gateway_url = _get_gateway_url(resolved_world)
     execution_domain = DEFAULT_SUBMIT_EXECUTION_DOMAIN
+    stage = DEFAULT_SUBMIT_STAGE
     services = get_global_services()
     strategy, strategy_class_name = _strategy_from_input(strategy_cls)
     world_ctx: WorldContext | None = None
     gateway_available = False
+    decision_envelope: DecisionEnvelope | None = None
 
     from qmtl.foundation.common.compute_key import ComputeContext
     compute_context = ComputeContext(
@@ -570,10 +611,6 @@ async def submit_async(
         result.downgrade_reason = getattr(reason, "value", reason)
         result.safe_mode = bool(getattr(compute_context, "safe_mode", False))
         return result
-    setattr(strategy, "compute_context", {
-        "world_id": resolved_world,
-        "execution_domain": execution_domain,
-    })
 
     async def _finalize_with_allocation(result: SubmitResult) -> SubmitResult:
         finalized = _attach_context_flags(result)
@@ -605,7 +642,6 @@ async def submit_async(
         return finalized
 
     try:
-        strategy.on_start()
         gateway_available = await _check_gateway_available(gateway_url, client=services.gateway_client)
         world_ctx = await _build_world_context(
             gateway_available=gateway_available,
@@ -617,6 +653,27 @@ async def submit_async(
             preset_overrides=preset_overrides,
             services=services,
         )
+        if gateway_available:
+            decision_envelope = await _fetch_decision_envelope(
+                gateway_url=gateway_url,
+                world_id=resolved_world,
+            )
+
+        compute_context, stage = _build_compute_context_from_world(
+            world_id=resolved_world,
+            decision=decision_envelope,
+            world_description=world_ctx.world_description if world_ctx else None,
+            default_domain=DEFAULT_SUBMIT_EXECUTION_DOMAIN,
+        )
+        execution_domain = compute_context.execution_domain or DEFAULT_SUBMIT_EXECUTION_DOMAIN
+        setattr(strategy, "compute_context", {
+            "world_id": resolved_world,
+            "execution_domain": execution_domain,
+        })
+        strategy.on_start()
+        trade_mode = "live"
+        if execution_domain not in {"live"}:
+            trade_mode = "dryrun" if execution_domain in {"dryrun", "shadow"} else "simulate"
         data_notices, _ = await _maybe_configure_world_data(
             strategy=strategy,
             world_ctx=world_ctx,
@@ -636,6 +693,7 @@ async def submit_async(
             gateway_url=gateway_url,
             gateway_available=gateway_available,
             policy_payload=world_ctx.policy_payload,
+            trade_mode=trade_mode,
         )
         if bootstrap_out.force_offline:
             gateway_available = False
@@ -1138,18 +1196,18 @@ async def _run_validation_and_ws_eval(
         profit_factor=validation_result.metrics.profit_factor,
     )
     evaluation_run_id = _build_evaluation_run_id(strategy_id, resolved_world)
-    ws_eval = await _evaluate_with_worldservice(
-        gateway_url=gateway_url,
-        world_id=resolved_world,
-        strategy_id=strategy_id,
-        metrics=eval_metrics,
-        returns=backtest_returns,
-        preset=resolved_preset,
-        client=services.gateway_client,
-        evaluation_run_id=evaluation_run_id,
-        stage=DEFAULT_SUBMIT_STAGE,
-        risk_tier=DEFAULT_EVALUATION_RISK_TIER,
-    )
+        ws_eval = await _evaluate_with_worldservice(
+            gateway_url=gateway_url,
+            world_id=resolved_world,
+            strategy_id=strategy_id,
+            metrics=eval_metrics,
+            returns=backtest_returns,
+            preset=resolved_preset,
+            client=services.gateway_client,
+            evaluation_run_id=evaluation_run_id,
+            stage=stage,
+            risk_tier=DEFAULT_EVALUATION_RISK_TIER,
+        )
     if ws_eval.error:
         logger.debug("WorldService evaluation fallback error: %s", ws_eval.error)
     try:
