@@ -69,6 +69,26 @@ class FakeCampaignExecutor(CampaignExecutor):
                 },
             )
 
+        if path == "/risk-hub/worlds/w/snapshots/latest":
+            assert params is not None
+            assert params.get("expand") is True
+            assert params.get("stage") == "backtest"
+            return (
+                200,
+                {
+                    "world_id": "w",
+                    "as_of": "2025-01-01T00:00:00Z",
+                    "version": "snap-1",
+                    "weights": {"s2": 1.0},
+                    "covariance": {
+                        "s1,s1": 0.04,
+                        "s2,s2": 0.01,
+                        "s1,s2": 0.005,
+                    },
+                    "provenance": {"actor": "test-suite", "stage": "backtest"},
+                },
+            )
+
         if path == "/worlds/w/evaluate":
             return 200, {"active": ["s1"], "evaluation_run_id": "camp-w-s1-backtest-20250101"}
 
@@ -93,6 +113,7 @@ def test_campaign_executor_executes_evaluate_with_sourced_metrics() -> None:
     metrics = body.get("metrics")
     assert isinstance(metrics, dict)
     assert metrics.get("s1", {}).get("returns", {}).get("sharpe") == 1.2
+    assert metrics.get("s1", {}).get("risk", {}).get("incremental_var_99") is not None
 
 
 def test_campaign_executor_skips_evaluate_when_no_metrics_source() -> None:
@@ -100,6 +121,8 @@ def test_campaign_executor_skips_evaluate_when_no_metrics_source() -> None:
         def _request(self, method: str, path: str, *, params=None, json_body=None):
             if path == "/worlds/w/strategies/s1/runs":
                 return 200, []
+            if path == "/risk-hub/worlds/w/snapshots/latest":
+                return 404, {"detail": "snapshot not found"}
             return super()._request(method, path, params=params, json_body=json_body)
 
     exe = NoMetricsExecutor()
@@ -109,3 +132,25 @@ def test_campaign_executor_skips_evaluate_when_no_metrics_source() -> None:
 
     assert results and results[0].skipped is True
     assert results[0].reason == "missing_metrics_source"
+
+
+def test_campaign_executor_falls_back_to_risk_hub_when_run_metrics_missing() -> None:
+    class RiskHubOnlyExecutor(FakeCampaignExecutor):
+        def _request(self, method: str, path: str, *, params=None, json_body=None):
+            if path == "/worlds/w/strategies/s1/runs":
+                return 200, []
+            return super()._request(method, path, params=params, json_body=json_body)
+
+    exe = RiskHubOnlyExecutor()
+    cfg = CampaignRunConfig(world_id="w", strategy_id="s1", execute=True, execute_evaluate=True)
+
+    _, results = exe.execute_tick(cfg)
+
+    assert results and results[0].ok is True
+    evaluate_calls = [c for c in exe.calls if c[0] == "POST" and c[1] == "/worlds/w/evaluate"]
+    assert len(evaluate_calls) == 1
+    _, _, _, body = evaluate_calls[0]
+    assert body is not None
+    metrics = body.get("metrics")
+    assert isinstance(metrics, dict)
+    assert metrics.get("s1", {}).get("risk", {}).get("incremental_var_99") is not None

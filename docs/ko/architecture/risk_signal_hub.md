@@ -58,8 +58,10 @@ flowchart LR
   - 동일 페이로드(동일 `hash`)의 재전송은 멱등 성공으로 처리하고 `risk_hub_snapshot_dedupe_total`로 계수한다.
 - API:
   - `POST /risk-hub/worlds/{world_id}/snapshots` (write, token/헤더 필요)
-  - `GET /risk-hub/worlds/{world_id}/snapshots/latest`
-  - `GET /risk-hub/worlds/{world_id}/snapshots` (list)
+  - `GET /risk-hub/worlds/{world_id}/snapshots/latest[?stage=...&actor=...&expand=true]`
+    - `stage`/`actor`: `provenance.stage`/`provenance.actor`로 필터링한 최신 스냅샷을 반환한다.
+    - `expand=true`: `covariance_ref`/`realized_returns_ref`/`stress_ref`를 가능한 경우 해석해 inline 필드(`covariance`, `realized_returns`, `stress`)를 함께 반환한다.
+  - `GET /risk-hub/worlds/{world_id}/snapshots[?limit=...&stage=...&actor=...&expand=true]` (list)
   - `GET /risk-hub/worlds/{world_id}/snapshots/lookup?version=...|as_of=...`
 
 ---
