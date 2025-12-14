@@ -22,6 +22,33 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def _safe_slug(value: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(value)).strip("-")
+    return safe or "x"
+
+
+def _campaign_eval_run_id(*, world_id: str, strategy_id: str, stage: str, date_bucket: str) -> str:
+    return f"camp-{_safe_slug(world_id)}-{_safe_slug(strategy_id)}-{_safe_slug(stage)}-{_safe_slug(date_bucket)}"
+
+
+def _idempotency_key(
+    *,
+    action: str,
+    world_id: str,
+    strategy_id: str | None = None,
+    stage: str | None = None,
+    run_id: str | None = None,
+) -> str:
+    parts = [str(action), str(world_id)]
+    if strategy_id:
+        parts.append(str(strategy_id))
+    if stage:
+        parts.append(str(stage))
+    if run_id:
+        parts.append(str(run_id))
+    return ":".join(parts)
+
+
 def _parse_iso(ts: str | None) -> datetime:
     candidate = str(ts or "").strip()
     if not candidate:
@@ -376,24 +403,43 @@ def create_campaigns_router(service: WorldService) -> APIRouter:
             mode = lp.get("mode")
             governance_mode = str(mode) if mode is not None else None
 
+        now = datetime.now(timezone.utc)
+        date_bucket = now.strftime("%Y%m%d")
+
         actions: list[CampaignTickAction] = []
         for strat in status.strategies:
             sid = strat.strategy_id
             if strat.phase == "backtest_campaign":
+                stage = "paper" if strat.promotable_to_paper else "backtest"
+                eval_run_id = _campaign_eval_run_id(
+                    world_id=world_id,
+                    strategy_id=sid,
+                    stage=stage,
+                    date_bucket=date_bucket,
+                )
                 if strat.promotable_to_paper:
                     actions.append(
                         CampaignTickAction(
                             action="evaluate",
+                            idempotency_key=_idempotency_key(
+                                action="evaluate",
+                                world_id=world_id,
+                                strategy_id=sid,
+                                stage="paper",
+                                run_id=eval_run_id,
+                            ),
                             strategy_id=sid,
                             stage="paper",
                             reason="promotable_to_paper",
+                            requires=["metrics"],
+                            suggested_run_id=eval_run_id,
                             suggested_method="POST",
                             suggested_endpoint=f"/worlds/{world_id}/evaluate",
                             suggested_body={
                                 "strategy_id": sid,
                                 "stage": "paper",
                                 "risk_tier": "low",
-                                "metrics": {"<strategy_id>": {"returns": {"sharpe": 0.0}}},
+                                "run_id": eval_run_id,
                             },
                         )
                     )
@@ -401,16 +447,25 @@ def create_campaigns_router(service: WorldService) -> APIRouter:
                     actions.append(
                         CampaignTickAction(
                             action="evaluate",
+                            idempotency_key=_idempotency_key(
+                                action="evaluate",
+                                world_id=world_id,
+                                strategy_id=sid,
+                                stage="backtest",
+                                run_id=eval_run_id,
+                            ),
                             strategy_id=sid,
                             stage="backtest",
                             reason="continue_backtest_campaign",
+                            requires=["metrics"],
+                            suggested_run_id=eval_run_id,
                             suggested_method="POST",
                             suggested_endpoint=f"/worlds/{world_id}/evaluate",
                             suggested_body={
                                 "strategy_id": sid,
                                 "stage": "backtest",
                                 "risk_tier": "low",
-                                "metrics": {"<strategy_id>": {"returns": {"sharpe": 0.0}}},
+                                "run_id": eval_run_id,
                             },
                         )
                     )
@@ -419,10 +474,21 @@ def create_campaigns_router(service: WorldService) -> APIRouter:
             if strat.phase == "paper_campaign":
                 if strat.promotable_to_live:
                     if str(governance_mode or "").lower() == "auto_apply":
+                        paper_run_id = str(strat.latest_paper_run_id or "") or "latest"
                         actions.append(
                             CampaignTickAction(
                                 action="auto_apply_live",
                                 reason="promotable_to_live",
+                                idempotency_key=_idempotency_key(
+                                    action="auto_apply_live",
+                                    world_id=world_id,
+                                    strategy_id=sid,
+                                    stage="live",
+                                    run_id=paper_run_id,
+                                ),
+                                strategy_id=sid,
+                                stage="live",
+                                suggested_run_id=paper_run_id,
                                 suggested_method="POST",
                                 suggested_endpoint=f"/worlds/{world_id}/promotions/live/auto-apply",
                             )
@@ -436,25 +502,50 @@ def create_campaigns_router(service: WorldService) -> APIRouter:
                                 action="manual_approval_required",
                                 strategy_id=sid,
                                 reason="promotable_to_live",
+                                idempotency_key=_idempotency_key(
+                                    action="manual_approval_required",
+                                    world_id=world_id,
+                                    strategy_id=sid,
+                                    stage="live",
+                                    run_id=run_id,
+                                ),
+                                stage="live",
+                                requires=["operator_approval"],
+                                suggested_run_id=run_id,
                                 suggested_method="GET",
                                 suggested_endpoint=f"/worlds/{world_id}/promotions/live/plan",
                                 suggested_params={"strategy_id": sid, "run_id": run_id},
                             )
                         )
                 else:
+                    eval_run_id = _campaign_eval_run_id(
+                        world_id=world_id,
+                        strategy_id=sid,
+                        stage="paper",
+                        date_bucket=date_bucket,
+                    )
                     actions.append(
                         CampaignTickAction(
                             action="evaluate",
+                            idempotency_key=_idempotency_key(
+                                action="evaluate",
+                                world_id=world_id,
+                                strategy_id=sid,
+                                stage="paper",
+                                run_id=eval_run_id,
+                            ),
                             strategy_id=sid,
                             stage="paper",
                             reason="continue_paper_campaign",
+                            requires=["metrics"],
+                            suggested_run_id=eval_run_id,
                             suggested_method="POST",
                             suggested_endpoint=f"/worlds/{world_id}/evaluate",
                             suggested_body={
                                 "strategy_id": sid,
                                 "stage": "paper",
                                 "risk_tier": "low",
-                                "metrics": {"<strategy_id>": {"returns": {"sharpe": 0.0}}},
+                                "run_id": eval_run_id,
                             },
                         )
                     )
@@ -463,7 +554,14 @@ def create_campaigns_router(service: WorldService) -> APIRouter:
             actions.append(
                 CampaignTickAction(
                     action="observe_live",
+                    idempotency_key=_idempotency_key(
+                        action="observe_live",
+                        world_id=world_id,
+                        strategy_id=sid,
+                        stage="live",
+                    ),
                     strategy_id=sid,
+                    stage="live",
                     reason="already_in_live_campaign",
                 )
             )

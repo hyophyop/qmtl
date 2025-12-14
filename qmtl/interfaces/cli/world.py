@@ -731,6 +731,9 @@ def _world_campaign_tick(args: argparse.Namespace) -> int:
     print(_t("🧭 Campaign Tick"))
     print("=" * 60)
     print(f"World: {world_id}")
+    schema_version = payload.get("schema_version")
+    if schema_version is not None:
+        print(f"Schema: {schema_version}")
     print(f"Count: {len(actions)}")
     if not actions:
         return 0
@@ -741,6 +744,9 @@ def _world_campaign_tick(args: argparse.Namespace) -> int:
         sid = item.get("strategy_id")
         stage = item.get("stage")
         reason = item.get("reason")
+        idem = item.get("idempotency_key")
+        suggested_run_id = item.get("suggested_run_id")
+        requires = item.get("requires")
         method = item.get("suggested_method")
         endpoint = item.get("suggested_endpoint")
         line = f"- {action}"
@@ -748,8 +754,16 @@ def _world_campaign_tick(args: argparse.Namespace) -> int:
             line += f" strategy={sid}"
         if stage:
             line += f" stage={stage}"
+        if suggested_run_id:
+            line += f" run={suggested_run_id}"
         if reason:
             line += f" reason={reason}"
+        if isinstance(requires, list) and requires:
+            rendered = ",".join(str(v) for v in requires if str(v).strip())
+            if rendered:
+                line += f" requires={rendered}"
+        if idem:
+            line += f" key={idem}"
         if method and endpoint:
             line += f" -> {method} {endpoint}"
         print(line)

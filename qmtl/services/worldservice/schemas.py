@@ -221,9 +221,12 @@ class CampaignStatusResponse(BaseModel):
 
 class CampaignTickAction(BaseModel):
     action: str
+    idempotency_key: str | None = None
     strategy_id: str | None = None
     stage: str | None = None
     reason: str | None = None
+    requires: List[str] = Field(default_factory=list)
+    suggested_run_id: str | None = None
     suggested_endpoint: str | None = None
     suggested_method: str | None = None
     suggested_params: Dict[str, Any] | None = None
@@ -231,6 +234,7 @@ class CampaignTickAction(BaseModel):
 
 
 class CampaignTickResponse(BaseModel):
+    schema_version: int = 1
     world_id: str
     generated_at: str
     actions: List[CampaignTickAction] = Field(default_factory=list)
