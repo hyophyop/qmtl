@@ -323,6 +323,8 @@ Phase 5의 “강한 검증/리스크 컷/스트레스”는 입력 데이터가
 	       - 최종 적용은 `POST /worlds/{id}/apply` (2‑phase apply)로 수렴시키되,
 	         “evaluation run → activation plan” 변환 결과(= promote/demote, activate/deactivate)가
 	         CLI/운영자가 검토 가능한 형태로 제공되어야 한다(예: `GET /worlds/{world}/promotions/live/plan?strategy_id=...&run_id=...`).
+	         - 권장: 위 plan 응답에는 `pending_manual_approval`(수동 승인 대기)과 `blocked_reasons`(차단 사유 코드 목록), `eligible`(현재 정책/가드레일 기준으로 승격 가능 여부) 같은 필드를 포함해,
+	           운영자가 “왜 아직 승격이 안 되는지(= dryrun/validation/스냅샷/fail‑closed/쿨다운 등)”를 빠르게 판단할 수 있어야 한다.
 	       - `governance.live_promotion.mode=auto_apply`의 초기 구현은 “외부 스케줄러가 호출하는 자동 적용 엔드포인트”로 시작할 수 있다.
 	         - 예: `POST /worlds/{world}/promotions/live/auto-apply`
 	     - RBAC:

@@ -752,6 +752,17 @@ class WorldService:
         run_id: str,
         override: EvaluationOverride,
     ) -> Dict[str, Any]:
+        existing = await self.store.get_evaluation_run(world_id, strategy_id, run_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="evaluation run not found")
+        summary = existing.get("summary") if isinstance(existing, Mapping) else {}
+        if isinstance(summary, Mapping):
+            current_status = str(summary.get("override_status") or "").lower()
+        else:
+            current_status = ""
+        requested_status = str(override.status or "").lower()
+        if current_status and current_status == requested_status:
+            return dict(existing)
         try:
             record = await self.store.record_evaluation_override(
                 world_id,

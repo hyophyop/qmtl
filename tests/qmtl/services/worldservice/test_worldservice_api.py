@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Any
 
 import asyncio
+from datetime import datetime, timezone
 
 import httpx
 import pytest
@@ -21,6 +22,36 @@ from qmtl.services.worldservice.storage import PersistentStorage, Storage
 from qmtl.services.worldservice.policy_engine import ValidationConfig, Policy
 from qmtl.services.worldservice.decision import DecisionEvaluator
 from qmtl.services.worldservice.risk_hub import PortfolioSnapshot
+
+
+def _iso_now() -> str:
+    return (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
+async def _post_risk_snapshot(
+    client: httpx.AsyncClient,
+    *,
+    world_id: str,
+    actor: str = "risk",
+    stage: str = "paper",
+    version: str = "v1",
+) -> None:
+    resp = await client.post(
+        f"/risk-hub/worlds/{world_id}/snapshots",
+        headers={"X-Actor": actor, "X-Stage": stage},
+        json={
+            "world_id": world_id,
+            "as_of": _iso_now(),
+            "version": version,
+            "weights": {"s1": 1.0},
+        },
+    )
+    assert resp.status_code == 200
 
 
 class _PersistentStoreStub:
@@ -569,6 +600,7 @@ async def test_live_promotion_apply_requires_manual_approval_by_policy():
             assert policy_resp.status_code == 200
             default_resp = await client.post("/worlds/wgov/set-default", json={"version": 1})
             assert default_resp.status_code == 200
+            await _post_risk_snapshot(client, world_id="wgov")
 
             await client.post("/worlds/wgov/decisions", json={"strategies": ["s-old"]})
             await store.record_evaluation_run(
@@ -578,7 +610,7 @@ async def test_live_promotion_apply_requires_manual_approval_by_policy():
                 stage="paper",
                 risk_tier="low",
                 metrics={"returns": {"sharpe": 1.0}},
-                summary={"active_set": ["s1"], "override_status": "none"},
+                summary={"active_set": ["s1"], "override_status": "none", "status": "pass"},
             )
 
             apply_resp = await client.post(
@@ -609,6 +641,7 @@ async def test_live_promotion_plan_endpoint_derives_apply_plan():
             await client.post("/worlds", json={"id": "wplan", "name": "Plan World"})
             set_resp = await client.post("/worlds/wplan/decisions", json={"strategies": ["s2", "s3"]})
             assert set_resp.status_code == 200
+            await _post_risk_snapshot(client, world_id="wplan")
 
             await store.record_evaluation_run(
                 "wplan",
@@ -617,7 +650,7 @@ async def test_live_promotion_plan_endpoint_derives_apply_plan():
                 stage="paper",
                 risk_tier="low",
                 metrics={"returns": {"sharpe": 1.0}},
-                summary={"active_set": ["s1", "s2"], "override_status": "approved"},
+                summary={"active_set": ["s1", "s2"], "override_status": "approved", "status": "pass"},
             )
 
             plan_resp = await client.get(
@@ -649,6 +682,7 @@ async def test_live_promotion_auto_apply_endpoint_applies_latest_paper_run():
             assert policy_resp.status_code == 200
             default_resp = await client.post("/worlds/wauto/set-default", json={"version": 1})
             assert default_resp.status_code == 200
+            await _post_risk_snapshot(client, world_id="wauto")
 
             await client.post("/worlds/wauto/decisions", json={"strategies": ["s3"]})
             await store.record_evaluation_run(
@@ -693,6 +727,7 @@ async def test_live_promotion_apply_enforces_max_live_slots():
             assert policy_resp.status_code == 200
             default_resp = await client.post("/worlds/wslots/set-default", json={"version": 1})
             assert default_resp.status_code == 200
+            await _post_risk_snapshot(client, world_id="wslots")
 
             await client.post("/worlds/wslots/decisions", json={"strategies": ["s-old"]})
             await store.record_evaluation_run(
@@ -702,7 +737,7 @@ async def test_live_promotion_apply_enforces_max_live_slots():
                 stage="paper",
                 risk_tier="low",
                 metrics={"returns": {"sharpe": 1.0}},
-                summary={"active_set": ["s1", "s2"], "override_status": "approved"},
+                summary={"active_set": ["s1", "s2"], "override_status": "approved", "status": "pass"},
             )
 
             apply_resp = await client.post(
@@ -731,6 +766,7 @@ async def test_live_promotion_auto_apply_respects_cooldown():
             assert policy_resp.status_code == 200
             default_resp = await client.post("/worlds/wcool/set-default", json={"version": 1})
             assert default_resp.status_code == 200
+            await _post_risk_snapshot(client, world_id="wcool")
 
             await client.post("/worlds/wcool/decisions", json={"strategies": ["s3"]})
             await store.record_evaluation_run(
@@ -775,6 +811,7 @@ async def test_live_promotion_auto_apply_respects_canary_fraction():
             assert policy_resp.status_code == 200
             default_resp = await client.post("/worlds/wcanary/set-default", json={"version": 1})
             assert default_resp.status_code == 200
+            await _post_risk_snapshot(client, world_id="wcanary")
 
             await client.post("/worlds/wcanary/decisions", json={"strategies": ["s3"]})
             await store.record_evaluation_run(
@@ -796,6 +833,104 @@ async def test_live_promotion_auto_apply_respects_canary_fraction():
             decisions = await client.get("/worlds/wcanary/decisions")
             assert decisions.status_code == 200
             assert decisions.json()["strategies"] == ["s3"]
+
+
+@pytest.mark.asyncio
+async def test_live_promotion_approve_respects_policy_approvers():
+    store = Storage()
+    app = create_app(storage=store)
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wapp", "name": "Approvers World"})
+            policy_resp = await client.post(
+                "/worlds/wapp/policies",
+                json={
+                    "policy": {
+                        "governance": {
+                            "live_promotion": {
+                                "mode": "manual_approval",
+                                "approvers": ["risk"],
+                            }
+                        },
+                        "thresholds": {"sharpe": {"metric": "sharpe", "min": 0.0}},
+                    }
+                },
+            )
+            assert policy_resp.status_code == 200
+            default_resp = await client.post("/worlds/wapp/set-default", json={"version": 1})
+            assert default_resp.status_code == 200
+
+            await store.record_evaluation_run(
+                "wapp",
+                "s1",
+                "run-1",
+                stage="paper",
+                risk_tier="low",
+                metrics={"returns": {"sharpe": 1.0}},
+                summary={"active_set": ["s1"], "override_status": "none", "status": "pass"},
+            )
+
+            deny_resp = await client.post(
+                "/worlds/wapp/promotions/live/approve",
+                json={"strategy_id": "s1", "run_id": "run-1", "reason": "ok", "actor": "someone"},
+            )
+            assert deny_resp.status_code == 403
+
+            allow_resp = await client.post(
+                "/worlds/wapp/promotions/live/approve",
+                json={"strategy_id": "s1", "run_id": "run-1", "reason": "ok", "actor": "risk"},
+            )
+            assert allow_resp.status_code == 200
+            assert allow_resp.json()["summary"]["override_status"] == "approved"
+
+
+@pytest.mark.asyncio
+async def test_live_promotion_approve_is_idempotent():
+    store = Storage()
+    app = create_app(storage=store)
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "widem", "name": "Idempotent World"})
+            policy_resp = await client.post(
+                "/worlds/widem/policies",
+                json={
+                    "policy": {
+                        "governance": {"live_promotion": {"mode": "manual_approval"}},
+                        "thresholds": {"sharpe": {"metric": "sharpe", "min": 0.0}},
+                    }
+                },
+            )
+            assert policy_resp.status_code == 200
+            default_resp = await client.post("/worlds/widem/set-default", json={"version": 1})
+            assert default_resp.status_code == 200
+
+            await store.record_evaluation_run(
+                "widem",
+                "s1",
+                "run-1",
+                stage="paper",
+                risk_tier="low",
+                metrics={"returns": {"sharpe": 1.0}},
+                summary={"active_set": ["s1"], "override_status": "none", "status": "pass"},
+            )
+            history_before = await store.list_evaluation_run_history("widem", "s1", "run-1")
+            assert len(history_before) == 1
+
+            approve_1 = await client.post(
+                "/worlds/widem/promotions/live/approve",
+                json={"strategy_id": "s1", "run_id": "run-1", "reason": "ok", "actor": "risk"},
+            )
+            assert approve_1.status_code == 200
+            history_after_1 = await store.list_evaluation_run_history("widem", "s1", "run-1")
+            assert len(history_after_1) == 2
+
+            approve_2 = await client.post(
+                "/worlds/widem/promotions/live/approve",
+                json={"strategy_id": "s1", "run_id": "run-1", "reason": "ok", "actor": "risk"},
+            )
+            assert approve_2.status_code == 200
+            history_after_2 = await store.list_evaluation_run_history("widem", "s1", "run-1")
+            assert len(history_after_2) == 2
 
 
 @pytest.mark.asyncio
