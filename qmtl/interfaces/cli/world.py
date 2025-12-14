@@ -372,7 +372,44 @@ def _world_status(args: argparse.Namespace) -> int:
 
     if args.strategy_id:
         print()
-        return _world_run_status(args)
+        rc = _world_run_status(args)
+        if rc != 0:
+            return rc
+
+        try:
+            strategy_id = _require_strategy_id(args)
+        except ValueError:
+            return 0
+
+        run_id = str(args.evaluation_run_id or "latest")
+        if run_id == "latest":
+            status_code, runs = http_get(f"/worlds/{world_id}/strategies/{strategy_id}/runs")
+            if status_code >= 400 or status_code == 0:
+                return 0
+            resolved = _pick_latest_run_id(runs)
+            if not resolved:
+                return 0
+            run_id = resolved
+
+        status_code, plan_resp = http_get(
+            f"/worlds/{world_id}/promotions/live/plan",
+            params={"strategy_id": strategy_id, "run_id": run_id},
+        )
+        if status_code >= 400 or status_code == 0 or not isinstance(plan_resp, dict):
+            return 0
+
+        print()
+        print(_t("🚦 Live Promotion"))
+        print("=" * 50)
+        print(f"Mode:          {plan_resp.get('promotion_mode')}")
+        print(f"Pending:       {bool(plan_resp.get('pending_manual_approval'))}")
+        if plan_resp.get("cooldown_remaining_sec") is not None:
+            print(f"Cooldown sec:  {plan_resp.get('cooldown_remaining_sec')}")
+        if plan_resp.get("max_live_slots") is not None:
+            print(f"Max slots:     {plan_resp.get('max_live_slots')}")
+        if plan_resp.get("canary_fraction") is not None:
+            print(f"Canary:        {plan_resp.get('canary_fraction')}")
+        return 0
     return 0
 
 

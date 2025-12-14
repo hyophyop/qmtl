@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
+import hashlib
+import re
 
 from fastapi import APIRouter, HTTPException
 
@@ -38,6 +41,14 @@ def _parse_iso(ts: str) -> datetime:
     return parsed
 
 
+@dataclass(frozen=True, slots=True)
+class LivePromotionGovernance:
+    mode: str | None
+    cooldown: str | None
+    max_live_slots: int | None
+    canary_fraction: float | None
+
+
 def _extract_live_promotion_mode(policy: object) -> str | None:
     if isinstance(policy, Policy):
         governance = policy.governance
@@ -59,6 +70,138 @@ def _extract_live_promotion_mode(policy: object) -> str | None:
 async def _get_live_promotion_mode(service: WorldService, world_id: str) -> str | None:
     policy = await service.store.get_default_policy(world_id)
     return _extract_live_promotion_mode(policy)
+
+
+def _extract_live_promotion_governance(policy: object) -> LivePromotionGovernance:
+    if isinstance(policy, Policy):
+        governance = policy.governance
+        live_promotion = governance.live_promotion if governance else None
+        if live_promotion is None:
+            return LivePromotionGovernance(None, None, None, None)
+        return LivePromotionGovernance(
+            mode=str(live_promotion.mode),
+            cooldown=live_promotion.cooldown,
+            max_live_slots=live_promotion.max_live_slots,
+            canary_fraction=live_promotion.canary_fraction,
+        )
+    if isinstance(policy, dict):
+        def _coerce_int(value: object) -> int | None:
+            if value is None:
+                return None
+            try:
+                return int(value)
+            except Exception:
+                return None
+
+        def _coerce_float(value: object) -> float | None:
+            if value is None:
+                return None
+            try:
+                return float(value)
+            except Exception:
+                return None
+
+        governance = policy.get("governance")
+        if not isinstance(governance, dict):
+            return LivePromotionGovernance(None, None, None, None)
+        live_promotion = governance.get("live_promotion")
+        if not isinstance(live_promotion, dict):
+            return LivePromotionGovernance(None, None, None, None)
+        mode = live_promotion.get("mode")
+        cooldown = live_promotion.get("cooldown")
+        max_live_slots = live_promotion.get("max_live_slots")
+        canary_fraction = live_promotion.get("canary_fraction")
+        return LivePromotionGovernance(
+            mode=str(mode) if mode is not None else None,
+            cooldown=str(cooldown) if cooldown is not None else None,
+            max_live_slots=_coerce_int(max_live_slots),
+            canary_fraction=_coerce_float(canary_fraction),
+        )
+    return LivePromotionGovernance(None, None, None, None)
+
+
+async def _get_live_promotion_governance(service: WorldService, world_id: str) -> LivePromotionGovernance:
+    policy = await service.store.get_default_policy(world_id)
+    return _extract_live_promotion_governance(policy)
+
+
+_DURATION_RE = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*([smhd])\s*$", re.IGNORECASE)
+
+
+def _parse_duration_seconds(value: str | None) -> int | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    match = _DURATION_RE.match(text)
+    if not match:
+        raise ValueError(f"invalid duration: {text!r}")
+    amount = float(match.group(1))
+    unit = match.group(2).lower()
+    multiplier = {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
+    seconds = int(amount * multiplier)
+    return max(0, seconds)
+
+
+async def _last_completed_apply_ts(service: WorldService, world_id: str) -> datetime | None:
+    entries = await service.store.get_audit(world_id)
+    if not entries:
+        return None
+    best: datetime | None = None
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("event") or "").lower() != "apply_stage":
+            continue
+        if str(entry.get("stage") or "").lower() != "completed":
+            continue
+        candidate = _parse_iso(str(entry.get("ts") or ""))
+        if best is None or candidate > best:
+            best = candidate
+    if best is None or best == datetime.min.replace(tzinfo=timezone.utc):
+        return None
+    return best
+
+
+async def _cooldown_remaining_seconds(
+    service: WorldService,
+    world_id: str,
+    *,
+    cooldown: str | None,
+) -> int | None:
+    try:
+        cooldown_seconds = _parse_duration_seconds(cooldown)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if cooldown_seconds is None:
+        return None
+    last_completed = await _last_completed_apply_ts(service, world_id)
+    if last_completed is None:
+        return 0
+    elapsed = max(0, int((datetime.now(timezone.utc) - last_completed).total_seconds()))
+    return max(0, cooldown_seconds - elapsed)
+
+
+def _stable_fraction_score(*, world_id: str, strategy_id: str, run_id: str) -> float:
+    payload = f"{world_id}:{strategy_id}:{run_id}".encode()
+    digest = hashlib.sha256(payload).digest()
+    value = int.from_bytes(digest[:8], "big", signed=False)
+    return value / float(1 << 64)
+
+
+def _canary_allows(
+    *,
+    canary_fraction: float | None,
+    world_id: str,
+    strategy_id: str,
+    run_id: str,
+) -> bool:
+    if canary_fraction is None:
+        return True
+    if canary_fraction <= 0:
+        return False
+    if canary_fraction >= 1:
+        return True
+    return _stable_fraction_score(world_id=world_id, strategy_id=strategy_id, run_id=run_id) < canary_fraction
 
 
 def create_promotions_router(service: WorldService) -> APIRouter:
@@ -140,6 +283,16 @@ def create_promotions_router(service: WorldService) -> APIRouter:
         current_set = {str(v) for v in current_active if str(v).strip()}
         target_set = {str(v) for v in target_active if str(v).strip()}
 
+        governance = await _get_live_promotion_governance(service, world_id)
+        mode_normalized = str(governance.mode or "").lower()
+        override_status = str(summary.get("override_status") or "none").lower()
+        pending_manual_approval = mode_normalized == "manual_approval" and override_status != "approved"
+        cooldown_remaining_sec = await _cooldown_remaining_seconds(
+            service,
+            world_id,
+            cooldown=governance.cooldown,
+        )
+
         plan = ApplyPlan(
             activate=sorted(target_set - current_set),
             deactivate=sorted(current_set - target_set),
@@ -151,6 +304,12 @@ def create_promotions_router(service: WorldService) -> APIRouter:
             plan=plan,
             target_active=sorted(target_set),
             current_active=sorted(current_set),
+            promotion_mode=governance.mode,
+            override_status=override_status,
+            pending_manual_approval=pending_manual_approval,
+            cooldown_remaining_sec=cooldown_remaining_sec,
+            max_live_slots=governance.max_live_slots,
+            canary_fraction=governance.canary_fraction,
         )
 
     @router.post(
@@ -183,6 +342,14 @@ def create_promotions_router(service: WorldService) -> APIRouter:
             strategy_id=payload.strategy_id,
             run_id=payload.run_id,
         )
+        max_live_slots = plan_resp.max_live_slots
+        if max_live_slots is not None and len(plan_resp.target_active) > max_live_slots:
+            raise HTTPException(status_code=409, detail="max live slots exceeded")
+
+        cooldown_remaining = plan_resp.cooldown_remaining_sec or 0
+        if cooldown_remaining > 0:
+            raise HTTPException(status_code=409, detail="cooldown active")
+
         apply_payload = ApplyRequest(
             run_id=payload.apply_run_id,
             plan=plan_resp.plan,
@@ -198,14 +365,14 @@ def create_promotions_router(service: WorldService) -> APIRouter:
         response_model=LivePromotionAutoApplyResponse,
     )
     async def post_live_promotion_auto_apply(world_id: str) -> LivePromotionAutoApplyResponse:
-        mode = await _get_live_promotion_mode(service, world_id)
-        mode_normalized = str(mode or "").lower()
+        governance = await _get_live_promotion_governance(service, world_id)
+        mode_normalized = str(governance.mode or "").lower()
         if mode_normalized != "auto_apply":
             raise HTTPException(status_code=409, detail="live promotion auto-apply is not enabled by policy")
 
         runs = await service.store.list_evaluation_runs(world_id=world_id)
         if not runs:
-            return LivePromotionAutoApplyResponse(world_id=world_id, applied=False)
+            return LivePromotionAutoApplyResponse(world_id=world_id, applied=False, reason="no_evaluation_runs")
 
         def _rank(run: dict) -> tuple[datetime, datetime]:
             created = _parse_iso(str(run.get("created_at") or ""))
@@ -220,15 +387,57 @@ def create_promotions_router(service: WorldService) -> APIRouter:
         ]
         candidate_runs = paper_runs or [r for r in runs if isinstance(r, dict)]
         if not candidate_runs:
-            return LivePromotionAutoApplyResponse(world_id=world_id, applied=False)
+            return LivePromotionAutoApplyResponse(world_id=world_id, applied=False, reason="no_candidate_runs")
 
         source = max(candidate_runs, key=_rank)
         strategy_id = str(source.get("strategy_id") or "")
         run_id = str(source.get("run_id") or "")
         if not strategy_id or not run_id:
-            return LivePromotionAutoApplyResponse(world_id=world_id, applied=False)
+            return LivePromotionAutoApplyResponse(
+                world_id=world_id,
+                applied=False,
+                reason="missing_source_identifiers",
+            )
 
         plan_resp = await get_live_promotion_plan(world_id, strategy_id=strategy_id, run_id=run_id)
+        max_live_slots = plan_resp.max_live_slots
+        if max_live_slots is not None and len(plan_resp.target_active) > max_live_slots:
+            return LivePromotionAutoApplyResponse(
+                world_id=world_id,
+                applied=False,
+                reason="max_live_slots_exceeded",
+                source_strategy_id=strategy_id,
+                source_run_id=run_id,
+                plan=plan_resp.plan,
+            )
+
+        cooldown_remaining = plan_resp.cooldown_remaining_sec or 0
+        if cooldown_remaining > 0:
+            return LivePromotionAutoApplyResponse(
+                world_id=world_id,
+                applied=False,
+                reason="cooldown_active",
+                cooldown_remaining_sec=cooldown_remaining,
+                source_strategy_id=strategy_id,
+                source_run_id=run_id,
+                plan=plan_resp.plan,
+            )
+
+        if not _canary_allows(
+            canary_fraction=plan_resp.canary_fraction,
+            world_id=world_id,
+            strategy_id=strategy_id,
+            run_id=run_id,
+        ):
+            return LivePromotionAutoApplyResponse(
+                world_id=world_id,
+                applied=False,
+                reason="canary_skipped",
+                source_strategy_id=strategy_id,
+                source_run_id=run_id,
+                plan=plan_resp.plan,
+            )
+
         apply_run_id = f"auto-live-{run_id}-{_utc_now_iso().replace(':', '').replace('-', '')}"
         apply_payload = ApplyRequest(
             run_id=apply_run_id,
@@ -238,6 +447,7 @@ def create_promotions_router(service: WorldService) -> APIRouter:
         return LivePromotionAutoApplyResponse(
             world_id=world_id,
             applied=True,
+            reason="applied",
             source_strategy_id=strategy_id,
             source_run_id=run_id,
             apply_run_id=apply_run_id,
