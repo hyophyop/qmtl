@@ -29,7 +29,7 @@ status: draft
   **월드 정책과 WorldService가 결정하는 상태**에 가깝게 재정의한다.
 - “검증/리스크/exit에 필요한 입력 데이터”는 WorldService가 직접 계산하기보다,  
   **스냅샷 SSOT(`risk_signal_hub`)를 통해 버전 고정(ref/hash/as_of) 형태로 공유**하는 방향을 지향한다.  
-  (관련: [Risk Signal Hub 설계](risk_signal_hub.md))
+  (관련: [Risk Signal Hub 아키텍처](../architecture/risk_signal_hub.md))
 - Core Loop의 표면은 다음 흐름을 기준으로 설계한다.
 
 ```text
@@ -246,7 +246,7 @@ status: draft
    - 이 블록은 “**live 후보군에 오르기 위한 최소 조건**”을 정의하는 곳으로 문서화한다.
    - (정렬) 검증/스트레스/실현 리턴 등 “입력 스냅샷 SSOT”는 `risk_signal_hub`를 기준으로 읽는다.
      - WS/Exit Engine/모니터링이 동일한 `version/hash/as_of` 스냅샷을 공유하도록 설계한다.
-     - 관련: [Risk Signal Hub 설계](risk_signal_hub.md)
+     - 관련: [Risk Signal Hub 아키텍처](../architecture/risk_signal_hub.md)
 
 2. **live 승격 거버넌스 옵션**
 

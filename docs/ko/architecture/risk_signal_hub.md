@@ -14,7 +14,7 @@ last_modified: 2025-12-10
     WorldService·Exit Engine·모니터링은 허브의 API/이벤트만 소비해 Var/ES·stress·exit 신호를 계산하고, 스냅샷 신선도/결측 여부를 모니터링한다.
 
 관련 문서:
-- 설계 세부: [design/risk_signal_hub.md](../design/risk_signal_hub.md)
+- 아카이브(초기 설계): [archive/risk_signal_hub.md](../archive/risk_signal_hub.md)
 - 검증 아키텍처: [design/world_validation_architecture.md](../design/world_validation_architecture.md)
 - 운영 런북: [operations/risk_signal_hub_runbook.md](../operations/risk_signal_hub_runbook.md)
 
@@ -49,6 +49,18 @@ flowchart LR
 - 필수: `world_id`, `as_of`(ISO), `version`, `weights`(합≈1.0)
 - 선택: `covariance`(작을 때 inline) 또는 `covariance_ref`, `realized_returns_ref`, `stress`, `constraints`, `ttl_sec`, `provenance`, `hash`
 - 검증: 가중치 합>0 및 1.0±1e-3, `as_of` ISO, TTL 만료시 캐시/조회에서 제외
+
+### 3.1 v1 계약(운영 기본값)
+
+- `X-Actor`/`X-Stage` 헤더는 필수이며, `provenance.actor/stage`로 저장된다.
+- TTL 기본값: `ttl_sec=900`(15m). 상한: `ttl_sec <= 86400`(초과 시 422).
+- 버전 충돌: `(world_id, version)` 충돌은 덮어쓰기 금지, **409(거절)** 로 수렴한다.
+  - 동일 페이로드(동일 `hash`)의 재전송은 멱등 성공으로 처리하고 `risk_hub_snapshot_dedupe_total`로 계수한다.
+- API:
+  - `POST /risk-hub/worlds/{world_id}/snapshots` (write, token/헤더 필요)
+  - `GET /risk-hub/worlds/{world_id}/snapshots/latest`
+  - `GET /risk-hub/worlds/{world_id}/snapshots` (list)
+  - `GET /risk-hub/worlds/{world_id}/snapshots/lookup?version=...|as_of=...`
 
 ---
 
