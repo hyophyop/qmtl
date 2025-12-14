@@ -40,6 +40,13 @@ class CampaignExecutor:
     This is designed to be embedded (library style) and invoked by a thin CLI.
     It uses the campaign tick endpoint as the SSOT for the "next step", and
     optionally executes some of those steps.
+
+    Metrics note
+    ------------
+    Campaign tick actions for `evaluate` require strategy metrics. In early
+    implementations, we source metrics by reusing the latest available evaluated
+    metrics for the strategy (prefer matching stage; fallback to any stage).
+    This keeps the executor lightweight and swappable for future producers.
     """
 
     def __init__(self, *, base_url: str, timeout_sec: float = 10.0) -> None:
@@ -84,6 +91,93 @@ class CampaignExecutor:
         if status >= 400 or status == 0 or not isinstance(payload, dict):
             raise RuntimeError(f"campaign tick failed: status={status}, payload={payload}")
         return payload
+
+    @staticmethod
+    def _parse_iso(ts: object) -> float:
+        text = str(ts or "").strip()
+        if not text:
+            return 0.0
+        candidate = text
+        if candidate.endswith("Z"):
+            candidate = candidate[:-1] + "+00:00"
+        try:
+            from datetime import datetime
+
+            parsed = datetime.fromisoformat(candidate)
+            return float(parsed.timestamp())
+        except Exception:
+            return 0.0
+
+    def _pick_latest_run_id(
+        self,
+        runs: list[dict[str, Any]],
+        *,
+        stage: str | None,
+    ) -> str | None:
+        target_stage = str(stage or "").lower().strip() or None
+
+        def _rank(run: dict[str, Any]) -> tuple[float, float]:
+            return (
+                self._parse_iso(run.get("updated_at")),
+                self._parse_iso(run.get("created_at")),
+            )
+
+        def _is_evaluated(run: dict[str, Any]) -> bool:
+            status = str(run.get("status") or "").lower().strip()
+            if status == "evaluated":
+                return True
+            metrics = run.get("metrics")
+            if isinstance(metrics, dict):
+                return bool(metrics)
+            return metrics is not None
+
+        candidates = [r for r in runs if isinstance(r, dict) and _is_evaluated(r)]
+        if not candidates:
+            return None
+        if target_stage:
+            stage_candidates = [
+                r
+                for r in candidates
+                if str(r.get("stage") or "").lower().strip() == target_stage
+            ]
+            if stage_candidates:
+                candidates = stage_candidates
+        best = max(candidates, key=_rank)
+        rid = str(best.get("run_id") or "").strip()
+        return rid or None
+
+    def _fetch_latest_metrics(
+        self,
+        *,
+        world_id: str,
+        strategy_id: str,
+        stage: str | None,
+    ) -> dict[str, Any] | None:
+        status, runs_payload = self._request(
+            "GET",
+            f"/worlds/{world_id}/strategies/{strategy_id}/runs",
+        )
+        if status >= 400 or status == 0 or not isinstance(runs_payload, list):
+            return None
+
+        runs: list[dict[str, Any]] = [r for r in runs_payload if isinstance(r, dict)]
+        run_id = self._pick_latest_run_id(runs, stage=stage)
+        if not run_id:
+            return None
+
+        status, metrics_payload = self._request(
+            "GET",
+            f"/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/metrics",
+        )
+        if status >= 400 or status == 0 or not isinstance(metrics_payload, Mapping):
+            return None
+
+        metrics = metrics_payload.get("metrics")
+        if metrics is None:
+            return None
+        if isinstance(metrics, Mapping):
+            return {str(k): v for k, v in metrics.items()}
+        return None
 
     @staticmethod
     def _materialize_evaluate_payload(template: Mapping[str, Any], *, strategy_id: str) -> dict[str, object]:
@@ -181,8 +275,13 @@ class CampaignExecutor:
                                 )
                             )
                             continue
-                        metrics = suggested_body.get("metrics")
-                        if not isinstance(metrics, Mapping) or not metrics:
+                        stage = str(suggested_body.get("stage") or raw.get("stage") or "").strip() or None
+                        derived_metrics = self._fetch_latest_metrics(
+                            world_id=cfg.world_id,
+                            strategy_id=sid,
+                            stage=stage,
+                        )
+                        if not derived_metrics:
                             results.append(
                                 ExecutionResult(
                                     action=action,
@@ -191,11 +290,12 @@ class CampaignExecutor:
                                     status_code=None,
                                     ok=True,
                                     skipped=True,
-                                    reason="missing_metrics",
+                                    reason="missing_metrics_source",
                                 )
                             )
                             continue
                         body = self._materialize_evaluate_payload(suggested_body, strategy_id=sid)
+                        body["metrics"] = {sid: derived_metrics}
                     else:
                         body = {str(k): v for k, v in suggested_body.items() if v is not None}
                 else:

@@ -203,10 +203,13 @@ status: draft
          - `schema_version`: 스키마 진화용 버전 필드(하위 호환 유지 전제)
          - `idempotency_key`: 외부 스케줄러가 중복 실행을 회피/디듀프하는 키
          - `suggested_run_id`: (특히 `evaluate`) 재실행 시 동일 런으로 업데이트되도록 유도하는 권장 `run_id`
-       - `evaluate` 액션의 `suggested_body`는 **실제 metrics를 포함하지 않는 템플릿**으로 취급한다. (`requires=["metrics"]`)  
-         즉, 평가 엔진/프로듀서가 metrics를 생성해 채운 뒤 `/evaluate`에 전달해야 하며, 더미 metrics로 승격 판단을 왜곡하지 않는다.
-     - (옵션) 외부 엔진 없이도 qmtl 내부 실행기로 운영할 수 있다.
-       - 예: `qmtl world campaign-execute <world> [--execute]`, `qmtl world campaign-loop <world> --interval-sec 3600 [--execute]`
+      - `evaluate` 액션의 `suggested_body`는 **실제 metrics를 포함하지 않는 템플릿**으로 취급한다. (`requires=["metrics"]`)
+        - 초기(경량) 구현: qmtl 내부 실행기(`CampaignExecutor`)가 **최근 평가 런의 metrics를 재사용**해 `/evaluate`를 호출할 수 있다.
+          - stage 일치(예: paper 추천이면 paper-stage run) 우선, 없으면 최근 evaluated run을 fallback.
+          - 목적: 외부 엔진 없이도 “캠페인 윈도우 관찰/상태 전이/승격 후보 산출”을 end-to-end로 돌릴 수 있게 한다.
+          - 한계: 실제 신규 backtest/paper 실행을 대체하지는 않으며, 진짜 지표 생산은 추후(리스크 허브/데이터 플레인/전용 프로듀서)로 확장한다.
+    - (옵션) 외부 엔진 없이도 qmtl 내부 실행기로 운영할 수 있다.
+      - 예: `qmtl world campaign-execute <world> [--execute] [--execute-evaluate]`, `qmtl world campaign-loop <world> --interval-sec 3600 [--execute] [--execute-evaluate]`
    - 이후 필요 시 WorldService 내부에 간단한 주기 평가 루프를 추가할 수 있다.
 
 4. **Runner/CLI와의 연결**
