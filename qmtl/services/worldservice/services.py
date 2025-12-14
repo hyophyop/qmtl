@@ -525,16 +525,12 @@ class WorldService:
                 out[key] = value
         return out
 
-    async def _metrics_from_risk_hub(
+    def _metrics_from_risk_snapshot(
         self,
+        snapshot: Mapping[str, Any],
         *,
-        world_id: str,
         strategy_id: str,
-        stage: str | None,
     ) -> dict[str, Any] | None:
-        snapshot = await self._fetch_risk_hub_snapshot(world_id=world_id, stage=stage)
-        if not snapshot:
-            return None
         derived: dict[str, Any] = {}
 
         realized = snapshot.get("realized_returns")
@@ -582,6 +578,18 @@ class WorldService:
 
         return derived or None
 
+    async def _metrics_from_risk_hub(
+        self,
+        *,
+        world_id: str,
+        strategy_id: str,
+        stage: str | None,
+    ) -> dict[str, Any] | None:
+        snapshot = await self._fetch_risk_hub_snapshot(world_id=world_id, stage=stage)
+        if not snapshot:
+            return None
+        return self._metrics_from_risk_snapshot(snapshot, strategy_id=strategy_id)
+
     async def _ensure_metrics_for_evaluate(self, world_id: str, payload: EvaluateRequest) -> None:
         strategy_id = str(payload.strategy_id or "").strip() or None
         if strategy_id is None:
@@ -611,6 +619,46 @@ class WorldService:
             derived = base_metrics or hub_metrics
         if derived:
             payload.metrics[strategy_id] = derived
+
+    async def _ensure_metrics_for_cohort_evaluate(self, world_id: str, payload: CohortEvaluateRequest) -> None:
+        candidates = list(payload.candidates or [])
+        if not candidates:
+            return
+
+        stage = str(payload.stage or "").strip() or None
+        snapshot = await self._fetch_risk_hub_snapshot(world_id=world_id, stage=stage)
+        missing: list[str] = []
+
+        for strategy_id in candidates:
+            sid = str(strategy_id).strip()
+            if not sid:
+                continue
+            existing = payload.metrics.get(sid)
+            if isinstance(existing, Mapping) and existing:
+                continue
+
+            base_metrics = await self._fetch_latest_metrics_from_runs(
+                world_id=world_id,
+                strategy_id=sid,
+                stage=stage,
+            )
+            hub_metrics = self._metrics_from_risk_snapshot(snapshot, strategy_id=sid) if snapshot else None
+
+            if base_metrics and hub_metrics:
+                derived = self._deep_merge(base_metrics, hub_metrics)
+            else:
+                derived = base_metrics or hub_metrics
+
+            if not derived:
+                missing.append(sid)
+                continue
+            payload.metrics[sid] = derived
+
+        if missing:
+            raise HTTPException(
+                status_code=422,
+                detail="cohort candidates missing metrics sources: " + ", ".join(sorted(set(missing))),
+            )
 
     @staticmethod
     def _coerce_float(value: Any) -> float | None:
@@ -984,6 +1032,7 @@ class WorldService:
     async def evaluate_cohort(
         self, world_id: str, payload: CohortEvaluateRequest
     ) -> CohortEvaluateResponse:
+        await self._ensure_metrics_for_cohort_evaluate(world_id, payload)
         try:
             self._augment_payload_metrics_with_series(payload)
         except Exception:  # pragma: no cover - best-effort enrichment
