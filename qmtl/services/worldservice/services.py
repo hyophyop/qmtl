@@ -19,6 +19,7 @@ from fastapi import HTTPException
 from qmtl.model_cards import ModelCardRegistry
 from qmtl.foundation.common.hashutils import hash_bytes
 from qmtl.foundation.common.compute_context import canonicalize_world_mode
+from qmtl.runtime.sdk.world_validation_metrics import build_v1_evaluation_metrics
 
 from .activation import ActivationEventPublisher
 from .apply_flow import ApplyCoordinator
@@ -530,16 +531,30 @@ class WorldService:
         snapshot: Mapping[str, Any],
         *,
         strategy_id: str,
+        stage: str | None = None,
     ) -> dict[str, Any] | None:
         derived: dict[str, Any] = {}
 
         realized = snapshot.get("realized_returns")
         live_returns = self._extract_returns_from_realized(realized, strategy_id=strategy_id)
+        normalized_stage = str(stage or "").strip().lower() or None
+        if normalized_stage is None:
+            provenance = snapshot.get("provenance")
+            if isinstance(provenance, Mapping):
+                normalized_stage = str(provenance.get("stage") or "").strip().lower() or None
+
         if live_returns is not None:
             diagnostics = dict(derived.get("diagnostics") or {})
             diagnostics["live_returns"] = live_returns
             diagnostics.setdefault("live_returns_source", "risk_hub")
             derived["diagnostics"] = diagnostics
+
+            if normalized_stage in {"paper", "shadow", "live", "dryrun"}:
+                perf_metrics = build_v1_evaluation_metrics(
+                    live_returns,
+                    returns_source="risk_hub.realized_returns",
+                )
+                derived = self._deep_merge(derived, perf_metrics)
 
         stress_payload = snapshot.get("stress")
         stress = self._extract_stress_for_strategy(stress_payload, strategy_id=strategy_id)
@@ -576,6 +591,13 @@ class WorldService:
                     diagnostics["extra_metrics"] = extra
                     derived["diagnostics"] = diagnostics
 
+        if derived:
+            diagnostics = dict(derived.get("diagnostics") or {})
+            extra = dict(diagnostics.get("extra_metrics") or {})
+            extra.setdefault("risk_hub_snapshot_version", snapshot.get("version"))
+            diagnostics["extra_metrics"] = extra
+            derived["diagnostics"] = diagnostics
+
         return derived or None
 
     async def _metrics_from_risk_hub(
@@ -588,7 +610,7 @@ class WorldService:
         snapshot = await self._fetch_risk_hub_snapshot(world_id=world_id, stage=stage)
         if not snapshot:
             return None
-        return self._metrics_from_risk_snapshot(snapshot, strategy_id=strategy_id)
+        return self._metrics_from_risk_snapshot(snapshot, strategy_id=strategy_id, stage=stage)
 
     async def _ensure_metrics_for_evaluate(self, world_id: str, payload: EvaluateRequest) -> None:
         strategy_id = str(payload.strategy_id or "").strip() or None
@@ -642,7 +664,9 @@ class WorldService:
                 strategy_id=sid,
                 stage=stage,
             )
-            hub_metrics = self._metrics_from_risk_snapshot(snapshot, strategy_id=sid) if snapshot else None
+            hub_metrics = (
+                self._metrics_from_risk_snapshot(snapshot, strategy_id=sid, stage=stage) if snapshot else None
+            )
 
             if base_metrics and hub_metrics:
                 derived = self._deep_merge(base_metrics, hub_metrics)
