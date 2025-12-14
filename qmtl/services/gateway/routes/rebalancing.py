@@ -328,7 +328,7 @@ def _resolve_venue_policies(request: Request) -> Mapping[str, VenuePolicy]:
 
 
 def _resolve_stage(request: Request) -> str | None:
-    return request.headers.get("X-Stage") or request.headers.get("X-Validation-Stage")
+    return request.headers.get("X-Stage") or request.headers.get("X-Validation-Stage") or "paper"
 
 
 def _resolve_risk_hub_client(

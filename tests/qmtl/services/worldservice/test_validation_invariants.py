@@ -50,6 +50,21 @@ def test_ensure_validation_health_computes_ratios_without_mutation():
     health = enriched["diagnostics"]["validation_health"]
     assert health["metric_coverage_ratio"] == pytest.approx(1.0)
     assert health["rules_executed_ratio"] == pytest.approx(len(rule_results) / DEFAULT_RULE_COUNT)
+    assert health["validation_error_count"] == 0
+
+
+def test_ensure_validation_health_counts_rule_errors():
+    metrics = _full_metrics()
+    rule_results = {
+        "sample": {"status": "fail", "reason_code": "rule_error"},
+        "performance": {"status": "warn", "reason_code": "missing_metric"},
+        "risk": {"status": "fail", "reason_code": "RULE_ERROR"},
+    }
+
+    enriched = ensure_validation_health(metrics, rule_results)
+
+    health = enriched["diagnostics"]["validation_health"]
+    assert health["validation_error_count"] == 2
 
 
 def test_check_invariants_flags_latest_live_failure():

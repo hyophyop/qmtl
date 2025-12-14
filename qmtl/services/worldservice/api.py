@@ -300,7 +300,12 @@ def create_app(
     risk_hub_ttl_default = (
         int(resolved_risk_hub_config.ttl_sec_default)
         if resolved_risk_hub_config is not None
-        else 10
+        else 900
+    )
+    risk_hub_ttl_max = (
+        int(resolved_risk_hub_config.ttl_sec_max)
+        if resolved_risk_hub_config is not None
+        else 86400
     )
     risk_hub_allowed_actors = (
         list(resolved_risk_hub_config.allowed_actors)
@@ -400,6 +405,7 @@ def create_app(
                         ),
                         dedupe_cache=getattr(risk_hub, "_cache", None),
                         ttl_sec_default=risk_hub_ttl_default,
+                        ttl_sec_max=risk_hub_ttl_max,
                         allowed_actors=risk_hub_allowed_actors,
                         allowed_stages=risk_hub_allowed_stages,
                         brokers=brokers,
@@ -486,6 +492,7 @@ def create_app(
             bus=bus_instance,
             expected_token=risk_hub_token,
             ttl_sec_default=risk_hub_ttl_default,
+            ttl_sec_max=risk_hub_ttl_max,
             allowed_actors=risk_hub_allowed_actors,
             allowed_stages=risk_hub_allowed_stages,
             schedule_extended_validation=lambda world_id: service._apply_extended_validation(  # type: ignore[attr-defined]

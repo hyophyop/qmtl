@@ -284,7 +284,8 @@ class RiskHubConfig:
     token: str | None = None
     inline_cov_threshold: int | None = 100
     stage: str | None = None  # optional default stage for producers
-    ttl_sec_default: int = 10
+    ttl_sec_default: int = 900
+    ttl_sec_max: int = 86400
     allowed_actors: list[str] | None = None
     allowed_stages: list[str] | None = None
     blob_store: RiskHubBlobStoreConfig = field(default_factory=RiskHubBlobStoreConfig)

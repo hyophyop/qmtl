@@ -455,6 +455,7 @@ class BenchmarkMetrics(BaseModel):
 class ValidationHealth(BaseModel):
     metric_coverage_ratio: float | None = None
     rules_executed_ratio: float | None = None
+    validation_error_count: int | None = None  # v1.5+
 
 
 class DiagnosticsMetrics(BaseModel):

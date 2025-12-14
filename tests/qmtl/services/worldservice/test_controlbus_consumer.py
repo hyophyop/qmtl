@@ -78,7 +78,7 @@ async def test_controlbus_consumer_hydrates_hub_and_triggers_callback():
             "as_of": "2025-01-01T00:00:00Z",
             "version": "v1",
             "weights": {"a": 1.0},
-            "provenance": {"actor": "gateway"},
+            "provenance": {"actor": "gateway", "stage": "paper"},
         },
     }
     msg = SimpleNamespace(value=json.dumps(data))
@@ -163,7 +163,7 @@ async def test_controlbus_consumer_skips_expired_snapshot():
             "weights": {"a": 1.0},
             "ttl_sec": 1,
             "created_at": old_created,
-            "provenance": {"actor": "gateway"},
+            "provenance": {"actor": "gateway", "stage": "paper"},
         },
     }
     msg = SimpleNamespace(value=json.dumps(data))
@@ -182,7 +182,7 @@ async def test_controlbus_consumer_skips_expired_snapshot():
     assert (
         get_metric_value(
             ws_metrics.risk_hub_snapshot_expired_total,
-            {"world_id": "w", "stage": "unknown"},
+            {"world_id": "w", "stage": "paper"},
         )
         == 1
     )

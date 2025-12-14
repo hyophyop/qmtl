@@ -54,6 +54,10 @@ related_issue: "hyophyop/qmtl#1750"
 - 평가 런이 완료되면:
   - WS가 **표준화된 지표 세트**(returns/PnL 요약, 리스크·성과 지표, 게이팅 사유 등)를 저장하고,
   - 이를 조회하는 **메트릭/스냅샷 API**를 제공한다.
+- (정렬) 평가 런은 “검증/리스크 입력 스냅샷”을 참조로 남긴다.
+  - 포트폴리오 스냅샷(가중치·공분산·실현 리턴·스트레스)은 별도의 SSOT인 `risk_signal_hub`에 저장하고,
+  - Evaluation Run에는 `risk_snapshot_version` 또는 `risk_snapshot_ref` 같은 링크/식별자를 포함해
+    WS/Exit Engine/모니터링이 동일한 `version/hash/as_of`를 공유하도록 한다.
 - Runner/CLI/툴은:
   - `Runner.submit` 결과에서 `evaluation_run_id`(또는 링크)를 받아,
   - WS의 **상태 조회 API**로 “지금 어느 단계인지” 확인하고,

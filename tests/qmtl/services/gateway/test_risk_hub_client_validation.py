@@ -22,7 +22,7 @@ def test_risk_hub_client_validates_weights_and_sets_hash():
 
 
 def test_risk_hub_client_rejects_bad_weights():
-    client = RiskHubClient(base_url="http://ws")
+    client = RiskHubClient(base_url="http://ws", actor="gateway", stage="paper")
     payload = {
         "as_of": "2025-01-01T00:00:00Z",
         "version": "v1",
@@ -39,6 +39,8 @@ def test_risk_hub_client_offloads_realized_returns_and_stress(tmp_path):
         base_url="http://ws",
         blob_store=store,
         inline_cov_threshold=1,
+        actor="gateway",
+        stage="paper",
     )
     payload = {
         "as_of": "2025-01-01T00:00:00Z",

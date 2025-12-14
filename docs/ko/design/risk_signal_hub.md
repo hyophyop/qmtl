@@ -14,9 +14,11 @@ status: draft
     WorldService/Exit Engine/모니터링이 동일한 스냅샷을 읽어 **일관된 검증·exit·모니터링**을 수행하도록 한다.
 
 연관 문서:
+- Core Loop × WorldService 로드맵: [core_loop_world_roadmap.md](core_loop_world_roadmap.md)
+- WorldService 평가 런 & 메트릭 API: [worldservice_evaluation_runs_and_metrics_api.md](worldservice_evaluation_runs_and_metrics_api.md)
 - World 검증 v1 구현 계획: [world_validation_v1_implementation_plan.md](world_validation_v1_implementation_plan.md) §6
 - Exit Engine 개요: [exit_engine_overview.md](exit_engine_overview.md)
-- World 검증 계층 설계: [world_validation_architecture.md](world_validation_architecture.md)
+- World Validation 아키텍처: [world_validation_architecture.md](world_validation_architecture.md)
 
 ---
 
@@ -27,6 +29,26 @@ status: draft
 - **재현성**: as_of/version/hash로 동일 스냅샷을 재현 가능.
 - **성능/확장성**: 이벤트 + 머티리얼라이즈드 뷰 형태, 큰 데이터는 ref/id로 전달.
 - **보안/감사**: 쓰기 주체 제한, 모든 변경에 감사/서명 가능하도록 메타 포함.
+
+### 0.1 Core Loop 로드맵과의 정렬(의도)
+
+이 문서의 `risk_signal_hub`는 “WorldService가 월드 정책/결정/검증을 일관되게 수행하기 위한 입력 SSOT”를 제공한다.
+
+- **Core Loop 로드맵(Phase 2)**: Evaluation Run은 “월드 내 제출/평가 사이클”을 추적하는 1급 개념이다. 이때 리스크/포트폴리오 스냅샷(가중치·공분산·실현 리턴·스트레스)은 본문에서 정의한 `risk_signal_hub`를 통해 **버전/해시/`as_of`가 고정된 참조(ref)**로 연결되는 것을 목표로 한다.
+- **Core Loop 로드맵(Phase 5)**: “검증 단계 고도화(리스크 컷/스트레스/데이터 신선도)”는 `risk_signal_hub`가 제공하는 최신/버전 고정 스냅샷을 입력으로 사용해 **WS/Exit Engine/모니터링이 동일한 근거 데이터**를 공유하도록 정렬한다.
+
+### 0.2 v1 기본 결정(권장 기본값)
+
+- TTL: `ttl_sec`의 기본값은 **900초(15m)** 로 한다. (`ttl_sec` 미지정 시 서버가 900으로 채움)
+  - 상한: 운영 실수 방지를 위해 과도한 TTL(예: `ttl_sec > 86400`)은 422로 거절한다.
+- 버전 충돌: `(world_id, version)`은 전역 유일을 전제로 하며, 충돌은 **기본 409(거절)** 로 처리한다. (덮어쓰기는 v1에서 금지)
+- 멱등/중복 제거(dedupe):
+  - `dedupe_key = (world_id, version, hash, actor, stage)`
+  - 동일 `dedupe_key` 재전송은 성공(멱등)으로 처리하고, 서버는 `risk_hub_snapshot_dedupe_total`로 계수한다.
+  - `(world_id, version, actor, stage)`가 같은데 `hash`가 달라지면 409로 거절한다. (같은 버전에서 내용이 바뀐 것으로 취급)
+- 대용량 ref(공분산/리턴): `*_ref`는 v1에서는 **opaque string(URI 또는 키)** 로 유지하되,
+  - 소비자는 `hash`/`version`/`as_of`로 무결성과 재현성을 검증할 수 있어야 한다.
+  - blob TTL은 snapshot TTL 이상이어야 한다(최소 `ttl_sec`).
 
 ---
 
@@ -63,8 +85,11 @@ status: draft
   - `provenance.actor` ← `X-Actor`
   - `provenance.stage` ← `X-Stage` (없으면 `unknown` 취급, dedupe/메트릭 분리 불가)
   - `provenance.reason/source/schema_version` 등은 프로듀서에서 설정
-- TTL: `ttl_sec` 기본 10초, 만료 스냅샷은 소비자가 거부하고 `risk_hub_snapshot_expired_total`에 계수.
-- Idempotency: `(world_id, version, hash, actor, stage)` 조합으로 dedupe 처리(`risk_hub_snapshot_dedupe_total`에 계수).
+- TTL: `ttl_sec` 기본 900초(15m). 만료 스냅샷은 소비자가 거부하고 `risk_hub_snapshot_expired_total`에 계수.
+- Idempotency/dedupe:
+  - `dedupe_key = (world_id, version, hash, actor, stage)` 조합으로 dedupe 처리(`risk_hub_snapshot_dedupe_total`에 계수).
+  - 동일 `dedupe_key` 재전송은 멱등 성공으로 처리한다.
+  - `(world_id, version)` 충돌은 기본 409로 거절한다(덮어쓰기 금지).
 
 ### 1.2 이벤트 목록
 - `PortfolioSnapshotUpdated` (필수 필드: world_id, version, as_of, weights, covariance_ref/hash, ttl)
@@ -152,7 +177,7 @@ status: draft
 ### 7.1 현재 코드 상태 대비 잔여 갭
 - 구현됨: 필수 검증/TTL/hash, Redis 캐시 최신 조회, Postgres 인덱스, blob-store(offload/ref) 지원, ControlBus 이벤트 소비/발행, bearer token 보호, gateway push 재시도/backoff.
 - 미구현/남은 것:
-  - 대용량 필드 표준 ref 스키마(s3/oss/redis)와 저장소 선택지 정의, 업로드 헬퍼.
+  - 대용량 ref 업로드/다운로드 헬퍼(프로듀서 공통)와 운영 수명/GC 정책(최소 TTL 정렬, pin/retention 옵션은 v1.5+).
   - 생산자 전면 적용: 체결/포지션 싱크·alloc 스냅샷 push + 재시도/ACL 일관화(리밸런스/activation 경로는 완료).
   - 운영 모니터링/알람: Prometheus 규칙 추가(`alert_rules.yml`에 RiskHubSnapshotStale/Missing), 런북 완성(`operations/risk_signal_hub_runbook.md`), metrics 노출(`risk_hub_snapshot_lag_seconds`, `risk_hub_snapshot_missing_total`), 헬스 스크립트(`scripts/risk_hub_monitor.py`).
   - 큐/ControlBus 워커 배포 예시와 idempotency 키: 미니멀 워커(`scripts/risk_hub_worker.py`) 제공, Celery/Arq 예시와 키 규칙은 운영 환경에 맞춰 확정 필요.

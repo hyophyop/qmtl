@@ -149,7 +149,7 @@ def build_blob_store(
             client = redis_sync.from_url(redis_dsn, decode_responses=True)
         if client is None:
             raise ValueError("redis blob store requires redis_client or redis_dsn")
-        ttl_final = cache_ttl if cache_ttl is not None else 10
+        ttl_final = cache_ttl if cache_ttl is not None else 900
         return RedisBlobStore(client, prefix=redis_prefix or "risk-blobs:", ttl=ttl_final)
 
     if normalized_type == "s3":

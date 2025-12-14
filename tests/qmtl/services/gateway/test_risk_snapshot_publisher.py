@@ -36,6 +36,8 @@ async def test_risk_hub_client_offloads_covariance(tmp_path):
         retries=0,
         blob_store=blob,
         inline_cov_threshold=1,
+        actor="gateway",
+        stage="paper",
     )
     await hub.publish_snapshot(
         "w",

@@ -101,8 +101,8 @@ def _build_risk_hub_client(
         return None
     inline_threshold = _resolve_risk_hub_inline(cfg)
     token = cfg.token if cfg else None
-    stage = cfg.stage if cfg else None
-    ttl_sec_default = int(cfg.ttl_sec_default) if cfg else 10
+    stage = (cfg.stage if cfg and cfg.stage else "paper")
+    ttl_sec_default = int(cfg.ttl_sec_default) if cfg else 900
     allowed_actors = list(cfg.allowed_actors) if cfg and cfg.allowed_actors is not None else None
     allowed_stages = list(cfg.allowed_stages) if cfg and cfg.allowed_stages is not None else None
     return RiskHubClient(

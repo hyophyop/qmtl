@@ -60,7 +60,8 @@ def normalize_and_validate_snapshot(
     *,
     actor: str | None = None,
     stage: str | None = None,
-    ttl_sec_default: int = 10,
+    ttl_sec_default: int = 900,
+    ttl_sec_max: int = 86400,
     allowed_actors: Sequence[str] | None = None,
     allowed_stages: Sequence[str] | None = None,
 ) -> dict[str, Any]:
@@ -109,6 +110,8 @@ def normalize_and_validate_snapshot(
             raise ValueError("ttl_sec must be an integer") from exc
         if ttl_int <= 0:
             raise ValueError("ttl_sec must be positive")
+        if ttl_sec_max is not None and ttl_int > int(ttl_sec_max):
+            raise ValueError(f"ttl_sec must be <= {int(ttl_sec_max)}")
         data["ttl_sec"] = ttl_int
 
     provenance = data.get("provenance")
@@ -130,10 +133,7 @@ def normalize_and_validate_snapshot(
     _validate_actor(actor_value, allowed_actors=allowed_actors)
 
     stage_value = str(provenance_map.get("stage") or "")
-    if allowed_stages is not None:
-        _validate_stage(stage_value, allowed_stages=allowed_stages)
-    elif stage_value:
-        _validate_stage(stage_value, allowed_stages=None)
+    _validate_stage(stage_value, allowed_stages=allowed_stages)
 
     if provenance_map:
         data["provenance"] = provenance_map

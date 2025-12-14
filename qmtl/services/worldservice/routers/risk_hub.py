@@ -11,7 +11,8 @@ from fastapi import APIRouter, HTTPException
 
 from qmtl.services.risk_hub_contract import normalize_and_validate_snapshot
 
-from ..risk_hub import PortfolioSnapshot, RiskSignalHub
+from .. import metrics as ws_metrics
+from ..risk_hub import PortfolioSnapshot, RiskSignalHub, RiskSnapshotConflictError
 from ..controlbus_producer import ControlBusProducer
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,8 @@ def create_risk_hub_router(
     bus: ControlBusProducer | None = None,
     schedule_extended_validation: Callable[[str], Awaitable[Any]] | Callable[[str], Any] | None = None,
     expected_token: str | None = None,
-    ttl_sec_default: int = 10,
+    ttl_sec_default: int = 900,
+    ttl_sec_max: int = 86400,
     allowed_actors: Sequence[str] | None = None,
     allowed_stages: Sequence[str] | None = None,
 ) -> APIRouter:
@@ -39,6 +41,8 @@ def create_risk_hub_router(
         if not actor:
             raise HTTPException(status_code=400, detail="missing actor header")
         stage = request.headers.get("X-Stage")
+        if not stage:
+            raise HTTPException(status_code=400, detail="missing stage header")
         if payload.get("world_id") and payload["world_id"] != world_id:
             raise HTTPException(status_code=400, detail="world_id mismatch")
         try:
@@ -48,6 +52,7 @@ def create_risk_hub_router(
                 actor=actor,
                 stage=stage,
                 ttl_sec_default=ttl_sec_default,
+                ttl_sec_max=ttl_sec_max,
                 allowed_actors=allowed_actors,
                 allowed_stages=allowed_stages,
             )
@@ -56,7 +61,23 @@ def create_risk_hub_router(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception as exc:  # pragma: no cover - defensive mapping
             raise HTTPException(status_code=422, detail=f"invalid snapshot: {exc}") from exc
-        await hub.upsert_snapshot(snapshot)
+        stage_label = str((snapshot.provenance or {}).get("stage") or stage or "unknown")
+        try:
+            deduped = await hub.upsert_snapshot(snapshot)
+        except RiskSnapshotConflictError as exc:
+            ws_metrics.record_risk_snapshot_failed(world_id, stage=stage_label)
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            detail = str(exc)
+            if "expired" in detail.lower():
+                ws_metrics.record_risk_snapshot_expired(world_id, stage=stage_label)
+            else:
+                ws_metrics.record_risk_snapshot_failed(world_id, stage=stage_label)
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if deduped:
+            ws_metrics.record_risk_snapshot_dedupe(world_id, stage=stage_label)
+        else:
+            ws_metrics.record_risk_snapshot_processed(world_id, stage=stage_label)
         if bus is not None:
             try:
                 await bus.publish_risk_snapshot_updated(world_id, snapshot.to_dict())
@@ -70,6 +91,17 @@ def create_risk_hub_router(
             except Exception:  # pragma: no cover - best-effort
                 logger.exception("Failed to schedule extended validation from risk hub update")
         return snapshot.to_dict()
+
+    @router.get("/worlds/{world_id}/snapshots/lookup")
+    async def lookup_snapshot(
+        world_id: str,
+        version: str | None = None,
+        as_of: str | None = None,
+    ) -> Dict[str, Any]:
+        snap = await hub.get_snapshot(world_id, version=version, as_of=as_of)
+        if snap is None:
+            raise HTTPException(status_code=404, detail="snapshot not found")
+        return snap.to_dict()
 
     @router.get("/worlds/{world_id}/snapshots/latest")
     async def get_latest_snapshot(world_id: str) -> Dict[str, Any]:

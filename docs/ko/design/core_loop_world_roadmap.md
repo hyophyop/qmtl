@@ -27,6 +27,9 @@ status: draft
 
 - 모드는 **사용자가 직접 선택하는 플래그**가 아니라,  
   **월드 정책과 WorldService가 결정하는 상태**에 가깝게 재정의한다.
+- “검증/리스크/exit에 필요한 입력 데이터”는 WorldService가 직접 계산하기보다,  
+  **스냅샷 SSOT(`risk_signal_hub`)를 통해 버전 고정(ref/hash/as_of) 형태로 공유**하는 방향을 지향한다.  
+  (관련: [Risk Signal Hub 설계](risk_signal_hub.md))
 - Core Loop의 표면은 다음 흐름을 기준으로 설계한다.
 
 ```text
@@ -127,6 +130,8 @@ status: draft
      - `SubmitResult`에 적어도 다음 중 하나를 포함한다.
        - `evaluation_run_id`
        - `evaluation_run_url` (상태/메트릭 조회용 링크)
+     - (권장) 평가 런 산출물에 “검증/리스크 입력 스냅샷”을 참조로 남긴다.
+       - 예: `risk_snapshot_version` 또는 `risk_snapshot_ref`(= `risk_signal_hub`의 `(world_id, version)` 혹은 URL)
    - 초기 단계에서는 여전히 “동기 파이프라인”으로 돌아도 괜찮지만,  
      **결과가 어디에 기록되는지**가 Evaluation Run으로 명확히 남아야 한다.
 
@@ -239,6 +244,9 @@ status: draft
        - 리스크 컷(`max_dd_Xd`, `ulcer_index`, tail risk proxy)
        - 시나리오/스트레스 테스트 결과 플래그
    - 이 블록은 “**live 후보군에 오르기 위한 최소 조건**”을 정의하는 곳으로 문서화한다.
+   - (정렬) 검증/스트레스/실현 리턴 등 “입력 스냅샷 SSOT”는 `risk_signal_hub`를 기준으로 읽는다.
+     - WS/Exit Engine/모니터링이 동일한 `version/hash/as_of` 스냅샷을 공유하도록 설계한다.
+     - 관련: [Risk Signal Hub 설계](risk_signal_hub.md)
 
 2. **live 승격 거버넌스 옵션**
 
@@ -286,4 +294,3 @@ status: draft
      제한된 환경에서만 opt‑in 하도록 계획한다.
 
 이 로드맵 하나만으로도 “Core Loop를 월드 중심으로 고도화한다”는 목적과 방향성을 잃지 않고, 각 단계에서 해야 할 일을 판단할 수 있어야 한다. 세부 API·스키마는 관련 설계 문서(`architecture/*.md`, `world/*.md`, `design/worldservice_evaluation_runs_and_metrics_api.md`)를 함께 참고하되, **“지금 이 변경이 전체 그림에서 어느 Phase인지”**는 항상 이 문서를 기준으로 정한다.
-
