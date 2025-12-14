@@ -6,10 +6,12 @@ import json
 import os
 import sys
 from pathlib import Path
+import time
 import uuid
 from typing import Any, Callable, Dict, List
 
 from qmtl.utils.i18n import _ as _t
+from qmtl.automation.campaign_executor import CampaignExecutor, CampaignRunConfig, LockFile, default_lock_path
 
 from .common import parse_preset_overrides
 from .http_client import http_get, http_post, http_delete
@@ -43,6 +45,8 @@ def cmd_world(argv: List[str]) -> int:
             "status",
             "run-status",
             "campaign-tick",
+            "campaign-execute",
+            "campaign-loop",
             "live-approve",
             "live-reject",
             "live-apply",
@@ -155,6 +159,38 @@ def cmd_world(argv: List[str]) -> int:
         help=_t("Print computed plan and exit (no apply)"),
     )
     parser.add_argument(
+        "--execute",
+        dest="execute",
+        action="store_true",
+        help=_t("Execute side-effecting actions (default: dry-run)"),
+    )
+    parser.add_argument(
+        "--execute-evaluate",
+        dest="execute_evaluate",
+        action="store_true",
+        help=_t("Allow executing evaluate actions (requires --execute)"),
+    )
+    parser.add_argument(
+        "--interval-sec",
+        dest="interval_sec",
+        type=int,
+        default=3600,
+        help=_t("Loop interval seconds for campaign-loop (default: 3600)"),
+    )
+    parser.add_argument(
+        "--max-iterations",
+        dest="max_iterations",
+        type=int,
+        default=0,
+        help=_t("Max loop iterations for campaign-loop (0=forever)"),
+    )
+    parser.add_argument(
+        "--lock-file",
+        dest="lock_file",
+        default=None,
+        help=_t("Optional lock file path for campaign-loop"),
+    )
+    parser.add_argument(
         "--force",
         dest="force",
         action="store_true",
@@ -230,6 +266,8 @@ def cmd_world(argv: List[str]) -> int:
         "status": lambda: _world_status(args),
         "run-status": lambda: _world_run_status(args),
         "campaign-tick": lambda: _world_campaign_tick(args),
+        "campaign-execute": lambda: _world_campaign_execute(args),
+        "campaign-loop": lambda: _world_campaign_loop(args),
         "live-approve": lambda: _world_live_override(args, status="approved"),
         "live-reject": lambda: _world_live_override(args, status="rejected"),
         "live-apply": lambda: _world_live_apply(args),
@@ -716,6 +754,115 @@ def _world_campaign_tick(args: argparse.Namespace) -> int:
             line += f" -> {method} {endpoint}"
         print(line)
     return 0
+
+
+def _world_campaign_execute(args: argparse.Namespace) -> int:
+    try:
+        world_id = _require_world_id(args)
+    except ValueError as exc:
+        print(_t("Error: {}").format(exc), file=sys.stderr)
+        return 1
+
+    base_url = (os.environ.get("QMTL_GATEWAY_URL") or os.environ.get("GATEWAY_URL") or "http://localhost:8000").rstrip("/")
+    executor = CampaignExecutor(base_url=base_url)
+    cfg = CampaignRunConfig(
+        world_id=world_id,
+        strategy_id=str(args.strategy_id) if args.strategy_id else None,
+        execute=bool(args.execute),
+        execute_evaluate=bool(args.execute and args.execute_evaluate),
+        base_url=base_url,
+    )
+    try:
+        tick, results = executor.execute_tick(cfg)
+    except Exception as exc:
+        print(_t("Error: {}").format(exc), file=sys.stderr)
+        return 1
+
+    actions = tick.get("actions") if isinstance(tick, dict) else None
+    action_count = len(actions) if isinstance(actions, list) else 0
+    print(_t("🧭 Campaign Execute"))
+    print("=" * 60)
+    print(f"World:    {world_id}")
+    if cfg.strategy_id:
+        print(f"Strategy: {cfg.strategy_id}")
+    print(f"Mode:     {'execute' if cfg.execute else 'dry-run'}")
+    print(f"Actions:  {action_count}")
+
+    failures = 0
+    for res in results:
+        detail = ""
+        if res.skipped and res.reason:
+            detail = f" (skipped: {res.reason})"
+        elif res.status_code is not None:
+            detail = f" (status={res.status_code})"
+        line = f"- {res.action}"
+        if res.method and res.path:
+            line += f" -> {res.method} {res.path}"
+        line += detail
+        print(line)
+        if not res.ok and not res.skipped:
+            failures += 1
+
+    return 0 if failures == 0 else 2
+
+
+def _world_campaign_loop(args: argparse.Namespace) -> int:
+    try:
+        world_id = _require_world_id(args)
+    except ValueError as exc:
+        print(_t("Error: {}").format(exc), file=sys.stderr)
+        return 1
+
+    base_url = (os.environ.get("QMTL_GATEWAY_URL") or os.environ.get("GATEWAY_URL") or "http://localhost:8000").rstrip("/")
+    executor = CampaignExecutor(base_url=base_url)
+
+    lock_path = Path(args.lock_file) if args.lock_file else default_lock_path(world_id)
+    try:
+        lock = LockFile(lock_path)
+        if not lock.acquire():
+            print(_t("Another campaign-loop is already running (lock: {})").format(lock_path), file=sys.stderr)
+            return 1
+    except Exception as exc:
+        print(_t("Error acquiring lock: {}").format(exc), file=sys.stderr)
+        return 1
+
+    interval = max(1, int(getattr(args, "interval_sec", 3600) or 3600))
+    max_iterations = max(0, int(getattr(args, "max_iterations", 0) or 0))
+    iteration = 0
+
+    print(_t("🧭 Campaign Loop"))
+    print("=" * 60)
+    print(f"World:    {world_id}")
+    if args.strategy_id:
+        print(f"Strategy: {args.strategy_id}")
+    print(f"Interval: {interval}s")
+    print(f"Mode:     {'execute' if bool(args.execute) else 'dry-run'}")
+    print(f"Lock:     {lock_path}")
+
+    try:
+        while True:
+            iteration += 1
+            cfg = CampaignRunConfig(
+                world_id=world_id,
+                strategy_id=str(args.strategy_id) if args.strategy_id else None,
+                execute=bool(args.execute),
+                execute_evaluate=bool(args.execute and args.execute_evaluate),
+                base_url=base_url,
+            )
+            try:
+                _, results = executor.execute_tick(cfg)
+                failed = sum(1 for r in results if (not r.ok and not r.skipped))
+                print(f"[{_utc_now_iso()}] iteration={iteration} results={len(results)} failed={failed}")
+            except Exception as exc:
+                print(f"[{_utc_now_iso()}] iteration={iteration} error={exc}", file=sys.stderr)
+
+            if max_iterations and iteration >= max_iterations:
+                return 0
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        lock.release()
 
 
 def _world_list() -> int:

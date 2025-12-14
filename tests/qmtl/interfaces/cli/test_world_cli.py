@@ -4,7 +4,119 @@ import json
 from pathlib import Path
 
 from qmtl.interfaces.cli import world
+from qmtl.automation.campaign_executor import ExecutionResult
 
+
+def test_campaign_execute_uses_executor(monkeypatch, capsys):
+    seen = {}
+
+    class FakeExecutor:
+        def __init__(self, *, base_url: str, timeout_sec: float = 10.0) -> None:
+            seen["base_url"] = base_url
+            seen["timeout_sec"] = timeout_sec
+
+        def execute_tick(self, cfg):
+            seen["cfg_execute"] = cfg.execute
+            seen["cfg_execute_evaluate"] = cfg.execute_evaluate
+            return (
+                {"actions": [{"action": "evaluate"}]},
+                [
+                    ExecutionResult(
+                        action="evaluate",
+                        method="POST",
+                        path="/worlds/w1/evaluate",
+                        status_code=None,
+                        ok=True,
+                        skipped=True,
+                        reason="dry_run",
+                    )
+                ],
+            )
+
+    monkeypatch.setattr(world, "CampaignExecutor", FakeExecutor)
+
+    exit_code = world.cmd_world(["campaign-execute", "w1", "--strategy", "s1"])
+
+    assert exit_code == 0
+    assert seen["cfg_execute"] is False
+    out = capsys.readouterr().out
+    assert "Campaign Execute" in out
+    assert "dry-run" in out
+
+
+def test_campaign_execute_can_execute(monkeypatch, capsys):
+    class FakeExecutor:
+        def __init__(self, *, base_url: str, timeout_sec: float = 10.0) -> None:
+            return None
+
+        def execute_tick(self, cfg):
+            assert cfg.execute is True
+            assert cfg.execute_evaluate is True
+            return (
+                {"actions": [{"action": "evaluate"}]},
+                [
+                    ExecutionResult(
+                        action="evaluate",
+                        method="POST",
+                        path="/worlds/w1/evaluate",
+                        status_code=200,
+                        ok=True,
+                        skipped=False,
+                    )
+                ],
+            )
+
+    monkeypatch.setattr(world, "CampaignExecutor", FakeExecutor)
+
+    exit_code = world.cmd_world(["campaign-execute", "w1", "--strategy", "s1", "--execute", "--execute-evaluate"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Mode:     execute" in out
+
+
+def test_campaign_loop_runs_iterations(monkeypatch, tmp_path: Path, capsys):
+    calls = {"iterations": 0}
+
+    class FakeLock:
+        def __init__(self, path):
+            self.path = path
+
+        def acquire(self) -> bool:
+            return True
+
+        def release(self) -> None:
+            return None
+
+    class FakeExecutor:
+        def __init__(self, *, base_url: str, timeout_sec: float = 10.0) -> None:
+            return None
+
+        def execute_tick(self, cfg):
+            calls["iterations"] += 1
+            return {"actions": []}, []
+
+    monkeypatch.setattr(world, "CampaignExecutor", FakeExecutor)
+    monkeypatch.setattr(world, "LockFile", FakeLock)
+    monkeypatch.setattr(world, "default_lock_path", lambda wid: tmp_path / f"{wid}.lock")
+    monkeypatch.setattr(world.time, "sleep", lambda _: None)
+
+    exit_code = world.cmd_world(
+        [
+            "campaign-loop",
+            "w1",
+            "--strategy",
+            "s1",
+            "--max-iterations",
+            "2",
+            "--interval-sec",
+            "1",
+        ]
+    )
+    assert exit_code == 0
+    assert calls["iterations"] == 2
+    out = capsys.readouterr().out
+    assert "Campaign Loop" in out
 
 def test_allocations_command_lists_snapshots(monkeypatch, capsys):
     calls = []

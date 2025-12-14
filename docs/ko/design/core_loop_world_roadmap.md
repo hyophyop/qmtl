@@ -215,6 +215,8 @@ status: draft
      - 예: “매일 1회 `/worlds/{id}/evaluate` 호출 → 정책 기반 승격 후보 계산 → `/apply`로 반영 또는 큐에 보관”.
      - 권장: 외부 스케줄러가 “다음에 무엇을 호출해야 하는지”를 얻기 위해, WorldService가 상태를 읽고 **추천 액션을 반환하는 tick 엔드포인트**를 제공한다(사이드이펙트 없음).
        - 예: `POST /worlds/{id}/campaign/tick` → `evaluate(backtest/paper)` 또는 `promotions/live/auto-apply` 호출 권장 목록 반환
+     - (옵션) 외부 엔진 없이도 qmtl 내부 실행기로 운영할 수 있다.
+       - 예: `qmtl world campaign-execute <world> [--execute]`, `qmtl world campaign-loop <world> --interval-sec 3600 [--execute]`
    - 이후 필요 시 WorldService 내부에 간단한 주기 평가 루프를 추가할 수 있다.
 
 4. **Runner/CLI와의 연결**
