@@ -2000,6 +2000,120 @@ async def test_risk_hub_latest_supports_expand_and_stage_filter(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_risk_hub_rejects_invalid_realized_returns_shape():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            resp = await client.post(
+                "/risk-hub/worlds/wr/snapshots",
+                headers={"X-Actor": "test-suite", "X-Stage": "paper"},
+                json={
+                    "as_of": "2025-01-01T00:00:00Z",
+                    "version": "v1",
+                    "weights": {"s1": 1.0},
+                    "realized_returns": "nope",
+                },
+            )
+            assert resp.status_code == 422
+            assert "realized_returns" in str(resp.json().get("detail", "")).lower()
+
+
+@pytest.mark.asyncio
+async def test_risk_hub_rejects_empty_realized_returns_series():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            resp = await client.post(
+                "/risk-hub/worlds/wr-empty/snapshots",
+                headers={"X-Actor": "test-suite", "X-Stage": "paper"},
+                json={
+                    "as_of": "2025-01-01T00:00:00Z",
+                    "version": "v1",
+                    "weights": {"s1": 1.0},
+                    "realized_returns": {"s1": []},
+                },
+            )
+            assert resp.status_code == 422
+            assert "non-empty" in str(resp.json().get("detail", "")).lower()
+
+
+@pytest.mark.asyncio
+async def test_risk_hub_rejects_empty_realized_returns_ref():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            resp = await client.post(
+                "/risk-hub/worlds/wr-ref/snapshots",
+                headers={"X-Actor": "test-suite", "X-Stage": "paper"},
+                json={
+                    "as_of": "2025-01-01T00:00:00Z",
+                    "version": "v1",
+                    "weights": {"s1": 1.0},
+                    "realized_returns_ref": " ",
+                },
+            )
+            assert resp.status_code == 422
+            assert "realized_returns_ref" in str(resp.json().get("detail", "")).lower()
+
+
+@pytest.mark.asyncio
+async def test_risk_hub_rejects_nonfinite_realized_returns_values():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            import json as _json
+            resp = await client.post(
+                "/risk-hub/worlds/wr2/snapshots",
+                headers={
+                    "X-Actor": "test-suite",
+                    "X-Stage": "paper",
+                    "Content-Type": "application/json",
+                },
+                content=_json.dumps(
+                    {
+                        "as_of": "2025-01-01T00:00:00Z",
+                        "version": "v1",
+                        "weights": {"s1": 1.0},
+                        "realized_returns": {"s1": [0.01, float("inf")]},
+                    },
+                    allow_nan=True,
+                ),
+            )
+            assert resp.status_code == 422
+            assert "non-finite" in str(resp.json().get("detail", "")).lower()
+
+
+@pytest.mark.asyncio
+async def test_risk_hub_offloads_realized_returns_and_expand_restores(tmp_path):
+    risk_hub = RiskSignalHub(blob_store=JsonBlobStore(tmp_path), inline_cov_threshold=1)
+    app = create_app(storage=Storage(), risk_hub=risk_hub)
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            create = await client.post(
+                "/risk-hub/worlds/wr3/snapshots",
+                headers={"X-Actor": "test-suite", "X-Stage": "paper"},
+                json={
+                    "as_of": "2025-01-01T00:00:00Z",
+                    "version": "v1",
+                    "weights": {"s1": 1.0},
+                    "realized_returns": {"s1": [0.01, -0.005]},
+                },
+            )
+            assert create.status_code == 200
+
+            latest_plain = await client.get("/risk-hub/worlds/wr3/snapshots/latest")
+            assert latest_plain.status_code == 200
+            plain = latest_plain.json()
+            assert plain.get("realized_returns") is None
+            assert plain.get("realized_returns_ref")
+
+            latest = await client.get("/risk-hub/worlds/wr3/snapshots/latest", params={"expand": "true"})
+            assert latest.status_code == 200
+            payload = latest.json()
+            assert payload.get("realized_returns") == {"s1": [0.01, -0.005]}
+
+
+@pytest.mark.asyncio
 async def test_evaluate_sources_metrics_from_latest_run_when_missing():
     app = create_app(storage=Storage())
     async with httpx.ASGITransport(app=app) as asgi:

@@ -47,7 +47,7 @@ flowchart LR
 ## 3. 데이터 계약 (요약)
 
 - 필수: `world_id`, `as_of`(ISO), `version`, `weights`(합≈1.0)
-- 선택: `covariance`(작을 때 inline) 또는 `covariance_ref`, `realized_returns_ref`, `stress`, `constraints`, `ttl_sec`, `provenance`, `hash`
+- 선택: `covariance`(작을 때 inline) 또는 `covariance_ref`, `realized_returns` 또는 `realized_returns_ref`, `stress`, `constraints`, `ttl_sec`, `provenance`, `hash`
 - 검증: 가중치 합>0 및 1.0±1e-3, `as_of` ISO, TTL 만료시 캐시/조회에서 제외
 
 ### 3.1 v1 계약(운영 기본값)
@@ -63,6 +63,21 @@ flowchart LR
     - `expand=true`: `covariance_ref`/`realized_returns_ref`/`stress_ref`를 가능한 경우 해석해 inline 필드(`covariance`, `realized_returns`, `stress`)를 함께 반환한다.
   - `GET /risk-hub/worlds/{world_id}/snapshots[?limit=...&stage=...&actor=...&expand=true]` (list)
   - `GET /risk-hub/worlds/{world_id}/snapshots/lookup?version=...|as_of=...`
+
+### 3.2 `realized_returns` 계약 (v1, 저장 전용)
+
+`realized_returns`는 “실현 수익률 시계열”을 스냅샷에 **저장**하기 위한 필드다. Hub는 `realized_returns`를 **계산/집계하지 않고**, 프로듀서(Gateway 등)가 계산한 결과를 저장한다.
+
+- 권장 shape(전략별):
+  - `realized_returns: { "<strategy_id>": [r1, r2, ...], ... }`
+- 값 제약:
+  - 각 원소는 **유한(finite) float** 이어야 한다. (`NaN/±Inf` 금지)
+  - 빈 시계열은 허용하지 않는다. (최소 1개 이상)
+- 순서/의미:
+  - 배열의 순서는 “시간 순서(오래된 → 최신)”로 해석한다.
+  - 리턴의 단위/주기(일간/바 단위 등), 비용 반영 여부(net/gross) 같은 의미론은 **프로듀서 계약**이며, `provenance` 또는 운영 문서로 고정한다.
+- 크기/전송:
+  - 큰 페이로드는 `realized_returns_ref`로 offload 하고, 조회 시 `expand=true`로 inline 데이터를 요청한다.
 
 ---
 

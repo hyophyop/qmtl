@@ -9,7 +9,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
-from qmtl.services.risk_hub_contract import stable_snapshot_hash
+from qmtl.services.risk_hub_contract import (
+    DEFAULT_REALIZED_RETURNS_MAX_POINTS_PER_SERIES,
+    DEFAULT_REALIZED_RETURNS_MAX_POINTS_TOTAL,
+    normalize_realized_returns,
+    stable_snapshot_hash,
+)
 from .blob_store import BlobStore
 
 
@@ -24,6 +29,7 @@ def _iso_now() -> str:
         .isoformat()
         .replace("+00:00", "Z")
     )
+
 
 @dataclass
 class PortfolioSnapshot:
@@ -307,6 +313,16 @@ class RiskSignalHub:
             # allow slight drift but enforce normalized input
             raise ValueError("weights must sum to ~1.0")
         _ = self._parse_iso(snapshot.as_of)  # raises on invalid
+        if snapshot.realized_returns_ref is not None:
+            if not isinstance(snapshot.realized_returns_ref, str) or not snapshot.realized_returns_ref.strip():
+                raise ValueError("realized_returns_ref must be a non-empty string when provided")
+            snapshot.realized_returns_ref = snapshot.realized_returns_ref.strip()
+        if snapshot.realized_returns is not None:
+            snapshot.realized_returns = normalize_realized_returns(
+                snapshot.realized_returns,
+                max_points_per_series=DEFAULT_REALIZED_RETURNS_MAX_POINTS_PER_SERIES,
+                max_points_total=DEFAULT_REALIZED_RETURNS_MAX_POINTS_TOTAL,
+            )
 
     @staticmethod
     def _with_hash(snapshot: PortfolioSnapshot) -> PortfolioSnapshot:
@@ -404,7 +420,11 @@ class RiskSignalHub:
 
         realized = payload.get("realized_returns")
         if payload.get("realized_returns_ref") is None and realized is not None:
-            if isinstance(realized, Mapping) and len(realized) > self._inline_cov_threshold:
+            threshold = int(self._inline_cov_threshold)
+            points = self._realized_returns_points(realized)
+            if points is None:
+                points = len(realized) if isinstance(realized, Mapping) else None
+            if points is not None and points > threshold:
                 ref = self._blob_store.write(f"{version}-realized", realized)
                 payload["realized_returns_ref"] = ref
                 payload.pop("realized_returns", None)
@@ -419,6 +439,18 @@ class RiskSignalHub:
                 changed = True
 
         return PortfolioSnapshot.from_payload(payload) if changed else snapshot
+
+    @staticmethod
+    def _realized_returns_points(realized: Any) -> int | None:
+        if isinstance(realized, Mapping):
+            total = 0
+            for value in realized.values():
+                if isinstance(value, (list, tuple)):
+                    total += len(value)
+            return total if total else None
+        if isinstance(realized, (list, tuple)):
+            return len(realized)
+        return None
 
     async def _enforce_version_idempotency(self, snapshot: PortfolioSnapshot) -> bool:
         if self._repository is None:

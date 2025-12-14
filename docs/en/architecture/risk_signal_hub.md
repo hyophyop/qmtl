@@ -46,7 +46,7 @@ flowchart LR
 ## 3. Data Contract (Summary)
 
 - Required: `world_id`, `as_of` (ISO), `version`, `weights` (sum≈1.0)
-- Optional: `covariance` (inline when small) or `covariance_ref`, `realized_returns_ref`, `stress`, `constraints`, `ttl_sec`, `provenance`, `hash`
+- Optional: `covariance` (inline when small) or `covariance_ref`, `realized_returns` or `realized_returns_ref`, `stress`, `constraints`, `ttl_sec`, `provenance`, `hash`
 - Validation: weight sum > 0 and within 1.0±1e-3, ISO `as_of`, TTL expiration excludes stale snapshots from cache/lookups.
 
 ### 3.1 v1 Contract Defaults
@@ -62,6 +62,21 @@ flowchart LR
     - `expand=true`: resolves `covariance_ref` / `realized_returns_ref` / `stress_ref` when possible and returns inline fields (`covariance`, `realized_returns`, `stress`).
   - `GET /risk-hub/worlds/{world_id}/snapshots[?limit=...&stage=...&actor=...&expand=true]` (list)
   - `GET /risk-hub/worlds/{world_id}/snapshots/lookup?version=...|as_of=...`
+
+### 3.2 `realized_returns` Contract (v1, storage-only)
+
+`realized_returns` stores a “realized return time series” on the snapshot. The hub **does not compute/aggregate** `realized_returns`; producers (e.g., Gateway) compute it and the hub stores it.
+
+- Recommended shape (per strategy):
+  - `realized_returns: { "<strategy_id>": [r1, r2, ...], ... }`
+- Value constraints:
+  - Each element must be a **finite float**. (`NaN/±Inf` not allowed)
+  - Empty series are not allowed (must contain at least 1 point).
+- Ordering/semantics:
+  - The array order is interpreted as “time order (oldest → newest)”.
+  - Semantics such as return frequency (daily vs bar) and whether costs are included (net/gross) are a **producer contract** and should be fixed via `provenance` or operational docs.
+- Size/transport:
+  - Large payloads should be offloaded via `realized_returns_ref`, and consumers should request inline data via `expand=true`.
 
 ---
 

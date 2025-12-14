@@ -8,11 +8,16 @@ hashing rules.
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from typing import Any
 
 from qmtl.foundation.common.hashutils import hash_bytes
+
+
+DEFAULT_REALIZED_RETURNS_MAX_POINTS_PER_SERIES = 200_000
+DEFAULT_REALIZED_RETURNS_MAX_POINTS_TOTAL = 1_000_000
 
 
 def stable_snapshot_hash(payload: Mapping[str, Any]) -> str:
@@ -114,6 +119,12 @@ def normalize_and_validate_snapshot(
             raise ValueError(f"ttl_sec must be <= {int(ttl_sec_max)}")
         data["ttl_sec"] = ttl_int
 
+    _normalize_and_validate_realized_returns(
+        data,
+        max_points_per_series=DEFAULT_REALIZED_RETURNS_MAX_POINTS_PER_SERIES,
+        max_points_total=DEFAULT_REALIZED_RETURNS_MAX_POINTS_TOTAL,
+    )
+
     provenance = data.get("provenance")
     provenance_map: dict[str, Any] = dict(provenance) if isinstance(provenance, Mapping) else {}
 
@@ -149,6 +160,94 @@ def normalize_and_validate_snapshot(
     return data
 
 
+def _normalize_and_validate_realized_returns(
+    data: dict[str, Any],
+    *,
+    max_points_per_series: int,
+    max_points_total: int,
+) -> None:
+    realized_ref = data.get("realized_returns_ref")
+    if realized_ref is not None and not (isinstance(realized_ref, str) and realized_ref.strip()):
+        raise ValueError("realized_returns_ref must be a non-empty string when provided")
+    if isinstance(realized_ref, str):
+        data["realized_returns_ref"] = realized_ref.strip()
+
+    realized = data.get("realized_returns")
+    if realized is None:
+        return
+
+    normalized = normalize_realized_returns(
+        realized,
+        max_points_per_series=max_points_per_series,
+        max_points_total=max_points_total,
+    )
+    data["realized_returns"] = normalized
+
+
+def normalize_realized_returns(
+    realized: Any,
+    *,
+    max_points_per_series: int = DEFAULT_REALIZED_RETURNS_MAX_POINTS_PER_SERIES,
+    max_points_total: int = DEFAULT_REALIZED_RETURNS_MAX_POINTS_TOTAL,
+) -> dict[str, list[float]] | list[float]:
+    """Validate and normalize realized_returns payload into JSON-stable primitives.
+
+    Accepted shapes:
+    - ``{"<strategy_id>": [r1, r2, ...], ...}``
+    - ``[r1, r2, ...]`` (single series; discouraged but supported for compatibility)
+
+    Normalization:
+    - Values are coerced to finite floats.
+    - Non-finite values and booleans are rejected.
+    - Hard caps prevent accidental multi-megabyte inline payloads.
+    """
+
+    if isinstance(realized, Mapping):
+        normalized: dict[str, list[float]] = {}
+        total_points = 0
+        for raw_key, raw_series in realized.items():
+            key = str(raw_key or "").strip()
+            if not key:
+                raise ValueError("realized_returns keys must be non-empty strings")
+            series = _normalize_float_series(raw_series, context=f"realized_returns[{key}]")
+            if len(series) > int(max_points_per_series):
+                raise ValueError(f"realized_returns series too long for '{key}'")
+            total_points += len(series)
+            if total_points > int(max_points_total):
+                raise ValueError("realized_returns total points exceed limit")
+            normalized[key] = series
+        if not normalized:
+            raise ValueError("realized_returns must be non-empty when provided")
+        return normalized
+
+    if isinstance(realized, Sequence) and not isinstance(realized, (str, bytes, bytearray)):
+        series = _normalize_float_series(realized, context="realized_returns")
+        if len(series) > int(max_points_total):
+            raise ValueError("realized_returns series too long")
+        return series
+
+    raise ValueError("realized_returns must be a mapping[str, sequence[float]] or a sequence[float]")
+
+
+def _normalize_float_series(raw: Any, *, context: str) -> list[float]:
+    if not isinstance(raw, Sequence) or isinstance(raw, (str, bytes, bytearray)):
+        raise ValueError(f"{context} must be a sequence of finite floats")
+    normalized: list[float] = []
+    for value in raw:
+        if isinstance(value, bool):
+            raise ValueError(f"{context} contains invalid boolean value")
+        try:
+            candidate = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{context} contains non-numeric value") from exc
+        if not math.isfinite(candidate):
+            raise ValueError(f"{context} contains non-finite value")
+        normalized.append(candidate)
+    if not normalized:
+        raise ValueError(f"{context} must be non-empty")
+    return normalized
+
+
 def _validate_actor(actor: str, *, allowed_actors: Sequence[str] | None) -> None:
     if not actor:
         raise ValueError("actor is required")
@@ -176,7 +275,10 @@ def _validate_iso_timestamp(value: str) -> None:
 
 
 __all__ = [
+    "DEFAULT_REALIZED_RETURNS_MAX_POINTS_PER_SERIES",
+    "DEFAULT_REALIZED_RETURNS_MAX_POINTS_TOTAL",
     "normalize_and_validate_snapshot",
+    "normalize_realized_returns",
     "risk_snapshot_dedupe_key",
     "stable_snapshot_hash",
 ]
