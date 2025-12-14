@@ -197,7 +197,7 @@ status: draft
    - `world/world.md`의 정책 예시에 다음과 같은 필드를 추가·정의한다 (이름은 조정 가능).
      - `campaign.backtest.window`: 최소 backtest 관찰 기간 (예: `180d`)
      - `campaign.paper.window`: 최소 paper 관찰 기간
-     - `campaign.common.min_trades_per_window`, `min_sample_days` 등
+     - `campaign.common.min_trades_total`, `min_sample_days` 등
    - 각 필드는 “해당 단계에서 최소로 관찰되어야 하는 PnL/지표 윈도우”로 설명한다.
 
 2. **캠페인 상태 모델**
@@ -264,13 +264,13 @@ Phase 5의 “강한 검증/리스크 컷/스트레스”는 입력 데이터가
 
 1. **월드 검증 단계 고도화**
 
-   - World 정책 DSL에서 **검증 전용 필드**를 명시적으로 구분한다.
-     - 예: `validation:` 블록 아래에
-       - 데이터 통화성(데이터 랙, missing coverage 비율)
-       - 샘플 충분성(`sample_days`, `trades_60d`, `notional_turnover`)
-       - 리스크 컷(`max_dd_Xd`, `ulcer_index`, tail risk proxy)
-       - 시나리오/스트레스 테스트 결과 플래그
-   - 이 블록은 “**live 후보군에 오르기 위한 최소 조건**”을 정의하는 곳으로 문서화한다.
+   - World 정책 DSL에서 “검증 게이트(= live 후보군에 오르기 위한 최소 조건)”는 별도 신규 블록을 만들기보다,
+     현재 WorldService가 사용하는 스키마(`thresholds`, `validation_profiles`, `validation(on_error/on_missing_metric)`)로 표현하는 것을 우선한다.
+     - 예:
+       - 데이터 통화성: `thresholds`의 `data_currency.*` 룰(필수 metric 존재/신선도 등)
+       - 샘플/성과/리스크/강건성: `validation_profiles`(stage별 프로파일) + `thresholds`
+       - 스트레스/드리프트/라이브 모니터링: `stress`, `paper_shadow_consistency`, `live_monitoring`
+   - 이 검증 게이트들은 “**live 후보군에 오르기 위한 최소 조건**”을 정의하는 곳으로 문서화한다.
    - (정렬) 검증/스트레스/실현 리턴 등 “입력 스냅샷 SSOT”는 `risk_signal_hub`를 기준으로 읽는다.
      - WS/Exit Engine/모니터링이 동일한 `version/hash/as_of` 스냅샷을 공유하도록 설계한다.
      - 관련: [Risk Signal Hub 아키텍처](../architecture/risk_signal_hub.md)

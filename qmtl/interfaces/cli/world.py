@@ -141,6 +141,12 @@ def cmd_world(argv: List[str]) -> int:
         help=_t("Evaluation run id (or 'latest')"),
     )
     parser.add_argument(
+        "--metrics",
+        dest="show_metrics",
+        action="store_true",
+        help=_t("Fetch and print evaluation run metrics (requires evaluated run)"),
+    )
+    parser.add_argument(
         "--comment",
         dest="comment",
         default=None,
@@ -388,6 +394,44 @@ def _world_run_status(args: argparse.Namespace) -> int:
             print(f"Override: {summary.get('override_status')}")
         if validation:
             print(f"Policy:   {validation.get('policy_version')}")
+
+        if bool(getattr(args, "show_metrics", False)):
+            status_code, metrics_payload = http_get(
+                f"/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/metrics"
+            )
+            if status_code == 409:
+                print()
+                print(_t("Metrics: not available (run not evaluated yet)"))
+                return 0
+            if status_code >= 400 or status_code == 0 or not isinstance(metrics_payload, dict):
+                err = metrics_payload.get("detail") if isinstance(metrics_payload, dict) else status_code
+                print()
+                print(_t("Error fetching metrics: {}").format(err), file=sys.stderr)
+                return 1
+
+            metrics_obj = metrics_payload.get("metrics")
+            metrics: dict[str, Any] = dict(metrics_obj) if isinstance(metrics_obj, dict) else {}
+            returns_obj = metrics.get("returns")
+            returns: dict[str, Any] = dict(returns_obj) if isinstance(returns_obj, dict) else {}
+            sample_obj = metrics.get("sample")
+            sample: dict[str, Any] = dict(sample_obj) if isinstance(sample_obj, dict) else {}
+
+            sharpe = returns.get("sharpe")
+            max_dd = returns.get("max_drawdown")
+            history_years = sample.get("effective_history_years")
+            trades_total = sample.get("n_trades_total")
+
+            print()
+            print(_t("📈 Metrics"))
+            print("=" * 50)
+            if sharpe is not None:
+                print(f"Sharpe:   {sharpe}")
+            if max_dd is not None:
+                print(f"Max DD:   {max_dd}")
+            if history_years is not None:
+                print(f"HistoryY: {history_years}")
+            if trades_total is not None:
+                print(f"Trades:   {trades_total}")
         return 0
 
     print(record)

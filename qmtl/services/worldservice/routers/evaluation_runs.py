@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from ..schemas import ExPostFailureRecord, EvaluationOverride, EvaluationRunHistoryItem, EvaluationRunModel
+from ..schemas import (
+    EvaluationRunMetricsResponse,
+    ExPostFailureRecord,
+    EvaluationOverride,
+    EvaluationRunHistoryItem,
+    EvaluationRunModel,
+)
 from ..services import WorldService
 
 
@@ -26,6 +32,42 @@ def create_evaluation_runs_router(service: WorldService) -> APIRouter:
         if record is None:
             raise HTTPException(status_code=404, detail="evaluation run not found")
         return EvaluationRunModel(**record)
+
+    @router.get(
+        "/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/metrics",
+        response_model=EvaluationRunMetricsResponse,
+    )
+    async def get_evaluation_run_metrics(
+        world_id: str, strategy_id: str, run_id: str
+    ) -> EvaluationRunMetricsResponse:
+        record = await service.store.get_evaluation_run(world_id, strategy_id, run_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="evaluation run not found")
+        run = EvaluationRunModel(**record)
+        metrics_present = (
+            run.metrics is not None
+            and bool(run.metrics.model_dump(exclude_none=True))
+        )
+        if not metrics_present:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "E_RUN_NOT_EVALUATED",
+                    "message": "evaluation run has no metrics yet",
+                },
+            )
+        return EvaluationRunMetricsResponse(
+            world_id=run.world_id,
+            strategy_id=run.strategy_id,
+            run_id=run.run_id,
+            stage=run.stage,
+            risk_tier=run.risk_tier,
+            metrics=run.metrics,
+            validation=run.validation,
+            summary=run.summary,
+            created_at=run.created_at,
+            updated_at=run.updated_at,
+        )
 
     @router.get(
         "/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/history",
