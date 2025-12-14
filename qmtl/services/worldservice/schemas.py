@@ -640,10 +640,18 @@ class EvaluationSummary(BaseModel):
     override_timestamp: str | None = None
 
 
+class EvaluationRunLinks(BaseModel):
+    """Hyperlinks for navigating evaluation-run related resources."""
+
+    metrics: str | None = None
+    history: str | None = None
+
+
 class EvaluationRunModel(BaseModel):
     world_id: str
     strategy_id: str
     run_id: str
+    status: Literal["evaluating", "evaluated"] | str | None = None
     stage: Literal["backtest", "paper", "live"] | str
     risk_tier: Literal["high", "medium", "low"] | str
     model_card_version: str | None = None
@@ -652,6 +660,7 @@ class EvaluationRunModel(BaseModel):
     summary: EvaluationSummary | None = None
     created_at: str | None = None
     updated_at: str | None = None
+    links: EvaluationRunLinks | None = None
 
 
 class EvaluationRunMetricsResponse(BaseModel):
@@ -660,6 +669,7 @@ class EvaluationRunMetricsResponse(BaseModel):
     world_id: str
     strategy_id: str
     run_id: str
+    status: Literal["evaluating", "evaluated"] | str | None = None
     stage: Literal["backtest", "paper", "live"] | str
     risk_tier: Literal["high", "medium", "low"] | str
     metrics: EvaluationMetrics
@@ -667,6 +677,7 @@ class EvaluationRunMetricsResponse(BaseModel):
     summary: EvaluationSummary | None = None
     created_at: str | None = None
     updated_at: str | None = None
+    links: EvaluationRunLinks | None = None
 
 
 class EvaluationRunHistoryItem(BaseModel):
@@ -742,6 +753,7 @@ __all__ = [
     'RuleResultModel',
     'EvaluationValidation',
     'EvaluationSummary',
+    'EvaluationRunLinks',
     'EvaluationRunModel',
     'EvaluationRunMetricsResponse',
     'EvaluationRunHistoryItem',

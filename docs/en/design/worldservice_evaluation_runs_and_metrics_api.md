@@ -145,7 +145,7 @@ This section outlines REST-style endpoints for evaluation run status, metrics, a
 GET /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}
 ```
 
-- Response (sketch):
+- Response (close to current implementation):
 
 ```json
 {
@@ -153,13 +153,13 @@ GET /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}
   "strategy_id": "beta_mkt_simple",
   "run_id": "2025-12-02T10:00:00Z-uuid",
   "status": "evaluated",
+  "stage": "paper",
+  "risk_tier": "low",
   "created_at": "2025-12-02T10:00:01Z",
   "updated_at": "2025-12-02T10:05:30Z",
-  "effective_mode": "validate",
-  "activation_state": "pending",
   "links": {
     "metrics": "/worlds/alpha_world/strategies/beta_mkt_simple/runs/2025-.../metrics",
-    "snapshot": "/worlds/alpha_world/snapshots/alpha_world-beta_mkt_simple-2025-..."
+    "history": "/worlds/alpha_world/strategies/beta_mkt_simple/runs/2025-.../history"
   }
 }
 ```
@@ -168,7 +168,7 @@ GET /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}
   - `SubmitResult.evaluation_run_url` points here, so tools can see status and discover metrics/snapshot URLs.
   - CLI may provide `qmtl world run-status --world alpha_world --strategy beta_mkt_simple --run latest`.
 
-### 3.2 Metrics API (draft)
+### 3.2 Metrics API (current implementation)
 
 - Purpose: fetch the **world-level evaluation metrics that WS owns and serves as a canonical contract**.
   - In an initial implementation, Runner/ValidationPipeline compute metrics/PnL and pass them to WS, which then uses them as the basis for policy evaluation and storage.
@@ -180,7 +180,7 @@ GET /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}
 GET /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/metrics
 ```
 
-- Response (sketch; to be aligned with existing WS schemas):
+- Response (summary; actual metrics fields follow the `EvaluationMetrics` schema):
 
 ```json
 {
@@ -188,37 +188,18 @@ GET /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/metrics
   "strategy_id": "beta_mkt_simple",
   "run_id": "2025-12-02T10:00:00Z-uuid",
   "status": "evaluated",
-  "evaluation": {
-    "returns": {
-      "sample_count": 1440,
-      "window": "2025-12-01T00:00:00Z/2025-12-02T00:00:00Z",
-      "source": "auto_returns",
-      "sharpe": 1.8,
-      "max_drawdown": -0.12,
-      "volatility": 0.25,
-      "win_rate": 0.54,
-      "profit_factor": 1.7
-    },
-    "pnl": {
-      "sample_count": 1440,
-      "reference_currency": "USD",
-      "pnl_total": 1234.5,
-      "pnl_max_drawdown": -230.0,
-      "pnl_equity_peak": 10234.0
-    },
-    "risk": {
-      "turnover_proxy": 0.8,
-      "exposure_bounds_ok": true,
-      "concentration_warnings": []
-    },
-    "gating": {
-      "verdict": "valid",
-      "violations": [],
-      "hysteresis": {
-        "promote_after": 5,
-        "demote_after": 3
-      }
-    }
+  "stage": "paper",
+  "risk_tier": "low",
+  "metrics": {
+    "returns": { "sharpe": 1.8, "max_drawdown": -0.12 },
+    "sample": { "effective_history_years": 0.5, "n_trades_total": 120 },
+    "risk": { "adv_utilization_p95": 0.2, "participation_rate_p95": 0.15 }
+  },
+  "validation": { "policy_version": "1", "ruleset_hash": "blake3:..." },
+  "summary": { "status": "pass", "recommended_stage": "paper_ok_live_candidate" },
+  "links": {
+    "metrics": "/worlds/alpha_world/strategies/beta_mkt_simple/runs/2025-.../metrics",
+    "history": "/worlds/alpha_world/strategies/beta_mkt_simple/runs/2025-.../history"
   }
 }
 ```
@@ -228,7 +209,7 @@ This shape can serve as the **canonical “world evaluation metrics snapshot”*
 !!! note "Call timing and error semantics"
     - When calling `GET /runs/{run_id}/metrics`:
       - If the specified `evaluation_run_id` does not exist, the service SHOULD return `404 Not Found`.
-      - If the run exists but is not yet in `evaluated` status, the service SHOULD return `409 Conflict` with a machine-readable code such as `"error": "E_RUN_NOT_EVALUATED"`.
+      - If the run exists but is not yet in `evaluated` status, return `409 Conflict` with a machine-readable code like `detail.code=E_RUN_NOT_EVALUATED`.
     - Clients are expected to first query `/runs/{run_id}` for status and only call the metrics endpoint once `status=evaluated`.
 
 ### 3.3 Snapshot API (draft)
