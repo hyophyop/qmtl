@@ -858,6 +858,61 @@ async def test_campaign_status_endpoint_reports_phase_and_progress():
 
 
 @pytest.mark.asyncio
+async def test_campaign_tick_emits_recommended_actions():
+    store = Storage()
+    app = create_app(storage=store)
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wtick", "name": "Tick World"})
+            policy_resp = await client.post(
+                "/worlds/wtick/policies",
+                json={
+                    "policy": {
+                        "campaign": {"backtest": {"window": "0d"}, "paper": {"window": "0d"}},
+                        "governance": {"live_promotion": {"mode": "auto_apply"}},
+                        "thresholds": {"sharpe": {"metric": "sharpe", "min": 0.0}},
+                    }
+                },
+            )
+            assert policy_resp.status_code == 200
+            default_resp = await client.post("/worlds/wtick/set-default", json={"version": 1})
+            assert default_resp.status_code == 200
+
+            await store.record_evaluation_run(
+                "wtick",
+                "s1",
+                "bt-1",
+                stage="backtest",
+                risk_tier="low",
+                metrics={"returns": {"sharpe": 1.0}, "sample": {"effective_history_years": 0.01, "n_trades_total": 10}},
+                summary={"status": "pass", "active_set": ["s1"]},
+                created_at="2025-01-01T00:00:00Z",
+                updated_at="2025-01-01T00:00:00Z",
+            )
+            await store.record_evaluation_run(
+                "wtick",
+                "s2",
+                "paper-1",
+                stage="paper",
+                risk_tier="low",
+                metrics={"returns": {"sharpe": 1.0}, "sample": {"effective_history_years": 0.01, "n_trades_total": 10}},
+                summary={"status": "pass", "active_set": ["s2"]},
+                created_at="2025-01-02T00:00:00Z",
+                updated_at="2025-01-02T00:00:00Z",
+            )
+
+            resp = await client.post("/worlds/wtick/campaign/tick", params={})
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["world_id"] == "wtick"
+            actions = body["actions"]
+            assert isinstance(actions, list)
+            action_names = {a.get("action") for a in actions if isinstance(a, dict)}
+            assert "evaluate" in action_names
+            assert "auto_apply_live" in action_names
+
+
+@pytest.mark.asyncio
 async def test_live_promotion_apply_enforces_max_live_slots():
     store = Storage()
     app = create_app(storage=store)

@@ -13,6 +13,7 @@ from qmtl.utils.i18n import _ as _t
 
 from .common import parse_preset_overrides
 from .http_client import http_get, http_post, http_delete
+from .http_client import http_request
 
 
 def cmd_world(argv: List[str]) -> int:
@@ -41,6 +42,7 @@ def cmd_world(argv: List[str]) -> int:
             "delete",
             "status",
             "run-status",
+            "campaign-tick",
             "live-approve",
             "live-reject",
             "live-apply",
@@ -227,6 +229,7 @@ def cmd_world(argv: List[str]) -> int:
         "rebalance-apply": lambda: _rebalance(args, apply=True),
         "status": lambda: _world_status(args),
         "run-status": lambda: _world_run_status(args),
+        "campaign-tick": lambda: _world_campaign_tick(args),
         "live-approve": lambda: _world_live_override(args, status="approved"),
         "live-reject": lambda: _world_live_override(args, status="rejected"),
         "live-apply": lambda: _world_live_apply(args),
@@ -657,6 +660,61 @@ def _world_live_candidates(args: argparse.Namespace) -> int:
             if isinstance(raw_deactivate, list):
                 deactivate_list = list(raw_deactivate)
             print(f"  plan: activate={len(activate_list)}, deactivate={len(deactivate_list)}")
+    return 0
+
+
+def _world_campaign_tick(args: argparse.Namespace) -> int:
+    try:
+        world_id = _require_world_id(args)
+    except ValueError as exc:
+        print(_t("Error: {}").format(exc), file=sys.stderr)
+        return 1
+
+    params: dict[str, object] = {}
+    if args.strategy_id:
+        params["strategy_id"] = str(args.strategy_id)
+
+    status_code, payload = http_request(
+        "post",
+        f"/worlds/{world_id}/campaign/tick",
+        params=params or None,
+        payload={},
+    )
+    if status_code >= 400 or status_code == 0 or not isinstance(payload, dict):
+        err = payload.get("detail") if isinstance(payload, dict) else status_code
+        print(_t("Error fetching campaign tick: {}").format(err), file=sys.stderr)
+        return 1
+
+    actions = payload.get("actions")
+    if not isinstance(actions, list):
+        print(_t("Error: invalid campaign tick response"), file=sys.stderr)
+        return 1
+
+    print(_t("🧭 Campaign Tick"))
+    print("=" * 60)
+    print(f"World: {world_id}")
+    print(f"Count: {len(actions)}")
+    if not actions:
+        return 0
+    for item in actions:
+        if not isinstance(item, dict):
+            continue
+        action = item.get("action")
+        sid = item.get("strategy_id")
+        stage = item.get("stage")
+        reason = item.get("reason")
+        method = item.get("suggested_method")
+        endpoint = item.get("suggested_endpoint")
+        line = f"- {action}"
+        if sid:
+            line += f" strategy={sid}"
+        if stage:
+            line += f" stage={stage}"
+        if reason:
+            line += f" reason={reason}"
+        if method and endpoint:
+            line += f" -> {method} {endpoint}"
+        print(line)
     return 0
 
 

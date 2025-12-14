@@ -198,6 +198,9 @@ class CampaignWindowStatus(BaseModel):
 class CampaignStrategyStatus(BaseModel):
     strategy_id: str
     phase: Literal["backtest_campaign", "paper_campaign", "live_campaign"] | str
+    latest_backtest_run_id: str | None = None
+    latest_paper_run_id: str | None = None
+    latest_live_run_id: str | None = None
     backtest: CampaignWindowStatus | None = None
     paper: CampaignWindowStatus | None = None
     sample_days: int | None = None
@@ -214,6 +217,23 @@ class CampaignStatusResponse(BaseModel):
     generated_at: str
     config: Dict[str, Any] | None = None
     strategies: List[CampaignStrategyStatus] = Field(default_factory=list)
+
+
+class CampaignTickAction(BaseModel):
+    action: str
+    strategy_id: str | None = None
+    stage: str | None = None
+    reason: str | None = None
+    suggested_endpoint: str | None = None
+    suggested_method: str | None = None
+    suggested_params: Dict[str, Any] | None = None
+    suggested_body: Dict[str, Any] | None = None
+
+
+class CampaignTickResponse(BaseModel):
+    world_id: str
+    generated_at: str
+    actions: List[CampaignTickAction] = Field(default_factory=list)
 
 
 class ApplyRequest(EvaluateRequest):

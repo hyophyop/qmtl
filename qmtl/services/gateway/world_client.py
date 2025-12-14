@@ -543,6 +543,24 @@ class WorldServiceClient:
             params=params or None,
         )
 
+    async def post_campaign_tick(
+        self,
+        world_id: str,
+        *,
+        strategy_id: str | None = None,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> Any:
+        params: Dict[str, Any] = {}
+        if strategy_id is not None:
+            params["strategy_id"] = strategy_id
+        return await self._request_json(
+            "POST",
+            f"/worlds/{world_id}/campaign/tick",
+            headers=headers,
+            params=params or None,
+            json={},
+        )
+
     async def post_live_promotion_apply(
         self,
         world_id: str,
