@@ -118,6 +118,35 @@ def test_campaign_loop_runs_iterations(monkeypatch, tmp_path: Path, capsys):
     out = capsys.readouterr().out
     assert "Campaign Loop" in out
 
+
+def test_run_status_metrics_flag_fetches_metrics(monkeypatch, capsys):
+    calls = []
+
+    def fake_get(path, params=None):
+        calls.append((path, params))
+        if path.endswith("/runs") and "runs/" not in path:
+            return 200, [{"run_id": "r1", "created_at": "2025-01-01T00:00:00Z", "updated_at": "2025-01-01T00:00:00Z"}]
+        if path.endswith("/runs/r1"):
+            return 200, {
+                "run_id": "r1",
+                "stage": "paper",
+                "risk_tier": "low",
+                "summary": {"status": "pass"},
+            }
+        if path.endswith("/runs/r1/metrics"):
+            return 200, {"metrics": {"returns": {"sharpe": 1.0}, "sample": {"n_trades_total": 10}}}
+        return 404, {"detail": "not found"}
+
+    monkeypatch.setattr(world, "http_get", fake_get)
+
+    exit_code = world.cmd_world(["run-status", "w1", "--strategy", "s1", "--run", "latest", "--metrics"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Evaluation Run" in out
+    assert "Metrics" in out
+    assert "Sharpe" in out
+
 def test_allocations_command_lists_snapshots(monkeypatch, capsys):
     calls = []
 

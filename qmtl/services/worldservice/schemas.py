@@ -654,6 +654,21 @@ class EvaluationRunModel(BaseModel):
     updated_at: str | None = None
 
 
+class EvaluationRunMetricsResponse(BaseModel):
+    """Canonical metrics snapshot surface for an evaluation run (Phase 2/3 design doc)."""
+
+    world_id: str
+    strategy_id: str
+    run_id: str
+    stage: Literal["backtest", "paper", "live"] | str
+    risk_tier: Literal["high", "medium", "low"] | str
+    metrics: EvaluationMetrics
+    validation: EvaluationValidation | None = None
+    summary: EvaluationSummary | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
 class EvaluationRunHistoryItem(BaseModel):
     revision: int
     recorded_at: str
@@ -728,6 +743,7 @@ __all__ = [
     'EvaluationValidation',
     'EvaluationSummary',
     'EvaluationRunModel',
+    'EvaluationRunMetricsResponse',
     'EvaluationRunHistoryItem',
     'LiveMonitoringStrategyReport',
     'LiveMonitoringReport',

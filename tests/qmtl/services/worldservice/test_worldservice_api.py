@@ -543,6 +543,48 @@ async def test_evaluation_run_override_flow():
 
 
 @pytest.mark.asyncio
+async def test_evaluation_run_metrics_endpoint_requires_metrics():
+    store = Storage()
+    app = create_app(storage=store)
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wmet", "name": "Metrics World"})
+            await store.record_evaluation_run(
+                "wmet",
+                "s1",
+                "run-empty",
+                stage="backtest",
+                risk_tier="low",
+                metrics=None,
+                summary={"status": "warn"},
+            )
+
+            resp = await client.get("/worlds/wmet/strategies/s1/runs/run-empty/metrics")
+            assert resp.status_code == 409
+            detail = resp.json()["detail"]
+            assert detail["code"] == "E_RUN_NOT_EVALUATED"
+
+            await store.record_evaluation_run(
+                "wmet",
+                "s1",
+                "run-full",
+                stage="paper",
+                risk_tier="low",
+                metrics={"returns": {"sharpe": 1.1, "max_drawdown": -0.2}, "sample": {"n_trades_total": 12}},
+                summary={"status": "pass"},
+            )
+            ok = await client.get("/worlds/wmet/strategies/s1/runs/run-full/metrics")
+            assert ok.status_code == 200
+            body = ok.json()
+            assert body["world_id"] == "wmet"
+            assert body["strategy_id"] == "s1"
+            assert body["run_id"] == "run-full"
+            assert body["metrics"]["returns"]["sharpe"] == 1.1
+            assert body["metrics"]["returns"]["max_drawdown"] == -0.2
+            assert body["metrics"]["sample"]["n_trades_total"] == 12
+
+
+@pytest.mark.asyncio
 async def test_world_decisions_get_endpoint_returns_active_strategies():
     app = create_app(storage=Storage())
     async with httpx.ASGITransport(app=app) as asgi:
