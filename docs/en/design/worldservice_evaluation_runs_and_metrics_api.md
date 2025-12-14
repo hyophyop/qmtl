@@ -214,46 +214,21 @@ This shape can serve as the **canonical “world evaluation metrics snapshot”*
 
 ### 3.3 Snapshot API (draft)
 
-- Purpose: build on the §3.2 metrics response and expose a snapshot object that combines metrics with lightweight series information (or references) as a **delivery/storage-friendly envelope** in a standard JSON format.
+Purpose: separately from “evaluation run metrics”, manage `risk_signal_hub` snapshots as the **input SSOT** (portfolio/risk/coverage).  
+In the current codebase, `/worlds/{world_id}/snapshots/*` refers to **Risk Signal Hub snapshots (world-scoped)**.
 
-- Example endpoint:
+- Example endpoints (current implementation):
 
 ```http
-GET /worlds/{world_id}/snapshots/{snapshot_id}
+POST /worlds/{world_id}/snapshots
+GET  /worlds/{world_id}/snapshots/latest
+GET  /worlds/{world_id}/snapshots/lookup?version=...&as_of=...
+GET  /worlds/{world_id}/snapshots?limit=10
 ```
 
-- Response (sketch):
-
-```json
-{
-  "snapshot_id": "alpha_world-beta_mkt_simple-2025-12-02T10:00:00Z",
-  "world_id": "alpha_world",
-  "strategy_id": "beta_mkt_simple",
-  "run_id": "2025-12-02T10:00:00Z-uuid",
-  "created_at": "2025-12-02T10:05:30Z",
-  "metrics": { "...": "..." },
-  "series_heads": {
-    "returns": [0.001, -0.0005, "..."],
-    "equity": [10000.0, 10010.0, "..."],
-    "pnl": [0.0, 10.0, "..."]
-  },
-  "meta": {
-    "pnl_source": "account_simulated_from_signals",
-    "auto_returns": true,
-    "tags": ["beta-factory", "sandbox"]
-  },
-  "storage_refs": {
-    "full_returns_series": "s3://.../returns.parquet",
-    "full_pnl_series": "s3://.../pnl.parquet"
-  }
-}
-```
-
-Projects can then reuse this WS snapshot format directly when writing `.qmtl_snapshots/*.json`, instead of inventing their own.
-
-!!! note "Metrics API vs snapshot API"
-    - `/runs/{run_id}/metrics` is the **canonical evaluation contract (SSOT)** owned by WS; policy/gating, dashboards, and algorithmic consumers (e.g., rebalancing engines) should read from this surface.
-    - `/snapshots/{snapshot_id}` is an envelope that adds **series heads, storage references, and meta** on top of the same evaluation result and is primarily aimed at CLI/tools/external analysis pipelines that work with `.qmtl_snapshots/*.json`.
+!!! note "Evaluation metrics vs Risk Hub snapshots"
+    - `/runs/{run_id}/metrics` is the SSOT for strategy evaluation results (returns/sample/risk).
+    - `/worlds/{world_id}/snapshots/*` is the SSOT for input/observation snapshots (`risk_signal_hub`).
 
 !!! note "Relationship to existing `/worlds/{id}/evaluate` API"
     - In an initial rollout, `/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/metrics` is expected to wrap the existing `/worlds/{world_id}/evaluate` behaviour (or the same policy engine) and expose the **same evaluation outcome in a normalised schema**.
@@ -267,33 +242,28 @@ The following sequence diagram sketches how Runner/CLI might use these APIs:
 sequenceDiagram
     participant User
     participant SDK as Runner/SDK
-    participant GW as Gateway
     participant WS as WorldService
 
     User->>SDK: Runner.submit(MyStrategy, world="alpha_world")
-    SDK->>GW: POST /strategies (submit)
-    GW->>WS: POST /worlds/{world}/strategies/{strategy}/runs
-    WS-->>GW: 202 Accepted + run_id
-    GW-->>SDK: 202 Ack + { evaluation_run_id, ... }
-    SDK-->>User: SubmitResult(evaluation_run_id=..., links=...)
+    SDK->>WS: POST /worlds/{world}/evaluate (with run_id)
+    WS-->>SDK: 200 + { evaluation_run_id, evaluation_run_url }
+    SDK-->>User: SubmitResult(evaluation_run_id=..., evaluation_run_url=...)
 
     User->>SDK: SDK.poll_evaluation(evaluation_run_id)
     SDK->>WS: GET /worlds/{world}/strategies/{strategy}/runs/{run}
-    WS-->>SDK: status=evaluated + links.metrics/snapshot
+    WS-->>SDK: status + links.metrics/history
 
     SDK->>WS: GET /worlds/{world}/strategies/{strategy}/runs/{run}/metrics
     WS-->>SDK: evaluation metrics
 
-    SDK->>WS: GET /worlds/{world}/snapshots/{snapshot_id}
-    WS-->>SDK: snapshot JSON
-    SDK-->>User: (optional) write snapshot JSON to .qmtl_snapshots/...
+    SDK->>WS: GET /worlds/{world}/snapshots/latest
+    WS-->>SDK: risk_signal_hub snapshot (optional input SSOT)
 ```
 
 Possible CLI surface (idea-level):
 
-- `qmtl submit strategies.beta_factory.beta_mkt_simple:Strategy --world alpha_world --snapshot`
-- `qmtl world run-status --world alpha_world --strategy beta_mkt_simple --run latest`
-- `qmtl world snapshot --world alpha_world --strategy beta_mkt_simple --run latest --output .qmtl_snapshots/alpha_world-beta_mkt_simple-latest.json`
+- `qmtl submit strategies.beta_factory.beta_mkt_simple:Strategy --world alpha_world`
+- `qmtl world run-status alpha_world --strategy beta_mkt_simple --run latest --metrics`
 
 ## 5. Relationship to Local PnL Helpers
 
