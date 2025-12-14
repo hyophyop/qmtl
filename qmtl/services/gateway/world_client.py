@@ -470,6 +470,47 @@ class WorldServiceClient:
             json=payload,
         )
 
+    async def post_live_promotion_approve(
+        self,
+        world_id: str,
+        payload: Any,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> Any:
+        return await self._request_json(
+            "POST",
+            f"/worlds/{world_id}/promotions/live/approve",
+            headers=headers,
+            json=payload,
+        )
+
+    async def post_live_promotion_reject(
+        self,
+        world_id: str,
+        payload: Any,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> Any:
+        return await self._request_json(
+            "POST",
+            f"/worlds/{world_id}/promotions/live/reject",
+            headers=headers,
+            json=payload,
+        )
+
+    async def get_live_promotion_plan(
+        self,
+        world_id: str,
+        *,
+        strategy_id: str,
+        run_id: str,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> Any:
+        return await self._request_json(
+            "GET",
+            f"/worlds/{world_id}/promotions/live/plan",
+            headers=headers,
+            params={"strategy_id": strategy_id, "run_id": run_id},
+        )
+
     async def post_apply(self, world_id: str, payload: Any, headers: Optional[Dict[str, str]] = None) -> Any:
         return await self._request_json(
             "POST",

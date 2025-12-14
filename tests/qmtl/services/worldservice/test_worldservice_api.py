@@ -526,6 +526,61 @@ async def test_world_decisions_get_endpoint_returns_active_strategies():
 
 
 @pytest.mark.asyncio
+async def test_live_promotion_approve_endpoint_records_override():
+    store = Storage()
+    app = create_app(storage=store)
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wpro", "name": "Promo World"})
+            await store.record_evaluation_run(
+                "wpro",
+                "s1",
+                "run-1",
+                stage="paper",
+                risk_tier="low",
+                metrics={"returns": {"sharpe": 1.0}},
+                summary={"active_set": ["s1"]},
+            )
+
+            approve_resp = await client.post(
+                "/worlds/wpro/promotions/live/approve",
+                json={"strategy_id": "s1", "run_id": "run-1", "reason": "risk sign-off", "actor": "risk"},
+            )
+            assert approve_resp.status_code == 200
+            assert approve_resp.json()["summary"]["override_status"] == "approved"
+
+
+@pytest.mark.asyncio
+async def test_live_promotion_plan_endpoint_derives_apply_plan():
+    store = Storage()
+    app = create_app(storage=store)
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wplan", "name": "Plan World"})
+            set_resp = await client.post("/worlds/wplan/decisions", json={"strategies": ["s2", "s3"]})
+            assert set_resp.status_code == 200
+
+            await store.record_evaluation_run(
+                "wplan",
+                "s1",
+                "run-1",
+                stage="paper",
+                risk_tier="low",
+                metrics={"returns": {"sharpe": 1.0}},
+                summary={"active_set": ["s1", "s2"], "override_status": "approved"},
+            )
+
+            plan_resp = await client.get(
+                "/worlds/wplan/promotions/live/plan",
+                params={"strategy_id": "s1", "run_id": "run-1"},
+            )
+            assert plan_resp.status_code == 200
+            body = plan_resp.json()
+            assert body["plan"]["activate"] == ["s1"]
+            assert body["plan"]["deactivate"] == ["s3"]
+
+
+@pytest.mark.asyncio
 async def test_ex_post_failure_record_flow_appends_history():
     app = create_app(storage=Storage())
     async with httpx.ASGITransport(app=app) as asgi:
