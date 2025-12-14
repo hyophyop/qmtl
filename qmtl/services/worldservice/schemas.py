@@ -277,13 +277,7 @@ class CohortEvaluateRequest(EvaluateRequest):
         self.candidates = candidates
 
         if not self.candidates:
-            raise ValueError("cohort evaluation requires metrics for at least one strategy")
-
-        missing_metrics = [sid for sid in self.candidates if sid not in raw_metrics]
-        if missing_metrics:
-            raise ValueError(
-                "candidates missing metrics: " + ", ".join(sorted(missing_metrics))
-            )
+            raise ValueError("cohort evaluation requires at least one candidate")
         return self
 
 

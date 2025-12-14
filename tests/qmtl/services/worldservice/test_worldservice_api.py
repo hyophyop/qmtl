@@ -2087,6 +2087,74 @@ async def test_evaluate_sources_metrics_from_risk_hub_when_run_metrics_missing()
 
 
 @pytest.mark.asyncio
+async def test_evaluate_cohort_sources_metrics_from_risk_hub_when_missing():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wcohort"})
+            await client.post("/worlds/wcohort/policies", json={"policy": {}})
+            await client.post("/worlds/wcohort/set-default", json={"version": 1})
+
+            snapshot = {
+                "as_of": "2025-01-01T00:00:00Z",
+                "version": "v1",
+                "weights": {"s2": 1.0},
+                "covariance": {"s1,s1": 0.04, "s2,s2": 0.01, "s1,s2": 0.005},
+            }
+            snap_resp = await client.post(
+                "/risk-hub/worlds/wcohort/snapshots",
+                json=snapshot,
+                headers={"X-Actor": "test-suite", "X-Stage": "backtest"},
+            )
+            assert snap_resp.status_code == 200
+
+            resp = await client.post(
+                "/worlds/wcohort/evaluate-cohort",
+                json={
+                    "campaign_id": "c1",
+                    "run_id": "cohort-run",
+                    "candidates": ["s1"],
+                    "metrics": {},
+                    "stage": "backtest",
+                    "risk_tier": "low",
+                },
+            )
+            assert resp.status_code == 200
+            runs = resp.json().get("evaluation_runs") or {}
+            run_url = runs.get("s1")
+            assert run_url
+
+            run_resp = await client.get(run_url)
+            assert run_resp.status_code == 200
+            recorded = run_resp.json()
+            assert recorded.get("metrics", {}).get("risk", {}).get("incremental_var_99") is not None
+
+
+@pytest.mark.asyncio
+async def test_evaluate_cohort_rejects_candidates_without_metrics_sources():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wcohort-miss"})
+            await client.post("/worlds/wcohort-miss/policies", json={"policy": {}})
+            await client.post("/worlds/wcohort-miss/set-default", json={"version": 1})
+
+            resp = await client.post(
+                "/worlds/wcohort-miss/evaluate-cohort",
+                json={
+                    "campaign_id": "c1",
+                    "run_id": "cohort-run",
+                    "candidates": ["s1"],
+                    "metrics": {},
+                    "stage": "backtest",
+                    "risk_tier": "low",
+                },
+            )
+            assert resp.status_code == 422
+            assert "missing metrics sources" in str(resp.json().get("detail", "")).lower()
+
+
+@pytest.mark.asyncio
 async def test_allocations_missing_snapshot_returns_empty_payload():
     bus = DummyBus()
     app = create_app(bus=bus, storage=Storage())
