@@ -296,19 +296,19 @@ Phase 5의 “강한 검증/리스크 컷/스트레스”는 입력 데이터가
 
    - CLI/툴 연계(필수):
      - 운영자가 “현재 상태를 보고 → 승인을 남기고(옵션) → apply를 실행”할 수 있어야 한다.
-     - 최소 CLI 서피스(예시, 이름은 조정 가능):
-       - 상태 조회:
-         - `qmtl world status <world> [--strategy <sid>]`  
-           (캠페인 phase, 최근 evaluation run, `validation` 통과 여부, `governance.live_promotion.mode`, `pending_live_approval` 여부/사유 요약)
-         - `qmtl world run-status --world <world> --strategy <sid> --run <id|latest>`  
-           (상태/메트릭/스냅샷 링크; 관련 설계: `design/worldservice_evaluation_runs_and_metrics_api.md`)
-       - 승인/거부(= `manual_approval` 모드에서만 활성):
-         - `qmtl world live approve --world <world> --strategy <sid> --run <run_id> --comment ...`
-         - `qmtl world live reject --world <world> --strategy <sid> --run <run_id> --comment ...`
-       - 적용:
-         - `qmtl world apply <world> --run-id <uuid> --plan-file <plan.json>` (기존)
-         - (권장) `qmtl world live apply --world <world> --strategy <sid> --run <run_id> --run-id <uuid>`  
-           (WS가 계산한 “승격 플랜”을 조회→검증→2‑phase apply로 위임)
+	     - 최소 CLI 서피스(예시, 이름은 조정 가능):
+	       - 상태 조회:
+	         - `qmtl world status <world> [--strategy <sid>]`  
+	           (캠페인 phase, 최근 evaluation run, `validation` 통과 여부, `governance.live_promotion.mode`, `pending_live_approval` 여부/사유 요약)
+	         - `qmtl world run-status <world> --strategy <sid> --run <id|latest>`  
+	           (상태/메트릭/스냅샷 링크; 관련 설계: `design/worldservice_evaluation_runs_and_metrics_api.md`)
+	       - 승인/거부(= `manual_approval` 모드에서만 활성):
+	         - `qmtl world live-approve <world> --strategy <sid> --run <run_id> --comment ...`
+	         - `qmtl world live-reject <world> --strategy <sid> --run <run_id> --comment ...`
+	       - 적용:
+	         - `qmtl world apply <world> --run-id <uuid> --plan-file <plan.json>` (기존)
+	         - (권장) `qmtl world live-apply <world> --strategy <sid> --run <run_id> --run-id <uuid>`  
+	           (WS가 계산한 “승격 플랜”을 조회→검증→2‑phase apply로 위임)
      - `auto_apply` 모드에서도, 위 명령은 “현재 상태/최근 자동 적용 내역(감사 로그)”을 조회하는 읽기 전용 기능으로 유용하다.
 
    - API 연계(필수):
