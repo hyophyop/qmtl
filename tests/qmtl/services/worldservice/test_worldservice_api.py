@@ -453,8 +453,11 @@ async def test_evaluation_run_creation_and_fetch():
             record = run_resp.json()
             assert record["run_id"] == "run-eval-1"
             assert record["strategy_id"] == "s-eval"
+            assert record["status"] == "evaluated"
             assert record["stage"] == "backtest"
             assert record["model_card_version"] == "v1.0"
+            assert record["links"]["metrics"].endswith("/worlds/weval/strategies/s-eval/runs/run-eval-1/metrics")
+            assert record["links"]["history"].endswith("/worlds/weval/strategies/s-eval/runs/run-eval-1/history")
             assert record["metrics"]["returns"]["sharpe"] == 1.5
             assert record["metrics"]["risk"]["adv_utilization_p95"] == 0.2
             assert record["metrics"]["risk"]["participation_rate_p95"] == 0.15

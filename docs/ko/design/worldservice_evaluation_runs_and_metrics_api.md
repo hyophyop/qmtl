@@ -150,7 +150,7 @@ stateDiagram-v2
 GET /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}
 ```
 
-- 응답(스케치):
+- 응답(현재 구현에 가까운 형태):
 
 ```json
 {
@@ -158,13 +158,13 @@ GET /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}
   "strategy_id": "beta_mkt_simple",
   "run_id": "2025-12-02T10:00:00Z-uuid",
   "status": "evaluated",
+  "stage": "paper",
+  "risk_tier": "low",
   "created_at": "2025-12-02T10:00:01Z",
   "updated_at": "2025-12-02T10:05:30Z",
-  "effective_mode": "validate",
-  "activation_state": "pending",  // or active/rejected
   "links": {
     "metrics": "/worlds/alpha_world/strategies/beta_mkt_simple/runs/2025-.../metrics",
-    "snapshot": "/worlds/alpha_world/snapshots/alpha_world-beta_mkt_simple-2025-..."
+    "history": "/worlds/alpha_world/strategies/beta_mkt_simple/runs/2025-.../history"
   }
 }
 ```
@@ -173,7 +173,7 @@ GET /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}
   - `SubmitResult.evaluation_run_url`을 따라가면 현재 상태와, 메트릭/스냅샷 링크를 한 번에 확인할 수 있다.
   - CLI에서는 `qmtl world run-status --world alpha_world --strategy beta_mkt_simple --run latest` 같은 명령으로 감싼다.
 
-### 3.2 메트릭 조회 API (초안)
+### 3.2 메트릭 조회 API (현재 구현)
 
 - 목적: WorldService가 **저장·관리하는** 성과/리스크/게이팅 지표를 조회.  
   - 초기 구현에서는 Runner/ValidationPipeline이 계산한 metrics/PnL을 WS에 전달하고, WS는 이를 정책 평가·스냅샷 조회의 기준으로 사용한다.
@@ -185,7 +185,7 @@ GET /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}
 GET /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/metrics
 ```
 
-- 응답(스케치; 실제 필드명은 worldservice 스키마와 정렬 필요):
+- 응답(요약; 실제 metrics 필드는 `EvaluationMetrics` 스키마를 따른다):
 
 ```json
 {
@@ -193,37 +193,18 @@ GET /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/metrics
   "strategy_id": "beta_mkt_simple",
   "run_id": "2025-12-02T10:00:00Z-uuid",
   "status": "evaluated",
-  "evaluation": {
-    "returns": {
-      "sample_count": 1440,
-      "window": "2025-12-01T00:00:00Z/2025-12-02T00:00:00Z",
-      "source": "auto_returns",  // or "strategy_explicit"
-      "sharpe": 1.8,
-      "max_drawdown": -0.12,
-      "volatility": 0.25,
-      "win_rate": 0.54,
-      "profit_factor": 1.7
-    },
-    "pnl": {
-      "sample_count": 1440,
-      "reference_currency": "USD",
-      "pnl_total": 1234.5,
-      "pnl_max_drawdown": -230.0,
-      "pnl_equity_peak": 10234.0
-    },
-    "risk": {
-      "turnover_proxy": 0.8,
-      "exposure_bounds_ok": true,
-      "concentration_warnings": []
-    },
-    "gating": {
-      "verdict": "valid",   // or "invalid"
-      "violations": [],
-      "hysteresis": {
-        "promote_after": 5,
-        "demote_after": 3
-      }
-    }
+  "stage": "paper",
+  "risk_tier": "low",
+  "metrics": {
+    "returns": { "sharpe": 1.8, "max_drawdown": -0.12 },
+    "sample": { "effective_history_years": 0.5, "n_trades_total": 120 },
+    "risk": { "adv_utilization_p95": 0.2, "participation_rate_p95": 0.15 }
+  },
+  "validation": { "policy_version": "1", "ruleset_hash": "blake3:..." },
+  "summary": { "status": "pass", "recommended_stage": "paper_ok_live_candidate" },
+  "links": {
+    "metrics": "/worlds/alpha_world/strategies/beta_mkt_simple/runs/2025-.../metrics",
+    "history": "/worlds/alpha_world/strategies/beta_mkt_simple/runs/2025-.../history"
   }
 }
 ```
@@ -233,7 +214,7 @@ GET /worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/metrics
 !!! note "메트릭 조회 시점과 에러 의미"
     - `GET /runs/{run_id}/metrics` 호출 시:
       - 지정된 `evaluation_run_id`가 존재하지 않으면 404(Not Found)를 반환한다.
-      - run이 존재하지만 아직 `evaluated` 상태가 아니라면 409(Conflict)와 함께 `"error": "E_RUN_NOT_EVALUATED"` 같은 머신 친화적 코드를 반환하는 것을 제안한다.
+      - run이 존재하지만 아직 `evaluated` 상태가 아니라면 409(Conflict)와 함께 `detail.code=E_RUN_NOT_EVALUATED` 같은 머신 친화적 코드를 반환한다.
     - 클라이언트는 먼저 `/runs/{run_id}` 상태를 조회해 `status=evaluated` 인지 확인한 뒤 메트릭을 요청하는 패턴을 기본으로 삼는다.
 
 ### 3.3 스냅샷 조회/저장 API (초안)

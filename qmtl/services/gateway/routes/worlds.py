@@ -407,9 +407,22 @@ WORLD_ROUTES: tuple[WorldRoute, ...] = (
         path_params=("world_id", "strategy_id", "run_id"),
     ),
     WorldRoute(
+        "get",
+        "/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/history",
+        "get_evaluation_run_history",
+        path_params=("world_id", "strategy_id", "run_id"),
+    ),
+    WorldRoute(
         "post",
         "/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/override",
         "post_evaluation_override",
+        path_params=("world_id", "strategy_id", "run_id"),
+        include_payload=True,
+    ),
+    WorldRoute(
+        "post",
+        "/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}/ex-post-failures",
+        "post_ex_post_failure",
         path_params=("world_id", "strategy_id", "run_id"),
         include_payload=True,
     ),
