@@ -185,6 +185,37 @@ class LivePromotionCandidatesResponse(BaseModel):
     candidates: List[LivePromotionCandidate] = Field(default_factory=list)
 
 
+class CampaignWindowStatus(BaseModel):
+    window: str | None = None
+    required_sec: int | None = None
+    observed_sec: int | None = None
+    progress: float | None = None
+    started_at: str | None = None
+    ended_at: str | None = None
+    satisfied: bool = False
+
+
+class CampaignStrategyStatus(BaseModel):
+    strategy_id: str
+    phase: Literal["backtest_campaign", "paper_campaign", "live_campaign"] | str
+    backtest: CampaignWindowStatus | None = None
+    paper: CampaignWindowStatus | None = None
+    sample_days: int | None = None
+    trades_total: int | None = None
+    sharpe: float | None = None
+    max_drawdown: float | None = None
+    promotable_to_paper: bool = False
+    promotable_to_live: bool = False
+    reasons: List[str] = Field(default_factory=list)
+
+
+class CampaignStatusResponse(BaseModel):
+    world_id: str
+    generated_at: str
+    config: Dict[str, Any] | None = None
+    strategies: List[CampaignStrategyStatus] = Field(default_factory=list)
+
+
 class ApplyRequest(EvaluateRequest):
     run_id: str
     plan: ApplyPlan | None = None

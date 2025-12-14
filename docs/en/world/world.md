@@ -107,6 +107,16 @@ selection:
     demote_after: 2
     min_dwell: 3h
 
+# Phase 4: campaign orchestration (observation windows)
+campaign:
+  backtest:
+    window: 180d      # minimum backtest observation window
+  paper:
+    window: 30d       # minimum paper(dryrun) observation window
+  common:
+    min_sample_days: 30
+    min_trades_total: 100
+
 position_policy:
   on_promote: flat_then_enable
   on_demote: disable_then_flat

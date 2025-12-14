@@ -784,6 +784,80 @@ async def test_live_promotion_candidates_endpoint_lists_latest_per_strategy():
 
 
 @pytest.mark.asyncio
+async def test_campaign_status_endpoint_reports_phase_and_progress():
+    store = Storage()
+    app = create_app(storage=store)
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wcamp", "name": "Campaign World"})
+            policy_resp = await client.post(
+                "/worlds/wcamp/policies",
+                json={
+                    "policy": {
+                        "campaign": {
+                            "backtest": {"window": "2d"},
+                            "paper": {"window": "1d"},
+                            "common": {"min_sample_days": 1, "min_trades_total": 1},
+                        },
+                        "thresholds": {"sharpe": {"metric": "sharpe", "min": 0.0}},
+                    }
+                },
+            )
+            assert policy_resp.status_code == 200
+            default_resp = await client.post("/worlds/wcamp/set-default", json={"version": 1})
+            assert default_resp.status_code == 200
+
+            await store.record_evaluation_run(
+                "wcamp",
+                "s1",
+                "bt-1",
+                stage="backtest",
+                risk_tier="low",
+                metrics={"returns": {"sharpe": 1.0}, "sample": {"effective_history_years": 0.01, "n_trades_total": 10}},
+                summary={"status": "pass", "active_set": ["s1"]},
+                created_at="2025-01-01T00:00:00Z",
+                updated_at="2025-01-01T00:00:00Z",
+            )
+            await store.record_evaluation_run(
+                "wcamp",
+                "s1",
+                "bt-2",
+                stage="backtest",
+                risk_tier="low",
+                metrics={"returns": {"sharpe": 1.0}, "sample": {"effective_history_years": 0.01, "n_trades_total": 10}},
+                summary={"status": "pass", "active_set": ["s1"]},
+                created_at="2025-01-03T00:00:00Z",
+                updated_at="2025-01-03T00:00:00Z",
+            )
+            await store.record_evaluation_run(
+                "wcamp",
+                "s1",
+                "paper-1",
+                stage="paper",
+                risk_tier="low",
+                metrics={"returns": {"sharpe": 1.2}, "sample": {"effective_history_years": 0.01, "n_trades_total": 10}},
+                summary={"status": "pass", "active_set": ["s1"]},
+                created_at="2025-01-04T00:00:00Z",
+                updated_at="2025-01-05T00:00:00Z",
+            )
+
+            resp = await client.get("/worlds/wcamp/campaign/status", params={"strategy_id": "s1"})
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["world_id"] == "wcamp"
+            assert body["config"]["backtest_window"] == "2d"
+            assert body["config"]["paper_window"] == "1d"
+            assert len(body["strategies"]) == 1
+            status = body["strategies"][0]
+            assert status["strategy_id"] == "s1"
+            assert status["phase"] == "paper_campaign"
+            assert status["backtest"]["satisfied"] is True
+            assert status["paper"]["satisfied"] is True
+            assert status["promotable_to_paper"] is True
+            assert status["promotable_to_live"] is True
+
+
+@pytest.mark.asyncio
 async def test_live_promotion_apply_enforces_max_live_slots():
     store = Storage()
     app = create_app(storage=store)

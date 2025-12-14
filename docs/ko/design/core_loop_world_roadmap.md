@@ -229,6 +229,10 @@ status: draft
 - CLI:
   - `qmtl world status` 등에서 캠페인 phase와 핵심 지표를 요약해서 보여주는 명령.
 
+권장 최소 API/CLI (예시):
+- `GET /worlds/{world}/campaign/status[?strategy_id=...]` (phase, 진행률, 승격 가능 여부/사유)
+- `qmtl world status <world> --strategy <sid>` (캠페인 phase/승격 가능 여부 요약 포함)
+
 ---
 
 ## Phase 5 — 검증 단계 고도화 & live 승격 거버넌스

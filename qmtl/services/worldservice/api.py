@@ -26,6 +26,7 @@ from .routers import (
     create_activation_router,
     create_allocations_router,
     create_bindings_router,
+    create_campaigns_router,
     create_evaluation_runs_router,
     create_live_monitoring_router,
     create_observability_router,
@@ -485,6 +486,7 @@ def create_app(
     app.include_router(create_activation_router(service))
     app.include_router(create_allocations_router(service))
     app.include_router(create_evaluation_runs_router(service))
+    app.include_router(create_campaigns_router(service))
     app.include_router(create_promotions_router(service))
     app.include_router(create_live_monitoring_router(service))
     app.include_router(create_observability_router())
