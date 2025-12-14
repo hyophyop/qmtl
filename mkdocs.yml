@@ -104,7 +104,6 @@ nav:
       - World Validation v1 Implementation Plan: design/world_validation_v1_implementation_plan.md
       - World Validation v1.5 Implementation: design/world_validation_v1.5_implementation.md
       - World Strategy Weighting v1.5 Design: design/world_strategy_weighting_v1.5_design.md
-      - Risk Signal Hub Design: design/risk_signal_hub.md
       - Exit Engine Overview: design/exit_engine_overview.md
       - Model Risk Management Framework: design/model_risk_management_framework.md
       - WorldService Evaluation Runs & Metrics API: design/worldservice_evaluation_runs_and_metrics_api.md

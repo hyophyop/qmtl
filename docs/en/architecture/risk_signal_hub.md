@@ -14,8 +14,7 @@ last_modified: 2025-12-10
     WorldService, Exit Engine, and monitoring consumers read from the hub API/events to compute Var/ES, stress, and exit signals, and to monitor freshness/missing data.
 
 Related documents:
-- Design details: [design/risk_signal_hub.md](../design/risk_signal_hub.md)
-- Validation architecture: [design/world_validation_architecture.md](../design/world_validation_architecture.md)
+- Archive (initial design): [archive/risk_signal_hub.md](../archive/risk_signal_hub.md)
 - Operations runbook: [operations/risk_signal_hub_runbook.md](../operations/risk_signal_hub_runbook.md)
 
 ---
@@ -49,6 +48,18 @@ flowchart LR
 - Required: `world_id`, `as_of` (ISO), `version`, `weights` (sum≈1.0)
 - Optional: `covariance` (inline when small) or `covariance_ref`, `realized_returns_ref`, `stress`, `constraints`, `ttl_sec`, `provenance`, `hash`
 - Validation: weight sum > 0 and within 1.0±1e-3, ISO `as_of`, TTL expiration excludes stale snapshots from cache/lookups.
+
+### 3.1 v1 Contract Defaults
+
+- `X-Actor` and `X-Stage` headers are required and stored as `provenance.actor/stage`.
+- TTL default: `ttl_sec=900` (15m). Max: `ttl_sec <= 86400` (422 otherwise).
+- Version collisions: `(world_id, version)` collisions are rejected with **409** (no overwrite).
+  - Idempotent retries (same `hash`) are treated as success and counted in `risk_hub_snapshot_dedupe_total`.
+- API:
+  - `POST /risk-hub/worlds/{world_id}/snapshots` (write; token/headers required)
+  - `GET /risk-hub/worlds/{world_id}/snapshots/latest`
+  - `GET /risk-hub/worlds/{world_id}/snapshots` (list)
+  - `GET /risk-hub/worlds/{world_id}/snapshots/lookup?version=...|as_of=...`
 
 ---
 

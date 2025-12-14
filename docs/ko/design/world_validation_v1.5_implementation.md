@@ -111,5 +111,5 @@
 ## 참고 링크
 - 설계: [world_validation_architecture.md](world_validation_architecture.md)
 - v1 계획: [world_validation_v1_implementation_plan.md](world_validation_v1_implementation_plan.md)
-- Risk Hub 설계: [risk_signal_hub.md](risk_signal_hub.md)
+- Risk Hub 아키텍처: [architecture/risk_signal_hub.md](../architecture/risk_signal_hub.md)
 - 운영 런북: [../operations/risk_signal_hub_runbook.md](../operations/risk_signal_hub_runbook.md)
