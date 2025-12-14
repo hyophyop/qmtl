@@ -3,7 +3,7 @@
 Demonstrates execution cost modeling with the simplified v2 API.
 """
 
-from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import Node, StreamInput
 from qmtl.runtime.transforms import alpha_history_node, TradeSignalGeneratorNode
 from qmtl.runtime.transforms.alpha_performance import alpha_performance_node
@@ -117,7 +117,6 @@ class ExecutionModelStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    # v2 API: backtest mode for cost modeling validation
-    result = Runner.submit(ExecutionModelStrategy, mode=Mode.BACKTEST)
+    # v2 API: submit to WorldService; stage/mode is governed by world policy
+    result = Runner.submit(ExecutionModelStrategy)
     print(f"Strategy submitted: {result.status}")
-

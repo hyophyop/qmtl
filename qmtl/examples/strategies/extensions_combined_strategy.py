@@ -1,6 +1,6 @@
 """Combined extensions strategy example - QMTL v2.0."""
 
-from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.generators import GarchInput
 from qmtl.runtime.indicators import ema
 from qmtl.runtime.transforms import rate_of_change
@@ -15,6 +15,6 @@ class CombinedExtensionsStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    # v2 API: backtest mode for local validation
-    result = Runner.submit(CombinedExtensionsStrategy, mode=Mode.BACKTEST)
+    # v2 API: submit to WorldService; stage/mode is governed by world policy
+    result = Runner.submit(CombinedExtensionsStrategy)
     print(f"Strategy submitted: {result.status}")

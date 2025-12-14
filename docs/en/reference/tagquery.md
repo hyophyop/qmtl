@@ -26,9 +26,9 @@ The tag/interval/namespace mapping is the same regardless of whether queues are 
 
 ## Runner Integration
 
-- Boot sequence: `Runner.submit(..., world=..., mode=...)` attaches `TagQueryManager` via the Gateway bootstrap path, applies the `queue_map` to nodes, and calls `resolve_tags()` once before starting live subscriptions.
+- Boot sequence: `Runner.submit(..., world=...)` attaches `TagQueryManager` via the Gateway bootstrap path, applies the `queue_map` to nodes, and calls `resolve_tags()` once before starting live subscriptions.
 - Live updates: After boot, `TagQueryManager.start()` subscribes to `/events/subscribe` and periodically reconciles via `GET /queues/by_tag` to heal divergence.
-- Offline/backtest: When using `Runner.submit(..., mode="backtest")` or when Gateway/Kafka are unavailable, `resolve_tags(offline=True)` hydrates queue mappings from a local cache file (`.qmtl_tagmap.json` by default). If no snapshot exists, nodes fall back to an empty queue set and remain compute-only until data is fed.
+- Offline/backtest: When Gateway/Kafka are unavailable, `resolve_tags(offline=True)` hydrates queue mappings from a local cache file (`.qmtl_tagmap.json` by default). If no snapshot exists, nodes fall back to an empty queue set and remain compute-only until data is fed.
 
 ## Caching & Determinism
 

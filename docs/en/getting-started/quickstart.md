@@ -22,7 +22,7 @@ Follow this guide to write and submit your first strategy **in 10 minutes**.
 Create a file `my_strategy.py`:
 
 ```python
-from qmtl.sdk import Strategy, StreamInput, Node, Runner, Mode
+from qmtl.sdk import Strategy, StreamInput, Node, Runner
 import pandas as pd
 
 class MomentumStrategy(Strategy):
@@ -62,7 +62,6 @@ if __name__ == "__main__":
     result = Runner.submit(
         MomentumStrategy,
         world="quickstart_demo",
-        mode=Mode.BACKTEST
     )
     print(result)
 ```
@@ -82,7 +81,6 @@ On success, you'll receive results like:
   "strategy_id": "momentum_btc_1m_abc123",
   "status": "valid",              # valid | invalid | pending | rejected
   "world": "quickstart_demo",
-  "mode": "backtest",
   "downgraded": false,            # True if forced into safe compute-only
   "downgrade_reason": null,       # e.g., "missing_as_of" when backtest inputs are incomplete
   "safe_mode": false,
@@ -104,7 +102,7 @@ On success, you'll receive results like:
 The CLI can emit the same WS/Precheck-separated JSON with:
 
 ```bash
-qmtl submit strategies.momentum:MomentumStrategy --world quickstart_demo --mode backtest --output json
+qmtl submit strategies.momentum:MomentumStrategy --world quickstart_demo --output json
 ```
 
 ---
@@ -170,19 +168,12 @@ def compute_signal(view):
     return pd.DataFrame({"signal": signal})
 ```
 
-### B. Promote to Paper Mode
+### B. Paper/Live are World-governed
 
-When backtest performance meets criteria, resubmit with the desired mode:
+After you submit, WorldService may run additional campaigns (paper/live) based on world policy and governance. There is no client-side `mode` flag.
 
-```python
-result = Runner.submit(
-    MomentumStrategy,
-    world="quickstart_demo",
-    mode=Mode.PAPER  # Virtual trading with real-time data
-)
-```
-
-World policies gate activation and may downgrade to compute-only if criteria are not met; demotion on policy breaches is automatic.
+- Inspect the world and campaign status: `qmtl world status quickstart_demo`
+- Inspect live candidates (operator): `qmtl world live-candidates quickstart_demo`
 
 ### C. Performance Monitoring
 
@@ -198,9 +189,6 @@ World policies gate activation and may downgrade to compute-only if criteria are
 ```bash
 # Submit file directly
 qmtl submit my_strategy.py --world quickstart_demo
-
-# Specify mode
-qmtl submit my_strategy.py --world quickstart_demo --mode paper
 ```
 
 ### Check Status

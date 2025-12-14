@@ -1,6 +1,8 @@
-"""Mode switch example - QMTL v2.0.
+"""Submission example - QMTL v2.0.
 
-Demonstrates how to run the same strategy across different modes.
+QMTL v2 exposes a single submission surface: ``Runner.submit(strategy, world=...)``.
+Execution stage (backtest/paper/live) is governed by WorldService policy, not a
+client-side mode flag.
 """
 
 from __future__ import annotations
@@ -8,7 +10,7 @@ from __future__ import annotations
 import argparse
 import pandas as pd
 
-from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import Node, StreamInput
 
 
@@ -29,13 +31,11 @@ class ModeSwitchStrategy(Strategy):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--world", "-w", help="Target world")
-    parser.add_argument("--mode", "-m", choices=["backtest", "paper", "live"], default="backtest")
     args = parser.parse_args()
 
-    # v2 API: Single entry point with mode
+    # v2 API: single entry point; stage/mode is WorldService-governed
     result = Runner.submit(
         ModeSwitchStrategy,
         world=args.world,
-        mode=Mode(args.mode),
     )
     print(f"Strategy submitted: {result.status}")

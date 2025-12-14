@@ -14,7 +14,7 @@ ASCII DAG::
 
 from pathlib import Path
 import argparse
-from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import Node, StreamInput
 import pandas as pd
 
@@ -46,13 +46,11 @@ class BranchingStrategy(Strategy):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--world", "-w", help="Target world")
-    parser.add_argument("--mode", "-m", choices=["backtest", "paper", "live"], default="backtest")
     args = parser.parse_args()
 
-    # v2 API: Single entry point
+    # v2 API: single entry point; stage/mode is WorldService-governed
     result = Runner.submit(
         BranchingStrategy,
         world=args.world,
-        mode=Mode(args.mode),
     )
     print(f"Strategy submitted: {result.status}")

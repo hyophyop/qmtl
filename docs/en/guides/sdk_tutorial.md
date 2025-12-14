@@ -40,23 +40,21 @@ class MyStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    Runner.submit(MyStrategy, world="demo_world", mode="backtest", data_preset="ohlcv.binance.spot.1m")
+    Runner.submit(MyStrategy, world="demo_world", data_preset="ohlcv.binance.spot.1m")
 ```
 
 - `StreamInput` and `ProcessingNode` cover the simplest source/compute path.
 - Add `TagQueryNode` for tag-based multi-queue input; let Gateway/WS own queue resolution and policies.
 
-## 2. Submission surface and mode rules
+## 2. Submission surface and stage rules
 
-- `Runner.submit(..., world=..., mode=backtest|paper|live, data_preset=...)`
-- CLI mirrors it: `qmtl submit strategies.my:MyStrategy --world ... --mode ... --data-preset ...`
-- Exposed modes are `backtest|paper|live` only; legacy tokens (`offline`/`sandbox`) normalize to `backtest`.
-- WS `effective_mode` is authoritative; ambiguous/missing/stale inputs downgrade to compute-only (backtest).
-- In `backtest/paper`, missing `as_of` or `dataset_fingerprint` surfaces `downgraded/safe_mode` at the top level.
+- `Runner.submit(..., world=..., data_preset=...)`
+- CLI mirrors it: `qmtl submit strategies.my:MyStrategy --world ... --data-preset ...`
+- WorldService `effective_mode` is authoritative; missing/stale inputs downgrade to compute-only (`downgraded/safe_mode`).
 
 | Surface | Rule |
 | --- | --- |
-| `--mode` | Only `backtest|paper|live`; omission forces compute-only (backtest). |
+| Stage | Decided by WorldService (`effective_mode` + world policy), not a client flag. |
 | execution_domain hints | Internally mapped to canonical modes; hidden from the user surface. |
 | WS envelope | `DecisionEnvelope`/`ActivationEnvelope` serialized verbatim. |
 | `precheck` | Local ValidationPipeline only; non-authoritative. |
@@ -69,7 +67,6 @@ if __name__ == "__main__":
 {
   "strategy_id": "demo_strategy",
   "world": "demo_world",
-  "mode": "backtest",
   "downgraded": true,
   "downgrade_reason": "missing_as_of",
   "ws": { "decision": { "...": "..." }, "activation": { "...": "..." } },
@@ -90,8 +87,7 @@ if __name__ == "__main__":
 ```bash
 uv run qmtl submit strategies.my:MyStrategy \
   --world demo_world \
-  --data-preset ohlcv.binance.spot.1m \
-  --mode backtest
+  --data-preset ohlcv.binance.spot.1m
 ```
 
 ## 5. Intent/order pipeline (brief)

@@ -7,7 +7,7 @@ stream to gate long signals when the short-term price trend is down.
 
 from typing import Any, Mapping
 
-from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import Node, StreamInput
 from qmtl.runtime.sdk.trade_execution_service import TradeExecutionService
 from qmtl.runtime.transforms import (
@@ -82,6 +82,6 @@ if __name__ == "__main__":
     Runner.set_trade_execution_service(service)
     Runner.set_trade_order_http_url("http://endpoint")
     Runner.set_trade_order_kafka_topic("orders")
-    # v2 API: backtest mode for local validation
-    result = Runner.submit(OrderPipelineStrategy, mode=Mode.BACKTEST)
+    # v2 API: submit to WorldService; stage/mode is governed by world policy
+    result = Runner.submit(OrderPipelineStrategy)
     print(f"Strategy submitted: {result.status}")

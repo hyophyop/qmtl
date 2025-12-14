@@ -55,7 +55,7 @@ Welcome to the QMTL documentation hub.
 
 | Section | Description |
 |---------|-------------|
-| [Getting Started](getting-started/index.md) | Core concepts (Strategy, World, Mode), 10-min quickstart, dev workflow |
+| [Getting Started](getting-started/index.md) | Core concepts (Strategy, World, Stage), 10-min quickstart, dev workflow |
 | [Architecture](architecture/README.md) | System design, component specifications |
 | [Guides](guides/README.md) | Step-by-step tutorials |
 | [Reference](reference/README.md) | APIs, schemas, configuration details |

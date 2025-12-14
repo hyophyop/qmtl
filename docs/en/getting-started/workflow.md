@@ -96,12 +96,11 @@ class MyStrategy(Strategy):
 ### Submit Strategy
 
 ```python
-from qmtl.sdk import Runner, Mode
+from qmtl.sdk import Runner
 
 result = Runner.submit(
     MyStrategy,
     world="my_portfolio",
-    mode=Mode.BACKTEST
 )
 ```
 
@@ -204,8 +203,8 @@ flowchart TD
     D -->|valid| E[Activated]
     D -->|invalid| F[Check improvement_hints]
     
-    E --> G{Higher Mode?}
-    G -->|Yes| H[Submit Paper/Live]
+    E --> G{Promotion eligible?}
+    G -->|Yes| H[World-managed paper/live campaign]
     G -->|No| I[Monitor]
     
     H --> D
@@ -262,13 +261,13 @@ print(result.metrics.get("correlation_with_portfolio"))
 ```
 User focus:
 1. Write strategy code
-2. Call Runner.submit(world=..., mode=...)
+2. Call Runner.submit(world=...)
 3. Read results and improvement_hints
 4. Improve and resubmit as needed
 ```
 
-- Mode transitions are governed by world policies. Submit with the mode you want (`backtest`/`paper`/`live`); WorldService will gate/activate or downgrade to safe compute-only if criteria are not met.
-- Demotion on performance/policy breaches is automatic; promotion to higher modes still requires a submission with that mode.
+- Stage transitions are governed by world policies and operator workflows. WorldService may run paper/live campaigns automatically or require explicit approval/apply steps.
+- Demotion on performance/policy breaches is automatic; promotion is controlled by WorldService governance (not a client-side flag).
 - Notifications/streams: ControlBus streams exist for SDK internals; user-facing subscribe helpers are not yet stable—poll via CLI/REST for now.
 
 ---

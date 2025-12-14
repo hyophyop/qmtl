@@ -35,9 +35,9 @@ Schema checking is controlled by the Runner via the
 - `off`: skip validation
 
 ```python
-from qmtl.runtime.sdk import Runner, Mode
+from qmtl.runtime.sdk import Runner
 
-Runner.submit(MyStrategy, mode=Mode.BACKTEST, schema_enforcement="warn")
+Runner.submit(MyStrategy, schema_enforcement="warn")
 ```
 
 ## Error Messages

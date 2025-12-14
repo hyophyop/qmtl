@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 
 from qmtl.interfaces.cli import submit as cli_submit
-from qmtl.runtime.sdk import Mode
 from qmtl.runtime.sdk.submit import PrecheckResult, StrategyMetrics, SubmitResult
 from qmtl.services.worldservice.shared_schemas import ActivationEnvelope, DecisionEnvelope
 
@@ -13,7 +12,6 @@ def test_cli_prints_ws_and_precheck_sections(capsys):
         strategy_id="s-1",
         status="active",
         world="w-1",
-        mode=Mode.PAPER,
         contribution=0.08,
         weight=0.12,
         rank=3,
@@ -46,7 +44,6 @@ def test_cli_prints_ws_rejection_and_precheck(capsys):
         strategy_id="s-2",
         status="rejected",
         world="w-2",
-        mode=Mode.BACKTEST,
         rejection_reason="WorldService evaluation rejected strategy",
         threshold_violations=[{"metric": "corr", "threshold_type": "max", "threshold_value": 0.8, "value": 0.9}],
         improvement_hints=["ws hint"],
@@ -92,7 +89,6 @@ def test_cli_emits_json_with_ws_and_precheck_sections(capsys):
         strategy_id="s-json",
         status="active",
         world="w-json",
-        mode=Mode.BACKTEST,
         contribution=0.05,
         weight=0.25,
         rank=1,

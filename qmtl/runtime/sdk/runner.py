@@ -29,7 +29,6 @@ from .services import RunnerServices, get_global_services, set_global_services
 from .strategy import Strategy
 from .strategy_bootstrapper import StrategyBootstrapper
 from .tag_manager_service import TagManagerService
-from .mode import Mode
 from .submit import AutoReturnsConfig, SubmitResult, submit, submit_async
 
 if TYPE_CHECKING:
@@ -97,7 +96,6 @@ class Runner:
         strategy_cls: type[Strategy],
         *,
         world: str | None = None,
-        mode: Mode | str = Mode.BACKTEST,
         preset: str | None = None,
         preset_mode: str | None = None,
         preset_version: str | None = None,
@@ -123,10 +121,7 @@ class Runner:
         world : str, optional
             Target world for the strategy. Uses QMTL_DEFAULT_WORLD env var
             or "__default__" if not specified.
-        mode : Mode | str
-            Execution mode: "backtest", "paper", or "live".
-            Default is "backtest" for validation.
-        
+
         Returns
         -------
         SubmitResult
@@ -137,13 +132,10 @@ class Runner:
         >>> result = Runner.submit(MyStrategy)
         >>> print(result.status)  # "active" or "rejected"
         >>> print(result.contribution)  # 0.023 (2.3% contribution)
-        
-        >>> result = Runner.submit(MyStrategy, world="prod", mode="live")
         """
         return submit(
             strategy_cls,
             world=world,
-            mode=mode,
             preset=preset,
             preset_mode=preset_mode,
             preset_version=preset_version,
@@ -160,7 +152,6 @@ class Runner:
         strategy_cls: type[Strategy],
         *,
         world: str | None = None,
-        mode: Mode | str = Mode.BACKTEST,
         preset: str | None = None,
         preset_mode: str | None = None,
         preset_version: str | None = None,
@@ -174,7 +165,6 @@ class Runner:
         return await submit_async(
             strategy_cls,
             world=world,
-            mode=mode,
             preset=preset,
             preset_mode=preset_mode,
             preset_version=preset_version,

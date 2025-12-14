@@ -32,8 +32,8 @@ last_modified: 2025-08-21
 Use `validate_backtest_data(strategy, fail_on_quality_threshold=0.8)` to enforce a minimum quality score.
 
 Runner integration:
-- For local/backtest runs, use `Runner.submit(MyStrategy, mode="backtest")` and invoke validation in your setup or pre-run checks.
-- For WS-first runs, use `Runner.submit(MyStrategy, world=..., mode="paper"|"live")` and keep validation as a separate preflight step if needed.
+- For local/backtest runs, use `Runner.submit(MyStrategy)` and invoke validation in your setup or pre-run checks.
+- For WS-first runs, use `Runner.submit(MyStrategy, world=...)` and keep validation as a separate preflight step if needed.
 
 ## Example
 

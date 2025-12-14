@@ -151,7 +151,7 @@ connectors:
   ws_url: wss://gateway/ws
 ```
 
-예시 전략 `qmtl/examples/strategies/dryrun_live_switch_strategy.py` 는 이 설정을 읽어 드라이런과 라이브 도메인을 전환합니다.
+예시 전략 `qmtl/examples/strategies/dryrun_live_switch_strategy.py` 는 이 설정을 읽어 브로커/WebSocket 연계를 선택적으로 구성합니다.
 
 ## Runner 에서의 사용
 

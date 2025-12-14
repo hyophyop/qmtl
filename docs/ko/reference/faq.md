@@ -13,7 +13,7 @@ last_modified: 2025-09-05
 
 `TagQueryNode`는 Runner가 생성하는 `TagQueryManager`가 Gateway와 통신하여 큐 목록을 갱신합니다. 월드 주도 실행에서 전략은 `Runner.submit(world=...)`로 시작하며, 이때 TagQueryManager가 초기 큐 조회와 WebSocket 구독을 설정합니다. Gateway/WorldService가 연결되지 않으면 전략은 안전기본(compute‑only, 주문 게이트 OFF)으로 유지됩니다. `Runner.submit()` 은 Gateway 없이 로컬 실행으로, 태그 기반 노드는 빈 큐 목록으로 초기화됩니다.
 
-과거 `Runner.backtest` 또는 CLI `--mode`를 사용하던 코드를 업데이트하는 방법은 [마이그레이션: 레거시 모드/하위호환 제거](../guides/migration_bc_removal.md)를 참고하세요.
+과거 레거시 진입점(예: `Runner.backtest`)을 사용하던 코드를 업데이트하는 방법은 [마이그레이션: 레거시 모드/하위호환 제거](../guides/migration_bc_removal.md)를 참고하세요.
 
 ## 테스트가 가끔 hang 되거나 자원이 해제되지 않는 것 같습니다. 어떻게 방지하나요?
 

@@ -8,10 +8,9 @@ def test_sdk_package_reexports_core_symbols():
     import qmtl.sdk as sdk
     import qmtl.runtime.sdk as runtime_sdk
 
-    # v2 core API: 5 symbols
+    # v2 core API
     assert sdk.Runner is runtime_sdk.Runner
     assert sdk.Strategy is runtime_sdk.Strategy
-    assert sdk.Mode is runtime_sdk.Mode
     assert sdk.SubmitResult is runtime_sdk.SubmitResult
     assert sdk.StrategyMetrics is runtime_sdk.StrategyMetrics
 

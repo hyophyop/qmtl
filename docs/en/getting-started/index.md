@@ -46,7 +46,7 @@ last_modified: 2025-12-01
 
 | Document | Description | Time |
 |----------|-------------|------|
-| [Core Concepts](concepts.md) | Strategy, World, Mode — 3 things to know | 5 min |
+| [Core Concepts](concepts.md) | Strategy, World, Stage — 3 things to know | 5 min |
 | [Quickstart](quickstart.md) | From first strategy to submission | 10 min |
 | [User Workflow](workflow.md) | Develop → Evaluate → Improve cycle | 15 min |
 

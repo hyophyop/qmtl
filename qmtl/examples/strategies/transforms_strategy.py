@@ -1,6 +1,6 @@
 """Transforms strategy example - QMTL v2.0."""
 
-from qmtl.runtime.sdk import Runner, Strategy, Mode
+from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import StreamInput
 from qmtl.runtime.transforms import rate_of_change
 
@@ -13,6 +13,6 @@ class RocStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    # v2 API: backtest mode for local validation
-    result = Runner.submit(RocStrategy, mode=Mode.BACKTEST)
+    # v2 API: submit to WorldService; stage/mode is governed by world policy
+    result = Runner.submit(RocStrategy)
     print(f"Strategy submitted: {result.status}")

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from qmtl.runtime.sdk import Mode, Runner, Strategy, StreamInput
+from qmtl.runtime.sdk import Runner, Strategy, StreamInput
 
 
 class CoreLoopDemoStrategy(Strategy):
@@ -10,4 +10,4 @@ class CoreLoopDemoStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    Runner.submit(CoreLoopDemoStrategy, world="core-loop-demo", mode=Mode.BACKTEST)
+    Runner.submit(CoreLoopDemoStrategy, world="core-loop-demo")

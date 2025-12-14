@@ -31,7 +31,7 @@ Runner.submit(
 ### CLI (preferred)
 
 ```bash
-qmtl submit strategy.py --world my-world --mode paper
+qmtl submit strategy.py --world my-world
 ```
 
 ### Python API
@@ -40,11 +40,10 @@ qmtl submit strategy.py --world my-world --mode paper
 Runner.submit(
     StrategyCls,
     world="my-world",
-    mode="paper",
 )
 ```
 
-- Runner fetches `effective_mode` (validate/backtest/live, etc.) from WorldService and applies order gates accordingly.
+- Runner fetches `effective_mode` (validate/backtest/paper/live, etc.) from WorldService and applies gates accordingly.
 - Provide `history_start` / `history_end` when you want an explicit window; otherwise the default world/provider coverage is used.
 
 ## 4) Apply activation gates

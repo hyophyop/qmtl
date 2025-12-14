@@ -44,7 +44,7 @@ class DemoStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    Runner.submit(DemoStrategy, world="demo_world", mode="backtest", data_preset="ohlcv.binance.spot.1m")
+    Runner.submit(DemoStrategy, world="demo_world", data_preset="ohlcv.binance.spot.1m")
 ```
 
 ## 2. Submit and read results (WS SSOT)
@@ -52,14 +52,13 @@ if __name__ == "__main__":
 ```bash
 uv run qmtl submit strategies.demo:DemoStrategy \
   --world demo_world \
-  --mode backtest \
   --data-preset ohlcv.binance.spot.1m \
   --output json
 ```
 
 - **WS envelope = SSOT**: `ws.decision`/`ws.activation` reuse the WorldService schema; the CLI `🌐 WorldService decision (SSOT)` section prints the same fields.
 - **Precheck is separate**: local ValidationPipeline output lives only under `precheck`.
-- **Default-safe**: ambiguous modes or missing `as_of` downgrade to compute-only (backtest) and surface `downgraded/safe_mode` at the top level.
+- **Default-safe**: missing `as_of`/dataset metadata downgrades to compute-only and surfaces `downgraded/safe_mode` at the top level.
 - The contract suite (`tests/e2e/core_loop`) pins these schemas and downgrade rules.
 
 ## 3. Data preset on-ramp
@@ -70,7 +69,7 @@ uv run qmtl submit strategies.demo:DemoStrategy \
 
 ## 4. Core Loop checklist
 
-- Submission: use `Runner.submit(..., world=..., mode=backtest|paper|live)` only; legacy `offline/sandbox` normalize to `backtest`.
+- Submission: use `Runner.submit(..., world=..., data_preset=...)` (single surface).
 - Result surface: `SubmitResult.ws.*` must mirror WS envelopes; `precheck` is advisory only.
 - Activation/deploy: WS owns authority; weights/TTL/etag come straight from WS, and ambiguous inputs downgrade to compute-only.
 - Allocation: inspect/apply world allocations with `qmtl world allocations|rebalance-*`.
@@ -83,7 +82,7 @@ uv run qmtl submit strategies.demo:DemoStrategy \
 
 ## Appendix — legacy/backtest-only path
 
-- Local experiments without a world run via `Runner.submit(..., mode="backtest")`. This is a secondary path and does not bypass WS/activation/queue rules.
+- Local experiments without a world run via `Runner.submit(...)`. This is a secondary path and does not bypass WS/activation/queue rules.
 - TagQuery/WebSocket details, test-mode budgets, and backfill tips live in [sdk_tutorial.md](sdk_tutorial.md) and [operations/e2e_testing.md](../operations/e2e_testing.md).
 
 {{ nav_links() }}

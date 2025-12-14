@@ -40,23 +40,21 @@ class MyStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    Runner.submit(MyStrategy, world="demo_world", mode="backtest", data_preset="ohlcv.binance.spot.1m")
+    Runner.submit(MyStrategy, world="demo_world", data_preset="ohlcv.binance.spot.1m")
 ```
 
 - `StreamInput`과 `ProcessingNode`는 가장 기본적인 소스/프로세싱 노드입니다.
 - Tag 기반 멀티큐가 필요하면 `TagQueryNode`를 추가하고, WS 결정/큐 매핑은 Gateway/WS가 담당하도록 둡니다.
 
-## 2. 제출 표면과 모드 규칙
+## 2. 제출 표면과 단계 규칙
 
-- `Runner.submit(..., world=..., mode=backtest|paper|live, data_preset=...)`
-- CLI는 동일하게 `qmtl submit strategies.my:MyStrategy --world ... --mode ... --data-preset ...`
-- 노출 모드는 `backtest|paper|live`뿐이며 legacy 토큰(`offline`/`sandbox`)은 모두 `backtest`로 정규화합니다.
-- WS `effective_mode`가 단일 권한이며 모호/누락/만료 시 compute-only(backtest)로 강등됩니다.
-- `backtest/paper`에서 `as_of`나 `dataset_fingerprint`가 없으면 `downgraded/safe_mode`가 최상단에 표시됩니다.
+- `Runner.submit(..., world=..., data_preset=...)`
+- CLI도 동일하게 `qmtl submit strategies.my:MyStrategy --world ... --data-preset ...`
+- 실행 단계는 WS의 `effective_mode`(+월드 정책)로 결정되며, 입력 누락/만료 시 `downgraded/safe_mode`로 안전 기본 경로가 표시됩니다.
 
 | 입력/출력 | 규칙 |
 | --- | --- |
-| `--mode` | `backtest|paper|live`만 허용. 미지정 시 compute-only(backtest) 강등. |
+| 단계(Stage) | WorldService(`effective_mode` + 월드 정책)가 결정하며 클라이언트 플래그가 아닙니다. |
 | `execution_domain` 힌트 | 내부적으로 표준 모드로만 매핑되며 사용자 표면에서는 숨김. |
 | WS 봉투 | `DecisionEnvelope`/`ActivationEnvelope` 스키마 그대로 직렬화. |
 | `precheck` | 로컬 ValidationPipeline 전용, SSOT 아님. |
@@ -69,7 +67,6 @@ if __name__ == "__main__":
 {
   "strategy_id": "demo_strategy",
   "world": "demo_world",
-  "mode": "backtest",
   "downgraded": true,
   "downgrade_reason": "missing_as_of",
   "ws": { "decision": { "...": "..." }, "activation": { "...": "..." } },
@@ -90,8 +87,7 @@ if __name__ == "__main__":
 ```bash
 uv run qmtl submit strategies.my:MyStrategy \
   --world demo_world \
-  --data-preset ohlcv.binance.spot.1m \
-  --mode backtest
+  --data-preset ohlcv.binance.spot.1m
 ```
 
 ## 5. 의도/주문 파이프라인(요약)

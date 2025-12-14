@@ -59,8 +59,7 @@ status: draft
 
 - `architecture/architecture.md`·`world/world.md`·`design/worldservice_evaluation_runs_and_metrics_api.md`를 기준으로 다음을 문장으로 고정한다.
   - **WS SSOT 원칙:** 실행 모드/단계의 단일 진실 소스는 항상 WorldService의 `effective_mode`/정책 결과다.
-  - Runner/SDK는 `mode`를 선택하더라도, **WS 결정이 존재하는 한 항상 이를 우선한다.**
-  - “모드는 선택값, WS `effective_mode` + world 정책은 계약”이라는 관점을 문서에서 일관되게 강조한다.
+  - Runner/SDK는 **client‑side `mode`를 제공하지 않으며**, 단계/모드 결정은 WS `effective_mode` + world 정책이 계약(SSOT)임을 문서에서 일관되게 강조한다.
 - World 정책 DSL에서 이미 존재하는 필드들(`data_currency`, `selection.gates`, `hysteresis` 등)을  
   “Core Loop 단계별 결정에 사용되는 1급 개념”으로 명시한다.
 
@@ -80,14 +79,8 @@ status: draft
 ### 해야 할 일
 
 1. **모드 결정 흐름 정리**
-   - `qmtl.runtime.sdk.mode.Mode` / `mode_to_execution_domain` / `execution_domain_to_mode` / `effective_mode_to_mode` 사용처를 점검한다.
-   - `qmtl.runtime.sdk.execution_context.resolve_execution_context`와  
-     `qmtl.runtime.helpers.runtime.determine_execution_mode`가  
-     아래 순서를 따르도록 확인·보완한다.
-     1. explicit `mode` 인자
-     2. 기존 `execution_mode` 컨텍스트
-     3. WS `effective_mode`에서 온 domain 힌트
-     4. 그 외에는 `backtest` (safe default)
+   - user-facing `mode` 개념을 제거하고, 제출 표면이 `Runner.submit(strategy, world=...)`로 수렴하는지 확인한다.
+   - 제출 경로에서 SDK가 임의로 도메인을 “승격”하지 않고, WS `effective_mode`/정책 결정을 그대로 반영하는지만 점검한다.
 
 2. **WS 결정 우선 적용**
    - Gateway/SDK가 WS `DecisionEnvelope` / `ActivationEnvelope`를 수신할 때:
@@ -151,37 +144,28 @@ status: draft
 
 ---
 
-## Phase 3 — world‑first 제출 UX & mode 인자 축소
+## Phase 3 — world‑first 제출 UX & mode 제거
 
-**목표:** 실사용 DX를 “전략 + 월드” 중심으로 재정렬하고, `mode`는 점차 hint/고급 옵션으로 밀어낸다.
+**목표:** 실사용 DX를 “전략 + 월드” 중심으로 재정렬하고, client‑side `mode`를 제거해 WS‑first 단계 결정으로 일원화한다.
 
 ### 해야 할 일
 
 1. **API 서피스 정리**
    - Python:
      - `Runner.submit(MyStrategy, world="...")`를 문서/예제에서 **기본 추천 경로**로 만든다.
-     - `mode=` 인자는 여전히 허용하되, docstring/가이드에서 “advanced/실험용”으로 명시한다.
    - CLI:
      - `qmtl submit strategy.py --world my-world`를 권장 기본 형식으로 문서화한다.
-     - `--mode` 플래그는 고급 옵션 섹션으로 이동한다.
+     - (breaking) `--mode` 플래그는 제거하고, 단계 전환은 월드 정책/거버넌스 워크플로로만 진행한다.
 
-2. **mode=None 코드 경로 지원**
-
-   - 내부적으로 `mode=None`을 허용하고, 이 경우:
-     - 실행 도메인 선택은 **WS `effective_mode` + world/data 정책**에 따라 결정된다.
-     - Runner/SDK는 compute‑only 강등·게이트 설정만 담당한다.
-
-3. **리그레이션 방지**
-
-   - 기존 `mode=Mode.BACKTEST/PAPER/LIVE` 호출은 계속 동작하되,
-     - WS가 붙어 있을 때는 `effective_mode`가 항상 최종 권위가 됨을 테스트로 보장한다.
+2. **마이그레이션 가이드 갱신**
+   - 기존 `mode=`/`--mode` 사용 예제를 제거하고, `Runner.submit(..., world=...)` 단일 호출로 업데이트한다.
 
 ### 산출물
 
 - 문서:
   - Getting Started/Guides/Architecture 문서에서 “mode 없는 submit”을 기본 흐름으로 예시.
 - 코드:
-  - `mode=None` 경로 지원 및 테스트.
+  - `mode`/`Mode` 관련 구현 및 테스트 제거.
 
 ---
 

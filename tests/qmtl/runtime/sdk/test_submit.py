@@ -6,7 +6,7 @@ from decimal import Decimal
 
 import pytest
 
-from qmtl.runtime.sdk import Mode, Runner, Strategy, StrategyMetrics, SubmitResult
+from qmtl.runtime.sdk import Runner, Strategy, StrategyMetrics, SubmitResult
 from qmtl.services.worldservice.shared_schemas import ActivationEnvelope, DecisionEnvelope
 
 from qmtl.runtime.sdk.submit import (
@@ -139,24 +139,6 @@ def test_metrics_only_flag_can_disable(monkeypatch):
     assert _metrics_only_enabled() is False
 
 
-class TestMode:
-    """Tests for Mode enum."""
-
-    def test_mode_values(self):
-        assert Mode.BACKTEST == "backtest"
-        assert Mode.PAPER == "paper"
-        assert Mode.LIVE == "live"
-
-    def test_mode_from_string(self):
-        assert Mode("backtest") == Mode.BACKTEST
-        assert Mode("paper") == Mode.PAPER
-        assert Mode("live") == Mode.LIVE
-
-    def test_invalid_mode(self):
-        with pytest.raises(ValueError):
-            Mode("invalid")
-
-
 class TestSubmitResult:
     """Tests for SubmitResult dataclass."""
 
@@ -165,12 +147,10 @@ class TestSubmitResult:
             strategy_id="s1",
             status="pending",
             world="test",
-            mode=Mode.BACKTEST,
         )
         assert result.strategy_id == "s1"
         assert result.status == "pending"
         assert result.world == "test"
-        assert result.mode == Mode.BACKTEST
         assert result.contribution is None
         assert result.weight is None
         assert result.rank is None
@@ -183,7 +163,6 @@ class TestSubmitResult:
             strategy_id="s1",
             status="active",
             world="prod",
-            mode=Mode.LIVE,
             contribution=0.05,
             weight=0.1,
             rank=3,
@@ -200,7 +179,6 @@ class TestSubmitResult:
             strategy_id="s1",
             status="rejected",
             world="test",
-            mode=Mode.PAPER,
             rejection_reason="Policy threshold not met",
             improvement_hints=["Increase sharpe ratio above 1.0"],
         )
@@ -233,7 +211,6 @@ class TestSubmitResult:
             strategy_id="placeholder",
             status="active",
             world="placeholder-world",
-            mode=Mode.LIVE,
             decision=decision,
             activation=activation,
         )
@@ -248,7 +225,6 @@ class TestSubmitResult:
             strategy_id="s2",
             status="pending",
             world="w",
-            mode=Mode.BACKTEST,
             downgraded=True,
             downgrade_reason="missing_as_of",
             safe_mode=True,
@@ -302,7 +278,6 @@ class TestSubmitResult:
             strategy_class_name="SimpleStrategy",
             strategy_id="sid-1",
             resolved_world="world-1",
-            mode=Mode.BACKTEST,
             world_notice=[],
             validation_result=validation,
             ws_eval=ws_eval,
@@ -358,7 +333,6 @@ class TestSubmitResult:
             strategy_class_name="SimpleStrategy",
             strategy_id="sid-2",
             resolved_world="world-2",
-            mode=Mode.BACKTEST,
             world_notice=["notice"],
             validation_result=validation,
             ws_eval=ws_eval,
@@ -417,7 +391,6 @@ class TestSubmitResult:
             strategy_class_name="SimpleStrategy",
             strategy_id="sid-3",
             resolved_world="world-3",
-            mode=Mode.BACKTEST,
             world_notice=[],
             validation_result=validation,
             ws_eval=ws_eval,
@@ -469,7 +442,6 @@ class TestSubmitResult:
             strategy_class_name="SimpleStrategy",
             strategy_id="sid-missing-ws",
             resolved_world="world-missing-ws",
-            mode=Mode.BACKTEST,
             world_notice=[],
             validation_result=validation,
             ws_eval=None,
@@ -513,7 +485,6 @@ class TestSubmitResult:
             strategy_class_name="SimpleStrategy",
             strategy_id="sid-offline",
             resolved_world="world-offline",
-            mode=Mode.BACKTEST,
             world_notice=[],
             validation_result=validation,
             ws_eval=None,
@@ -540,7 +511,6 @@ class TestSubmitResult:
             strategy_id="s3",
             status="active",
             world="w",
-            mode=Mode.PAPER,
             contribution=0.05,
             weight=0.1,
             rank=2,
@@ -550,7 +520,6 @@ class TestSubmitResult:
 
         payload = result.to_dict()
         assert payload["status"] == "active"
-        assert payload["mode"] == "paper"
         assert payload["weight"] == 0.1
         assert payload["precheck"]["status"] == "passed"
         assert payload["precheck"]["weight"] == 0.02
@@ -620,7 +589,6 @@ class TestSubmitResult:
             strategy_class_name="SimpleStrategy",
             strategy_id="sid-x",
             resolved_world="world-x",
-            mode=Mode.BACKTEST,
             world_notice=[],
             validation_result=validation,
             ws_eval=ws_eval,
@@ -675,7 +643,6 @@ class TestSubmitResult:
             strategy_class_name="SimpleStrategy",
             strategy_id="sid-eval",
             resolved_world="world-eval",
-            mode=Mode.BACKTEST,
             world_notice=[],
             validation_result=validation,
             ws_eval=ws_eval,
@@ -709,16 +676,6 @@ class TestSubmitFunction:
         result = submit(SimpleStrategy, world="test_world")
         assert result.world == "test_world"
 
-    def test_submit_with_mode(self):
-        """Test submit with explicit mode."""
-        result = submit(SimpleStrategy, mode=Mode.PAPER)
-        assert result.mode == Mode.PAPER
-
-    def test_submit_backtest_mode(self):
-        """Test submit in backtest mode (offline)."""
-        result = submit(SimpleStrategy, mode=Mode.BACKTEST)
-        assert result.mode == Mode.BACKTEST
-
     def test_submit_rejects_when_no_returns_available(self):
         """Auto-validate should fail when no returns are produced."""
         class NoReturnsStrategy(Strategy):
@@ -743,12 +700,6 @@ class TestSubmitAsync:
         """Test async submit with strategy class."""
         result = await submit_async(SimpleStrategy)
         assert isinstance(result, SubmitResult)
-
-    @pytest.mark.asyncio
-    async def test_submit_async_with_mode(self):
-        """Test async submit with explicit mode."""
-        result = await submit_async(SimpleStrategy, mode=Mode.PAPER)
-        assert result.mode == Mode.PAPER
 
 
 class TestSubmitInRunningLoop:
