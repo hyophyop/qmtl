@@ -2087,6 +2087,102 @@ async def test_evaluate_sources_metrics_from_risk_hub_when_run_metrics_missing()
 
 
 @pytest.mark.asyncio
+async def test_evaluate_sources_paper_performance_metrics_from_risk_hub_realized_returns():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wrisk-paper"})
+            await client.post("/worlds/wrisk-paper/policies", json={"policy": {}})
+            await client.post("/worlds/wrisk-paper/set-default", json={"version": 1})
+
+            returns = [0.01, -0.005, 0.002, 0.003, -0.001, 0.0, 0.004, -0.002, 0.001, 0.005]
+            snapshot = {
+                "as_of": "2025-01-01T00:00:00Z",
+                "version": "v1",
+                "weights": {"s1": 1.0},
+                "realized_returns": {"s1": returns},
+            }
+            snap_resp = await client.post(
+                "/risk-hub/worlds/wrisk-paper/snapshots",
+                json=snapshot,
+                headers={"X-Actor": "test-suite", "X-Stage": "paper"},
+            )
+            assert snap_resp.status_code == 200
+
+            resp = await client.post(
+                "/worlds/wrisk-paper/evaluate",
+                json={
+                    "strategy_id": "s1",
+                    "run_id": "run-paper",
+                    "metrics": {},
+                    "stage": "paper",
+                    "risk_tier": "low",
+                },
+            )
+            assert resp.status_code == 200
+            run_url = resp.json().get("evaluation_run_url")
+            assert run_url
+
+            run_resp = await client.get(run_url)
+            assert run_resp.status_code == 200
+            recorded = run_resp.json()
+            metrics = recorded.get("metrics", {}) or {}
+            assert metrics.get("returns", {}).get("sharpe") is not None
+            assert metrics.get("returns", {}).get("max_drawdown") is not None
+            assert metrics.get("returns", {}).get("gain_to_pain_ratio") is not None
+            assert metrics.get("returns", {}).get("time_under_water_ratio") is not None
+            assert metrics.get("robustness", {}).get("deflated_sharpe_ratio") is not None
+            assert metrics.get("sample", {}).get("effective_history_years") == pytest.approx(len(returns) / 252.0)
+
+
+@pytest.mark.asyncio
+async def test_evaluate_cohort_sources_paper_performance_metrics_from_risk_hub_realized_returns():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "wcohort-paper"})
+            await client.post("/worlds/wcohort-paper/policies", json={"policy": {}})
+            await client.post("/worlds/wcohort-paper/set-default", json={"version": 1})
+
+            returns = [0.002, -0.001, 0.001, 0.0, 0.003]
+            snapshot = {
+                "as_of": "2025-01-01T00:00:00Z",
+                "version": "v1",
+                "weights": {"s1": 1.0},
+                "realized_returns": {"s1": returns},
+            }
+            snap_resp = await client.post(
+                "/risk-hub/worlds/wcohort-paper/snapshots",
+                json=snapshot,
+                headers={"X-Actor": "test-suite", "X-Stage": "paper"},
+            )
+            assert snap_resp.status_code == 200
+
+            resp = await client.post(
+                "/worlds/wcohort-paper/evaluate-cohort",
+                json={
+                    "campaign_id": "c1",
+                    "run_id": "cohort-run-paper",
+                    "candidates": ["s1"],
+                    "metrics": {},
+                    "stage": "paper",
+                    "risk_tier": "low",
+                },
+            )
+            assert resp.status_code == 200
+            runs = resp.json().get("evaluation_runs") or {}
+            run_url = runs.get("s1")
+            assert run_url
+
+            run_resp = await client.get(run_url)
+            assert run_resp.status_code == 200
+            recorded = run_resp.json()
+            metrics = recorded.get("metrics", {}) or {}
+            assert metrics.get("returns", {}).get("sharpe") is not None
+            assert metrics.get("sample", {}).get("effective_history_years") == pytest.approx(len(returns) / 252.0)
+
+
+@pytest.mark.asyncio
 async def test_evaluate_cohort_sources_metrics_from_risk_hub_when_missing():
     app = create_app(storage=Storage())
     async with httpx.ASGITransport(app=app) as asgi:
