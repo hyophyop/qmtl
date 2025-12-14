@@ -100,6 +100,16 @@ selection:
     demote_after: 2
     min_dwell: 3h        # 최소 체류 시간
 
+# Phase 4: 캠페인 오케스트레이션(관찰 윈도우)
+campaign:
+  backtest:
+    window: 180d      # 최소 backtest 관찰 기간 (예: 180d)
+  paper:
+    window: 30d       # 최소 paper(dryrun) 관찰 기간
+  common:
+    min_sample_days: 30
+    min_trades_total: 100
+
 position_policy:
   on_promote: flat_then_enable   # 기본: 포지션 미이월
   on_demote: disable_then_flat

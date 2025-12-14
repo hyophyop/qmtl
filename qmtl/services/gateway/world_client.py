@@ -526,6 +526,23 @@ class WorldServiceClient:
             params={"limit": limit, "include_plan": include_plan},
         )
 
+    async def get_campaign_status(
+        self,
+        world_id: str,
+        *,
+        strategy_id: str | None = None,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> Any:
+        params: Dict[str, Any] = {}
+        if strategy_id is not None:
+            params["strategy_id"] = strategy_id
+        return await self._request_json(
+            "GET",
+            f"/worlds/{world_id}/campaign/status",
+            headers=headers,
+            params=params or None,
+        )
+
     async def post_live_promotion_apply(
         self,
         world_id: str,

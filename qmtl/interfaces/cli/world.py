@@ -396,6 +396,27 @@ def _world_status(args: argparse.Namespace) -> int:
         except ValueError:
             return 0
 
+        status_code, campaign_resp = http_get(
+            f"/worlds/{world_id}/campaign/status",
+            params={"strategy_id": strategy_id},
+        )
+        if status_code < 400 and status_code != 0 and isinstance(campaign_resp, dict):
+            strategies = campaign_resp.get("strategies")
+            if isinstance(strategies, list) and strategies:
+                first = strategies[0] if isinstance(strategies[0], dict) else None
+                if isinstance(first, dict):
+                    print()
+                    print(_t("🧭 Campaign Status"))
+                    print("=" * 50)
+                    print(f"Phase:         {first.get('phase')}")
+                    print(f"Promote paper: {bool(first.get('promotable_to_paper'))}")
+                    print(f"Promote live:  {bool(first.get('promotable_to_live'))}")
+                    reasons = first.get("reasons")
+                    if isinstance(reasons, list) and reasons:
+                        rendered = ", ".join(str(v) for v in reasons if str(v).strip())
+                        if rendered:
+                            print(f"Reasons:       {rendered}")
+
         run_id = str(args.evaluation_run_id or "latest")
         if run_id == "latest":
             status_code, runs = http_get(f"/worlds/{world_id}/strategies/{strategy_id}/runs")

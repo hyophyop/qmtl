@@ -436,6 +436,13 @@ WORLD_ROUTES: tuple[WorldRoute, ...] = (
         query_params=("limit", "include_plan"),
     ),
     WorldRoute(
+        "get",
+        "/worlds/{world_id}/campaign/status",
+        "get_campaign_status",
+        path_params=("world_id",),
+        query_params=("strategy_id",),
+    ),
+    WorldRoute(
         "post",
         "/worlds/{world_id}/promotions/live/apply",
         "post_live_promotion_apply",

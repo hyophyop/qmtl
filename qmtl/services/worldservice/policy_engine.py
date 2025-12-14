@@ -332,6 +332,23 @@ class GovernanceConfig(BaseModel):
     live_promotion: LivePromotionConfig | None = None
 
 
+class CampaignStageConfig(BaseModel):
+    window: str | None = None
+
+
+class CampaignCommonConfig(BaseModel):
+    min_sample_days: int | None = None
+    min_trades_total: int | None = None
+
+
+class CampaignConfig(BaseModel):
+    """World-level campaign observation configuration (Phase 4)."""
+
+    backtest: CampaignStageConfig | None = None
+    paper: CampaignStageConfig | None = None
+    common: CampaignCommonConfig | None = None
+
+
 class Policy(BaseModel):
     thresholds: dict[str, ThresholdRule] = Field(default_factory=dict)
     top_k: TopKRule | None = None
@@ -348,6 +365,7 @@ class Policy(BaseModel):
     paper_shadow_consistency: PaperShadowConsistencyConfig | None = None
     live_monitoring: LiveMonitoringConfig | None = None
     governance: GovernanceConfig | None = None
+    campaign: CampaignConfig | None = None
 
     def model_post_init(self, __context: Any) -> None:  # type: ignore[override]
         self._normalize_selection()
