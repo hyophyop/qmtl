@@ -23,8 +23,6 @@ on:
         description: "Base dir for file blob store (when blob_store_type=file)"
         required: false
         default: ".risk_blobs"
-  schedule:
-    - cron: "13 */2 * * *" # Every 2 hours at :13 UTC
 
 permissions:
   contents: read
@@ -105,4 +103,3 @@ jobs:
           path: |
             live_monitoring_report.md
             live_monitoring_report.json
-

@@ -51,7 +51,9 @@
 - 운영 엔트리포인트(예시):
   - Live run 생성(크론/데몬): `uv run python scripts/live_monitoring_worker.py --interval-seconds 3600`
   - 리포트 생성(Markdown/JSON): `uv run python scripts/generate_live_monitoring_report.py --world <world_id> --output live_report.md`
-  - GitHub Actions 스케줄(권장): `.github/workflows/live-monitoring-schedule.yml` (secrets 미설정 시 자동 skip + 리포트 아티팩트 업로드)
+  - GitHub Actions 스케줄(권장): `.github/workflows/live-monitoring-schedule.yml`
+    - 현재: 배포 전 개발 단계에서는 **수동(workflow_dispatch) 전용**으로 운영(주기 실행은 배포 이후 재도입)
+    - secrets 미설정 시 자동 skip + 리포트 아티팩트 업로드
 
 ### 6) Validation Health / Invariants
 
