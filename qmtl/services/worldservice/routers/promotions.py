@@ -17,6 +17,8 @@ from ..schemas import (
     LivePromotionApproveRequest,
     LivePromotionApplyRequest,
     LivePromotionAutoApplyResponse,
+    LivePromotionCandidate,
+    LivePromotionCandidatesResponse,
     LivePromotionPlanResponse,
     LivePromotionRejectRequest,
 )
@@ -578,6 +580,105 @@ def create_promotions_router(service: WorldService) -> APIRouter:
             source_run_id=run_id,
             apply_run_id=apply_run_id,
             plan=plan_resp.plan,
+        )
+
+    @router.get(
+        "/worlds/{world_id}/promotions/live/candidates",
+        response_model=LivePromotionCandidatesResponse,
+    )
+    async def get_live_promotion_candidates(
+        world_id: str,
+        *,
+        limit: int = 20,
+        include_plan: bool = False,
+    ) -> LivePromotionCandidatesResponse:
+        governance = await _get_live_promotion_governance(service, world_id)
+        mode_normalized = str(governance.mode or "").lower()
+        if mode_normalized == "disabled":
+            return LivePromotionCandidatesResponse(world_id=world_id, promotion_mode=governance.mode, candidates=[])
+
+        runs = await service.store.list_evaluation_runs(world_id=world_id)
+        paper_runs = [
+            r
+            for r in runs
+            if isinstance(r, dict) and str(r.get("stage") or "").lower() == "paper"
+        ]
+        if not paper_runs:
+            return LivePromotionCandidatesResponse(world_id=world_id, promotion_mode=governance.mode, candidates=[])
+
+        def _rank(run: dict) -> tuple[datetime, datetime]:
+            created = _parse_iso(str(run.get("created_at") or ""))
+            updated = _parse_iso(str(run.get("updated_at") or "")) or created
+            return updated, created
+
+        by_strategy: dict[str, dict] = {}
+        for run in paper_runs:
+            strategy_id = str(run.get("strategy_id") or "")
+            if not strategy_id:
+                continue
+            existing = by_strategy.get(strategy_id)
+            if existing is None or _rank(run) > _rank(existing):
+                by_strategy[strategy_id] = run
+
+        selected = sorted(by_strategy.values(), key=_rank, reverse=True)
+        if limit > 0:
+            selected = selected[: int(limit)]
+
+        current_active = await service.store.get_decisions(world_id)
+        current_set = {str(v) for v in current_active if str(v).strip()}
+
+        candidates: list[LivePromotionCandidate] = []
+        for run in selected:
+            summary = run.get("summary") if isinstance(run, dict) else None
+            if not isinstance(summary, dict):
+                continue
+            status = str(summary.get("status") or "").lower()
+            if status not in {"pass", "warn"}:
+                continue
+            active_set = summary.get("active_set")
+            if not isinstance(active_set, list) or not all(isinstance(v, str) for v in active_set):
+                continue
+            target_set = {str(v) for v in active_set if str(v).strip()}
+            if not target_set:
+                continue
+            target_active = sorted(target_set)
+            override_status = str(summary.get("override_status") or "none").lower()
+            block_reasons = await _compute_promotion_block_reasons(
+                service,
+                world_id,
+                run,
+                governance=governance,
+                override_status=override_status,
+                target_active=target_active,
+            )
+            pending_manual_approval = block_reasons == ["manual_approval_required"]
+            eligible = block_reasons in ([], ["manual_approval_required"])
+            plan = None
+            if include_plan:
+                plan = ApplyPlan(
+                    activate=sorted(target_set - current_set),
+                    deactivate=sorted(current_set - target_set),
+                )
+            candidates.append(
+                LivePromotionCandidate(
+                    strategy_id=str(run.get("strategy_id") or ""),
+                    run_id=str(run.get("run_id") or ""),
+                    created_at=str(run.get("created_at") or "") or None,
+                    updated_at=str(run.get("updated_at") or "") or None,
+                    status=status or None,
+                    override_status=override_status,
+                    pending_manual_approval=pending_manual_approval,
+                    eligible=eligible,
+                    blocked_reasons=block_reasons,
+                    target_active=target_active,
+                    plan=plan,
+                )
+            )
+
+        return LivePromotionCandidatesResponse(
+            world_id=world_id,
+            promotion_mode=governance.mode,
+            candidates=candidates,
         )
 
     return router

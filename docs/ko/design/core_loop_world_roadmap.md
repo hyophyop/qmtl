@@ -327,6 +327,9 @@ Phase 5의 “강한 검증/리스크 컷/스트레스”는 입력 데이터가
 	           운영자가 “왜 아직 승격이 안 되는지(= dryrun/validation/스냅샷/fail‑closed/쿨다운 등)”를 빠르게 판단할 수 있어야 한다.
 	       - `governance.live_promotion.mode=auto_apply`의 초기 구현은 “외부 스케줄러가 호출하는 자동 적용 엔드포인트”로 시작할 수 있다.
 	         - 예: `POST /worlds/{world}/promotions/live/auto-apply`
+	       - 후보군 조회(권장):
+	         - `GET /worlds/{world}/promotions/live/candidates` (최신 paper run 기준 후보군 요약)
+	         - (권장 CLI) `qmtl world live-candidates <world> [--include-plan]`
 	     - RBAC:
 	       - 승인/적용은 operator‑only(또는 별도 role)로 제한하고, 모든 호출은 감사 로그로 남긴다.
 

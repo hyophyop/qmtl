@@ -44,6 +44,7 @@ def cmd_world(argv: List[str]) -> int:
             "live-approve",
             "live-reject",
             "live-apply",
+            "live-candidates",
             "allocations",
             "apply",
             "rebalance-plan",
@@ -158,6 +159,19 @@ def cmd_world(argv: List[str]) -> int:
         help=_t("Force live-apply even if run is not approved"),
     )
     parser.add_argument(
+        "--limit",
+        dest="limit",
+        type=int,
+        default=20,
+        help=_t("Limit candidate listing size (default: 20)"),
+    )
+    parser.add_argument(
+        "--include-plan",
+        dest="include_plan",
+        action="store_true",
+        help=_t("Include activate/deactivate plan in candidate listing"),
+    )
+    parser.add_argument(
         "--target", "-t",
         dest="target_allocations",
         default=None,
@@ -216,6 +230,7 @@ def cmd_world(argv: List[str]) -> int:
         "live-approve": lambda: _world_live_override(args, status="approved"),
         "live-reject": lambda: _world_live_override(args, status="rejected"),
         "live-apply": lambda: _world_live_apply(args),
+        "live-candidates": lambda: _world_live_candidates(args),
     }
     return actions[args.action]()
 
@@ -558,6 +573,69 @@ def _world_live_apply(args: argparse.Namespace) -> int:
     phase = resp.get("phase") if isinstance(resp, dict) else None
     if phase:
         print(f"Phase:    {phase}")
+    return 0
+
+
+def _world_live_candidates(args: argparse.Namespace) -> int:
+    try:
+        world_id = _require_world_id(args)
+    except ValueError as exc:
+        print(_t("Error: {}").format(exc), file=sys.stderr)
+        return 1
+
+    limit = int(getattr(args, "limit", 20) or 20)
+    include_plan = bool(getattr(args, "include_plan", False))
+    status_code, payload = http_get(
+        f"/worlds/{world_id}/promotions/live/candidates",
+        params={"limit": limit, "include_plan": str(include_plan).lower()},
+    )
+    if status_code >= 400 or status_code == 0 or not isinstance(payload, dict):
+        err = payload.get("detail") if isinstance(payload, dict) else status_code
+        print(_t("Error fetching live promotion candidates: {}").format(err), file=sys.stderr)
+        return 1
+
+    candidates = payload.get("candidates")
+    if not isinstance(candidates, list):
+        print(_t("Error: invalid candidates response"), file=sys.stderr)
+        return 1
+
+    print(_t("🚦 Live Promotion Candidates"))
+    print("=" * 60)
+    print(f"World: {world_id}")
+    print(f"Mode:  {payload.get('promotion_mode')}")
+    print(f"Count: {len(candidates)}")
+    if not candidates:
+        return 0
+
+    for item in candidates:
+        if not isinstance(item, dict):
+            continue
+        sid = item.get("strategy_id")
+        rid = item.get("run_id")
+        status = item.get("status")
+        pending = bool(item.get("pending_manual_approval"))
+        eligible = bool(item.get("eligible"))
+        blocked = item.get("blocked_reasons")
+        blocked_text = ""
+        if isinstance(blocked, list) and blocked:
+            rendered = ", ".join(str(v) for v in blocked if str(v).strip())
+            if rendered:
+                blocked_text = rendered
+        header = f"- {sid} run={rid} status={status} eligible={eligible} pending={pending}"
+        print(header)
+        if blocked_text:
+            print(f"  blocked: {blocked_text}")
+        plan = item.get("plan")
+        if include_plan and isinstance(plan, dict):
+            activate_list: list[Any] = []
+            deactivate_list: list[Any] = []
+            raw_activate = plan.get("activate")
+            raw_deactivate = plan.get("deactivate")
+            if isinstance(raw_activate, list):
+                activate_list = list(raw_activate)
+            if isinstance(raw_deactivate, list):
+                deactivate_list = list(raw_deactivate)
+            print(f"  plan: activate={len(activate_list)}, deactivate={len(deactivate_list)}")
     return 0
 
 
