@@ -114,6 +114,31 @@ class ApplyPlan(BaseModel):
     deactivate: List[str] = Field(default_factory=list)
 
 
+class LivePromotionApproveRequest(BaseModel):
+    strategy_id: str = Field(min_length=1)
+    run_id: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    actor: str = Field(min_length=1)
+    timestamp: str | None = None
+
+
+class LivePromotionRejectRequest(BaseModel):
+    strategy_id: str = Field(min_length=1)
+    run_id: str = Field(min_length=1)
+    reason: str | None = None
+    actor: str | None = None
+    timestamp: str | None = None
+
+
+class LivePromotionPlanResponse(BaseModel):
+    world_id: str
+    strategy_id: str
+    run_id: str
+    plan: ApplyPlan
+    target_active: List[str] = Field(default_factory=list)
+    current_active: List[str] = Field(default_factory=list)
+
+
 class ApplyRequest(EvaluateRequest):
     run_id: str
     plan: ApplyPlan | None = None
