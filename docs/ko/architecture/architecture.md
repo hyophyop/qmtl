@@ -12,7 +12,7 @@ last_modified: 2025-12-06
 # QMTL 고급 아키텍처 및 시스템 구현 계획서
 
 !!! warning
-    문서 내 `Runner.run`/`Runner.offline` 예시는 더 이상 사용되지 않습니다. 모든 실행/제출 진입점은 `Runner.submit(..., world=..., mode=...)` 하나로 통일되었습니다.
+    문서 내 `Runner.run`/`Runner.offline` 예시는 더 이상 사용되지 않습니다. 모든 실행/제출 진입점은 `Runner.submit(..., world=...)` 하나로 통일되었습니다.
 
 ## 관련 문서
 - [Architecture Overview](README.md)
@@ -20,6 +20,7 @@ last_modified: 2025-12-06
 - [DAG Manager](dag-manager.md)
 - [Lean Brokerage Model](lean_brokerage_model.md)
 - [WorldService](worldservice.md)
+- [Core Loop 자동화](core_loop_world_automation.md)
 - [ControlBus](controlbus.md)
 - [Exchange Node Sets](exchange_node_sets.md)
 - Risk Signal Hub: [Risk Signal Hub 아키텍처](risk_signal_hub.md)
@@ -42,7 +43,7 @@ last_modified: 2025-12-06
 <a id="core-loop-summary"></a>
 ## Core Loop 합의 요약 (편입)
 
-- 단일 진입점: 모든 제출은 `Runner.submit(..., world=..., mode=...)`로 통일되었고, Mode는 `backtest|paper|live` 3단계다. (`qmtl/runtime/sdk/submit.py`, `mode.py`)
+- 단일 진입점: 모든 제출은 `Runner.submit(..., world=...)`로 통일되며, client-side `mode`는 없다. 단계(backtest/paper/live)는 월드 정책과 WorldService가 관리한다. (`qmtl/runtime/sdk/submit.py`)
 - WS SSOT: SubmitResult는 WorldService 결정/활성(envelope)을 SSOT로 노출하고, precheck는 보조 정보로 분리된다. (`qmtl/services/worldservice/shared_schemas.py`, Core Loop 계약 테스트)
 - Default-safe: WorldService 결정이 없거나 stale이면 강등·safe_mode 플래그로 백테스트/compute-only로 수렴한다. (`qmtl/runtime/sdk/execution_context.py`, `tests/e2e/core_loop/test_compute_context_contract.py`)
 - 데이터 온램프: world preset 기반 Seamless auto-wiring이 기본 경로이며 Core Loop 계약 테스트로 검증한다. (`qmtl/runtime/sdk/world_data.py`, `tests/e2e/core_loop/`)
@@ -58,7 +59,7 @@ QMTL 아키텍처 전반의 **핵심 설계 가치**는 다음 한 문장으로 
 > **“전략 로직에만 집중하면 시스템이 알아서 최적화하고 수익을 낸다.”**
 
 따라서 이 문서에서 정의하는 모든 컴포넌트(Gateway, DAG Manager, WorldService, SDK/Runner 등)는 다음 원칙을 공유한다.
-- 전략 작성자는 **전략 DAG와 월드 선택, 모드 선택** 정도에만 신경 쓰고, 나머지(큐 생성·스케일링·ExecutionDomain·2‑Phase Apply·Feature Artifact 관리·리스크/타이밍 게이트)는 시스템 내부 레이어가 맡는다.
+- 전략 작성자는 **전략 DAG와 월드 선택** 정도에만 신경 쓰고, 나머지(단계 결정·큐 생성·스케일링·ExecutionDomain·2‑Phase Apply·Feature Artifact 관리·리스크/타이밍 게이트)는 시스템 내부 레이어가 맡는다.
 - 내부 레이어는 복잡해질 수 있지만, **외부 인터페이스는 `전략 작성 → 제출 → (자동 평가/배포) → 수익 기여 확인` 흐름을 중심으로 설계**한다.
 - 새로운 기능을 추가할 때도 “사용자가 더 많은 옵션을 알게 만드는 대신, 시스템이 자동 결정하고 필요 시에만 override 하게 한다”는 방향을 기본으로 삼는다.
 
@@ -76,7 +77,7 @@ QMTL 아키텍처 전반의 **핵심 설계 가치**는 다음 한 문장으로 
 > 전략 작성 → 제출 → (시스템이 월드 안에서 백테스트/평가/배포) → 월드 성과 확인 → 전략 개선
 
 - 전략 코드는 “신호 생성 + 필요한 데이터”만 표현하고, 데이터 공급/백필/시장 replay는 Seamless/DataPlane이 책임진다.
-- `Runner.submit(..., world=..., mode=...)` 한 번으로 히스토리 warm‑up + replay 기반 백테스트, 성과 지표 계산, WorldService 정책 평가, 활성/비활성 결정과 월드 단위 자본 배분 스냅샷 노출까지 이어진다.
+- `Runner.submit(..., world=...)` 한 번으로 히스토리 warm‑up + replay 기반 백테스트, 성과 지표 계산, WorldService 정책 평가, 활성/비활성 결정과 월드 단위 자본 배분 스냅샷 노출까지 이어진다.
 - 사용자는 월드 성과/기여도를 보고 전략을 개선하는 루프에 집중한다.
 
 #### 0.1.1 백테스트 & 시장 replay

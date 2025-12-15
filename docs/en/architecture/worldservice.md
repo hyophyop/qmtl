@@ -44,6 +44,8 @@ Non-goals:
 
 ### 0-A. Core Loop Alignment
 
+Related: [Core Loop × WorldService — Campaign Automation and Promotion Governance](core_loop_world_automation.md)
+
 #### Evaluation & Activation Flow
 
 - WS evaluation results (active/weight/contribution/violations) are the **single world-level source of truth**, surfaced directly by SDK/Runner; `ValidationPipeline` stays as a hint/local pre-check only.

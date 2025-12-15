@@ -18,7 +18,7 @@ status: draft
 - 아키텍처 개요 및 Core Loop: [architecture/architecture.md](../architecture/architecture.md)
 - World 사양: [world/world.md](../world/world.md)
 - WorldService 평가 런 & 메트릭 API: [design/worldservice_evaluation_runs_and_metrics_api.md](worldservice_evaluation_runs_and_metrics_api.md)
-- Core Loop × World 로드맵: [design/core_loop_world_roadmap.md](core_loop_world_roadmap.md)
+- Core Loop × WorldService 자동화 아키텍처: [architecture/core_loop_world_automation.md](../architecture/core_loop_world_automation.md)
 - 모델 리스크 관리 프레임워크: [design/model_risk_management_framework.md](model_risk_management_framework.md)
 - 과거 SDK auto_returns 설계(보관용): [archive/auto_returns_unified_design.md](../archive/auto_returns_unified_design.md)
 
@@ -555,7 +555,10 @@ WorldService는 해당 전략/월드/Run에 대한 다음 정보를 함께 기�
 
 ## 6. 로드맵 연계 및 다음 단계
 
-이 문서의 설계는 [Core Loop × World 로드맵](core_loop_world_roadmap.md)의 Phase 4–5와 직접 연결된다.
+이 문서의 설계는 “Core Loop × WorldService 자동화 아키텍처”의 캠페인/거버넌스(Phase 4–5)와 직접 연결된다.
+
+- Core Loop 자동화(정리본): [architecture/core_loop_world_automation.md](../architecture/core_loop_world_automation.md)
+- (아카이브) 단계별 작업 로드맵: [archive/core_loop_world_roadmap.md](../archive/core_loop_world_roadmap.md)
 
 - **Phase 4**:  
   - 여기서 정의한 Evaluation Run 메트릭 블록 구조 및 캠페인 상태 모델을 사용해  
