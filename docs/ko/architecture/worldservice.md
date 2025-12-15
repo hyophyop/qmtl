@@ -20,6 +20,8 @@ WorldService는 월드의 단일 진실 소스(SSOT)입니다. 다음을 소유�
 - 감사 및 RBAC: 각 정책/업데이트/결정/적용 이벤트를 로깅하고 권한을 검사
 - 이벤트: 내부 ControlBus로 활성화/정책 업데이트 발행
 
+관련: [Core Loop × WorldService — 캠페인 자동화와 승격 거버넌스](core_loop_world_automation.md)
+
 !!! note "배포 프로필"
     `profile: dev`에서는 활성화 캐시 Redis가 비어 있으면 인메모리 저장소를 사용합니다. `profile: prod`에서는 `worldservice.server.redis`가 비어 있으면 프로세스가 기동 전에 실패하며, 인메모리 모드는 지원하지 않습니다.
 

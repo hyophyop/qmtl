@@ -21,6 +21,7 @@ nav:
       - Gateway: architecture/gateway.md
       - Risk Signal Hub: architecture/risk_signal_hub.md
       - WorldService: architecture/worldservice.md
+      - Core Loop Automation: architecture/core_loop_world_automation.md
       - ControlBus: architecture/controlbus.md
       - Lean Brokerage Model: architecture/lean_brokerage_model.md
       - Exchange Node Sets: architecture/exchange_node_sets.md
@@ -99,7 +100,6 @@ nav:
       - CI: operations/ci.md
   - Design:
       - QMTL UI: design/qmtl_ui.md
-      - Core Loop × World Roadmap: design/core_loop_world_roadmap.md
       - World Validation Architecture: design/world_validation_architecture.md
       - World Validation v1 Implementation Plan: design/world_validation_v1_implementation_plan.md
       - World Validation v1.5 Implementation: design/world_validation_v1.5_implementation.md
@@ -201,10 +201,10 @@ plugins:
             "Independent Validation": "독립 검증"
             "World Validation Governance": "World Validation 거버넌스"
             "Validation Report": "Validation Report"
+            "Core Loop Automation": "Core Loop 자동화"
             "Rebalancing Schema Coordination": "리밸런싱 스키마 조율"
             Design: 설계
             QMTL UI: QMTL UI
-            "Core Loop × World Roadmap": "Core Loop × World 로드맵"
             "World Validation Architecture": "World 검증 계층 설계"
             "Model Risk Management Framework": "모델 리스크 관리 프레임워크"
             "World Validation v1 Implementation Plan": "World 검증 v1 구현 계획"

@@ -14,7 +14,7 @@ status: draft
     WorldService/Exit Engine/모니터링이 동일한 스냅샷을 읽어 **일관된 검증·exit·모니터링**을 수행하도록 한다.
 
 연관 문서:
-- Core Loop × WorldService 로드맵: [design/core_loop_world_roadmap.md](../design/core_loop_world_roadmap.md)
+- (아카이브) Core Loop × WorldService 로드맵: [archive/core_loop_world_roadmap.md](core_loop_world_roadmap.md)
 - WorldService 평가 런 & 메트릭 API: [design/worldservice_evaluation_runs_and_metrics_api.md](../design/worldservice_evaluation_runs_and_metrics_api.md)
 - World 검증 v1 구현 계획: [design/world_validation_v1_implementation_plan.md](../design/world_validation_v1_implementation_plan.md) §6
 - Exit Engine 개요: [design/exit_engine_overview.md](../design/exit_engine_overview.md)

@@ -12,7 +12,7 @@ last_modified: 2025-12-06
 # QMTL Advanced Architecture and Implementation Blueprint
 
 !!! warning
-    Legacy code samples that use `Runner.run`/`Runner.offline` are obsolete. Use `Runner.submit(..., world=..., mode=...)` instead; the architecture remains the same, but the entrypoint is now submit-only.
+    Legacy code samples that use `Runner.run`/`Runner.offline` are obsolete. Use `Runner.submit(..., world=...)` instead; the architecture remains the same, but the entrypoint is now submit-only.
 
 ## Related Documents
 - [Architecture Overview](README.md)
@@ -20,6 +20,7 @@ last_modified: 2025-12-06
 - [DAG Manager](dag-manager.md)
 - [Lean Brokerage Model](lean_brokerage_model.md)
 - [WorldService](worldservice.md)
+- [Core Loop Automation](core_loop_world_automation.md)
 - [ControlBus](controlbus.md)
 - [Exchange Node Sets](exchange_node_sets.md)
 - Risk Signal Hub: [Risk Signal Hub Architecture](risk_signal_hub.md)
@@ -41,7 +42,7 @@ Bootstrap workflows and operational validation steps live in
 <a id="core-loop-summary"></a>
 ## Core Loop decisions (incorporated)
 
-- Single entrypoint: all submissions use `Runner.submit(..., world=..., mode=...)` with 3 modes only: `backtest|paper|live`. (`qmtl/runtime/sdk/submit.py`, `mode.py`)
+- Single entrypoint: all submissions use `Runner.submit(..., world=...)`; there is no client-side `mode`. Stages (backtest/paper/live) are managed by world policy and WorldService. (`qmtl/runtime/sdk/submit.py`)
 - WS as SSOT: SubmitResult exposes WorldService decision/activation envelopes as the source of truth, with local precheck kept separate. (`qmtl/services/worldservice/shared_schemas.py`, Core Loop contract tests)
 - Default-safe: when WS decisions are missing or stale, executions downgrade to backtest/compute-only and mark safe_mode. (`qmtl/runtime/sdk/execution_context.py`, `tests/e2e/core_loop/test_compute_context_contract.py`)
 - Data on-ramp: world presets drive Seamless auto-wiring by default, verified by the Core Loop contract suite. (`qmtl/runtime/sdk/world_data.py`, `tests/e2e/core_loop/`)
@@ -72,7 +73,7 @@ single sentence:
 All components described in this document (Gateway, DAG Manager, WorldService,
 SDK/Runner, etc.) share the following intent:
 - Strategy authors focus on **strategy DAGs, world selection, and execution mode**
-  while the system layers own queue creation/scaling, ExecutionDomain handling,
+  while the system layers own stage decisions, queue creation/scaling, ExecutionDomain handling,
   2‑Phase apply, feature artifact management, and risk/timing gating.
 - Internal layers are allowed to be complex, but the **external interface is
   designed around `Write strategy → Submit → (Auto evaluate/deploy) → Check
@@ -95,13 +96,13 @@ From the user’s perspective, QMTL’s **Core Loop** is:
 > Implement strategy → Submit → (system backtests/evaluates/deploys inside a world) → Observe world performance → Refine strategy
 
 - Strategy code only expresses “signal logic + required data”, while data supply/backfill/market replay are handled by the Seamless/DataPlane.
-- A single `Runner.submit(..., world=..., mode=...)` call warms up history, runs a replay‑style backtest, computes metrics, evaluates policies (WorldService), and surfaces activation/allocations at the world level.
+- A single `Runner.submit(..., world=...)` call warms up history, runs a replay‑style backtest, computes metrics, evaluates policies (WorldService), and surfaces activation/allocations at the world level.
 - Users stay focused on the “submit → observe → improve” loop for their worlds.
 
 #### 0.1.1 Backtest & Market Replay
 
 - `HistoryWarmupService` and `Pipeline` handle `StreamInput` history loading and replay.
-- Seamless/QuestDB/CCXT and other sources are integrated into the v2 data plane; worlds that declare `world.data.presets[]` let Runner/CLI auto‑wire a Seamless provider and StreamInputs from the world + preset. The default on‑ramp needs only `world`, `mode`, and (optionally) a data preset for market‑style replay; worlds without presets still follow the manual wiring described in the design docs.
+- Seamless/QuestDB/CCXT and other sources are integrated into the v2 data plane; worlds that declare `world.data.presets[]` let Runner/CLI auto‑wire a Seamless provider and StreamInputs from the world + preset. The default on‑ramp needs only `world` (and optionally a data preset) for market‑style replay; worlds without presets still follow the manual wiring described in the design docs.
 
 #### 0.1.2 Data Supply Automation
 

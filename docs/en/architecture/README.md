@@ -23,6 +23,7 @@ See also: Architecture Glossary (../architecture/glossary.md) for canonical term
 - [Gateway](gateway.md): Gateway component specification.
 - [DAG Manager](dag-manager.md): DAG Manager design.
 - [WorldService](worldservice.md): World policy, decisions, activation.
+- [Core Loop Automation](core_loop_world_automation.md): Campaign loops, metric sourcing, and live promotion governance.
 - [ControlBus](controlbus.md): Internal control bus (opaque to SDK).
 - [Lean Brokerage Model](lean_brokerage_model.md): Brokerage integration details.
 - [Risk Signal Hub](risk_signal_hub.md): Portfolio/risk snapshot SSOT.

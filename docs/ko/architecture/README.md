@@ -24,6 +24,7 @@ EventStreamDescriptor와 같은 표준 명칭을 확인할 수 있습니다.
 - [Gateway](gateway.md): 게이트웨이 구성 요소 명세.
 - [DAG Manager](dag-manager.md): DAG 매니저 설계.
 - [WorldService](worldservice.md): 월드 정책, 결정, 활성화.
+- [Core Loop 자동화](core_loop_world_automation.md): 캠페인 루프, 메트릭 소싱, live 승격 거버넌스.
 - [ControlBus](controlbus.md): SDK에서는 보이지 않는 내부 제어 버스.
 - [Lean Brokerage Model](lean_brokerage_model.md): 브로커리지 통합 세부 사항.
 - [Risk Signal Hub](risk_signal_hub.md): 포트폴리오/리스크 스냅샷 SSOT.
