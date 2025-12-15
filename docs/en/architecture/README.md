@@ -4,7 +4,7 @@ tags:
   - architecture
   - overview
 author: "QMTL Team"
-last_modified: 2025-09-12
+last_modified: 2025-12-15
 ---
 
 {{ nav_links() }}
@@ -18,15 +18,38 @@ Design documents describing core QMTL components.
 
 See also: Architecture Glossary (../architecture/glossary.md) for canonical terms such as DecisionEnvelope, ActivationEnvelope, ControlBus, and EventStreamDescriptor.
 
-## Related Documents
-- [Architecture Overview](architecture.md): High-level system design.
-- [Gateway](gateway.md): Gateway component specification.
-- [DAG Manager](dag-manager.md): DAG Manager design.
-- [WorldService](worldservice.md): World policy, decisions, activation.
-- [Core Loop Automation](core_loop_world_automation.md): Campaign loops, metric sourcing, and live promotion governance.
-- [ControlBus](controlbus.md): Internal control bus (opaque to SDK).
+## Doc Map
+
+### Overview
+- [Architecture Overview](architecture.md): High-level system blueprint and Core Loop alignment.
+- [Glossary](glossary.md): Canonical terms such as DecisionEnvelope and ExecutionDomain.
+
+### Control plane
+- [Gateway](gateway.md): Public ingress, proxy/caching, and stream relay.
+- [DAG Manager](dag-manager.md): Graph/node/queue SSOT, diffs, and orchestration.
+- [WorldService](worldservice.md): World policy, decisions, activation, allocations/rebalancing.
+- [ControlBus](controlbus.md): Internal control-plane event fabric (Activation/Queue/Policy).
+
+### Data plane
+- [Seamless Data Provider v2](seamless_data_provider_v2.md): Conformance, backfill, SLAs, observability.
+- [CCXT × Seamless Integrated](ccxt-seamless-integrated.md): CCXT-backed history/live delivery through Seamless.
+
+### Execution & brokerage
+- [Exchange Node Sets](exchange_node_sets.md): Composable execution-layer Node Sets.
+- [Execution Layer Nodes](execution_nodes.md): Pre-trade/sizing/execution/fills/risk/timing nodes.
+- [Execution State & TIF](execution_state.md): Order state machine and TIF semantics.
 - [Lean Brokerage Model](lean_brokerage_model.md): Brokerage integration details.
+
+### Risk
 - [Risk Signal Hub](risk_signal_hub.md): Portfolio/risk snapshot SSOT.
+
+### Templates
+- [Layered Template System](layered_template_system.md): Project/template layering architecture.
+
+### Engineering notes
+- [SDK Layering](../maintenance/engineering/sdk_layers.md): SDK dependency layering guide.
+- [Seamless Data Provider Modularization](../maintenance/engineering/seamless_data_provider_modularity.md): SDP refactor/module-boundary memo.
+- [RPC Adapter Command/Facade Design](../maintenance/engineering/rpc_adapters.md): Adapter complexity reduction patterns.
 
 ## Architectural Layers at a Glance
 

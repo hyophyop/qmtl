@@ -1,3 +1,12 @@
+---
+title: "Execution Layer Nodes"
+tags: [architecture, execution, nodes]
+author: "QMTL Team"
+last_modified: 2025-12-15
+---
+
+{{ nav_links() }}
+
 # Execution Layer Nodes
 
 ## 0. Purpose and Core Loop Position
@@ -81,3 +90,5 @@ Notes
 - `Node(input=[...])`: pass any iterable of upstream nodes to create a fan‑in node.
 - `view[upstream][upstream.interval]`: access the latest window for each upstream within `compute_fn`.
 - Event‑time gating uses the slowest upstream watermark; late data handling follows the node’s `allowed_lateness`/`on_late` policy.
+
+{{ nav_links() }}

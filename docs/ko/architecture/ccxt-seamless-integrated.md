@@ -2,8 +2,10 @@
 title: "CCXT × Seamless 통합 아키텍처"
 tags: [architecture, ccxt, seamless]
 author: "QMTL Team"
-last_modified: 2025-08-21
+last_modified: 2025-12-15
 ---
+
+{{ nav_links() }}
 
 # CCXT × Seamless 통합 아키텍처 (High + Codex)
 
@@ -561,3 +563,5 @@ environment:
 - 웹소켓을 활용하면서 폴링과 동일한 의미론을 유지하는 ccxt.pro 기반 `LiveDataFeed`를 구현합니다.
 - 교차 거래소 가중 중간가와 같은 합성 시계열을 별도 노드로 탐색하되 커버리지 보증을 계속 준수합니다.
 - 상류 OHLCV 피드에 지속적인 갭이 존재할 때 체결→바 복구 워크플로를 평가하고, 하류 감사용 프로비넌스 메타데이터를 방출합니다.
+
+{{ nav_links() }}

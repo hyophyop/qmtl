@@ -1,6 +1,6 @@
 # World Validation Governance (Override Re-review)
 
-This document operationalizes `world_validation_architecture.md` §12.3 (Invariant 3) by standardizing the **approved override re-review queue, deadlines, and SLA**.
+This document operationalizes [World Validation Architecture (icebox, reference-only)](../design/icebox/world_validation_architecture.md) §12.3 (Invariant 3) by standardizing the **approved override re-review queue, deadlines, and SLA**.
 
 ## Concepts (Summary)
 

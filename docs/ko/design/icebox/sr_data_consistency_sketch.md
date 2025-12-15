@@ -9,6 +9,9 @@ related: sr_integration_proposal.md
 
 # SR-QMTL 데이터 일관성 설계 스케치
 
+!!! warning "Icebox (참고용, 현재 작업 대상 아님)"
+    이 문서는 `docs/ko/design/icebox/`에 보관된 참고용 설계 스케치입니다. **현재 작업 대상(SSOT)** 이 아니며, 필요 시 배경/아이디어 참고로만 사용하세요. 채택한 내용은 `docs/ko/architecture/` 또는 코드/테스트로 승격해 반영합니다.
+
 !!! warning "임시 문서"
     이 문서는 논의용 스케치입니다. 결정 후 `sr_integration_proposal.md`에 통합 예정.
 
@@ -298,7 +301,7 @@ class DataContext:
 - 이 문서에서 정의한 `DataContext`는 SR-QMTL 간 **데이터 컨텍스트의 정규화된 개념 모델**입니다.
   - 핵심 필드: `universe_id`, `snapshot_id`, `feature_set`
   - 보조 메타데이터: `source`, `timeframe`, `symbols`, `data_hash`
-- `docs/ko/design/sr_integration_proposal.md`에서는 동일 계열의 개념을 다음 용어로 사용합니다.
+- `docs/ko/design/icebox/sr_integration_proposal.md`에서는 동일 계열의 개념을 다음 용어로 사용합니다.
   - `data_spec`: `DataContext`를 직렬화했을 때의 최소 서브셋 (현재는 주로 스냅샷 핸들 역할)
   - `data_context`: 제출 핸드셰이크에서 사용하는, 스냅샷 식별에 필요한 필드 묶음
 - 정렬 기준:

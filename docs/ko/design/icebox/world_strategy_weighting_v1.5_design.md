@@ -8,15 +8,18 @@ status: draft
 
 # World 전략 비중 조절(Weighting) v1.5 설계 초안
 
+!!! warning "Icebox (참고용, 현재 작업 대상 아님)"
+    이 문서는 `docs/ko/design/icebox/`에 보관된 참고용 설계 스케치입니다. **현재 작업 대상(SSOT)** 이 아니며, 필요 시 배경/아이디어 참고로만 사용하세요. 채택한 내용은 `docs/ko/architecture/` 또는 코드/테스트로 승격해 반영합니다.
+
 본 문서는 QMTL **WorldService(WS)** 가 월드 내부의 전략 비중을 **이론 기반 포트폴리오 최적화 기법**으로 자동 조절하는 기능을 추가하기 위한 설계 초안이다.  
 월드 내 전략을 “자산(슬리브)”으로 보고, **성과/리스크/레짐 정보를 입력으로 받아 전략 가중치(=strategy_alloc_total, activation.weight)를 산출·적용**한다.
 
 관련 문서:
-- World/전략 생애주기 사양: [world/world.md](../world/world.md)
-- WorldService SSOT/Activation/Apply: [architecture/worldservice.md](../architecture/worldservice.md)
-- 리밸런싱 계약/캐스케이드: [world/rebalancing.md](../world/rebalancing.md)
-- World 검증 v1.5 진행 현황: [design/world_validation_v1.5_implementation.md](world_validation_v1.5_implementation.md)
-- Risk Signal Hub(실현 리스크/공분산 입력): [architecture/risk_signal_hub.md](../architecture/risk_signal_hub.md)
+- World/전략 생애주기 사양: [world/world.md](../../world/world.md)
+- WorldService SSOT/Activation/Apply: [architecture/worldservice.md](../../architecture/worldservice.md)
+- 리밸런싱 계약/캐스케이드: [world/rebalancing.md](../../world/rebalancing.md)
+- World 검증 아키텍처: [design/world_validation_architecture.md](world_validation_architecture.md)
+- Risk Signal Hub(실현 리스크/공분산 입력): [architecture/risk_signal_hub.md](../../architecture/risk_signal_hub.md)
 
 ---
 
@@ -323,4 +326,3 @@ strategy_weighting:
 
 각 단계는 `strategy_weighting.method` 플래그로 opt‑in하며,
 기본값은 현행 Sharpe‑비례를 유지한다.
-

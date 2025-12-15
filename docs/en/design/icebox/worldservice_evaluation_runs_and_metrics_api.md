@@ -9,6 +9,9 @@ related_issue: "hyophyop/qmtl#1750"
 
 # WorldService Evaluation Runs & Metrics API Sketch
 
+!!! warning "Icebox (Reference-only)"
+    This document lives under `docs/en/design/icebox/` and is **not an active work item/SSOT**. Use it for background/reference only; promote adopted parts into `docs/en/architecture/` or code/tests.
+
 ## 0. Motivation & Context
 
 This document captures an initial design sketch for:
@@ -21,9 +24,9 @@ from the perspective of the Core Loop and the external feedback in [hyophyop/qmt
 
 Related docs:
 
-- [Architecture](../architecture/architecture.md), [WorldService](../architecture/worldservice.md)
-- [auto_returns unified design (Korean source)](../../ko/archive/auto_returns_unified_design.md)
-- Core Loop decisions: [architecture.md](../architecture/architecture.md#core-loop-summary)
+- [Architecture](../../architecture/architecture.md), [WorldService](../../architecture/worldservice.md)
+- [auto_returns unified design (Korean source)](../../../ko/archive/auto_returns_unified_design.md)
+- Core Loop decisions: [architecture.md](../../architecture/architecture.md#core-loop-summary)
 
 All API shapes and schemas here are **draft-level**. They are meant to drive discussion; any implementation must be reconciled with existing worldservice/gateway/SDK contracts.
 

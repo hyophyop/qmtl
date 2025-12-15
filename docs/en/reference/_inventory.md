@@ -49,7 +49,7 @@ last_modified: 2025-08-26
 ## Design
 *Owner: Design Council*
 
-- `docs/design/yaml_config_overhaul.md`
+- `docs/design/icebox/yaml_config_overhaul.md`
 
 ## Guides
 *Owner: Developer Enablement*

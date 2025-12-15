@@ -8,6 +8,9 @@ status: plan-revised
 
 # QMTL SR(Strategy Recommendation) 통합 제안서
 
+!!! warning "Icebox (참고용, 현재 작업 대상 아님)"
+    이 문서는 `docs/ko/design/icebox/`에 보관된 참고용 설계 문서입니다. **현재 작업 대상(SSOT)** 이 아니며, 필요 시 배경/아이디어 참고로만 사용하세요. 채택한 내용은 `docs/ko/architecture/` 또는 코드/테스트로 승격해 반영합니다.
+
 ## 0. As‑Is / To‑Be 요약
 
 - As‑Is
@@ -169,4 +172,4 @@ selection:
 - Gateway 배치 제출 API와 검증 배치 최적화.
 - DAG Manager 직접 병합/캐싱/서브그래프 재사용 스위치.
 - World/Gateway에서 표현식 그룹 교체/가중치 재분배 정책 고도화.
-- 세부 내용은 `docs/ko/design/sr_data_consistency_sketch.md`에서 선택/결정.
+- 세부 내용은 `docs/ko/design/icebox/sr_data_consistency_sketch.md`에서 선택/결정.

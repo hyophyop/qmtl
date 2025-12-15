@@ -1,5 +1,8 @@
 # YAML-Only Configuration Overhaul
 
+!!! warning "Icebox (Reference-only)"
+    This document lives under `docs/en/design/icebox/` and is **not an active work item/SSOT**. Use it for background/reference only; promote adopted parts into `docs/en/architecture/` or code/tests.
+
 ## Overview
 This document captures the implementation roadmap for moving every QMTL component to a single YAML-based configuration source. It is scoped to the work tracked in [Issue #1337](https://github.com/hyophyop/qmtl/issues/1337) and establishes the guardrails that downstream workstreams must follow.
 
@@ -73,4 +76,4 @@ The epic is decomposed into nine focused workstreams. Each workstream must align
 
 ## References
 - [Issue #1337](https://github.com/hyophyop/qmtl/issues/1337) – Epic tracker.
-- [Operations Config CLI](../operations/config-cli.md) – Existing CLI usage that will be updated.
+- [Operations Config CLI](../../operations/config-cli.md) – Existing CLI usage that will be updated.

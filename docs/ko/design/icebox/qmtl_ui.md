@@ -1,5 +1,8 @@
 # QMTL UI 설계
 
+!!! warning "Icebox (참고용, 현재 작업 대상 아님)"
+    이 문서는 `docs/ko/design/icebox/`에 보관된 참고용 설계 스케치입니다. **현재 작업 대상(SSOT)** 이 아니며, 필요 시 배경/아이디어 참고로만 사용하세요. 채택한 내용은 `docs/ko/architecture/` 또는 코드/테스트로 승격해 반영합니다.
+
 !!! warning "Status: draft"
     이 문서는 초안 상태입니다. 구현 세부사항과 최신 결정이 반영되기 전에 변경될 수 있습니다.
 
@@ -7,7 +10,7 @@
 
 - QMTL의 Gateway·DAG Manager·WorldService 경로를 시각화하고 운영할 UI를 정의한다. 새 백엔드를 추가하지 않고 기존 컴포넌트에 얇은 UI/CLI 층을 덧씌운다.
 - `qmtl ui` CLI로 로컬/스테이징 UI 서버를 띄우고, 동일한 설정/시크릿(예: `config-cli`, 환경 변수)을 재사용한다.
-- 대상 사용자는 전략 작성자, 런너/배포 담당자, SRE/리스크 팀이며, 핵심 흐름은 [`architecture/architecture.md`](../architecture/architecture.md), [`architecture/gateway.md`](../architecture/gateway.md), [`architecture/dag-manager.md`](../architecture/dag-manager.md)와 일관되게 설계한다.
+- 대상 사용자는 전략 작성자, 런너/배포 담당자, SRE/리스크 팀이며, 핵심 흐름은 [`architecture/architecture.md`](../../architecture/architecture.md), [`architecture/gateway.md`](../../architecture/gateway.md), [`architecture/dag-manager.md`](../../architecture/dag-manager.md)와 일관되게 설계한다.
 
 ## 1. 사용자 여정과 기능 축
 

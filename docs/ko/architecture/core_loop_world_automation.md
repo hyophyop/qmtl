@@ -2,7 +2,7 @@
 title: "Core Loop × WorldService — 캠페인 자동화와 승격 거버넌스"
 tags: [architecture, core-loop, worldservice, campaign, governance]
 author: "QMTL Team"
-last_modified: 2025-12-14
+last_modified: 2025-12-15
 ---
 
 {{ nav_links() }}
@@ -18,7 +18,7 @@ last_modified: 2025-12-14
 - QMTL 전체 아키텍처: [architecture/architecture.md](architecture.md)
 - WorldService 아키텍처: [architecture/worldservice.md](worldservice.md)
 - Risk Signal Hub: [architecture/risk_signal_hub.md](risk_signal_hub.md)
-- 평가 런/메트릭 API(설계): [design/worldservice_evaluation_runs_and_metrics_api.md](../design/worldservice_evaluation_runs_and_metrics_api.md)
+- 평가 런/메트릭 API(icebox, 참고용): [design/worldservice_evaluation_runs_and_metrics_api.md](../design/icebox/worldservice_evaluation_runs_and_metrics_api.md)
 - (아카이브) 단계별 작업 로드맵: [archive/core_loop_world_roadmap.md](../archive/core_loop_world_roadmap.md)
 
 ---
@@ -31,7 +31,7 @@ flowchart LR
     SDK -->|submit payload| GW[Gateway]
     GW -->|/worlds/{id}/evaluate\n/activation\n/apply| WS[WorldService]
     GW -->|POST /risk-hub| HUB[(Risk Signal Hub)]
-    HUB -->|PortfolioSnapshotUpdated\nControlBus event| WS
+    HUB -->|risk_snapshot_updated\nControlBus event| WS
     SCHED[Scheduler/Loop\n(qmtl or external)] -->|POST /worlds/{id}/campaign/tick\n(+ execute recommended actions)| WS
 ```
 
@@ -99,4 +99,3 @@ live 승격은 기본적으로 “운영/거버넌스” 단계이며, 월드별
   - `auto_apply`로 설정하더라도, Phase 4의 paper(dryrun) 관찰과 Phase 5의 validation 게이트는 **생략되지 않는다**.
 - fail-closed(필수):
   - `risk_signal_hub` 스냅샷이 missing/expired/stale이면 승격은 차단되고, 차단 사유를 후보/리포트에 남긴다.
-

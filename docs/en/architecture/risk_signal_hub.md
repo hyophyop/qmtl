@@ -2,7 +2,7 @@
 title: "Risk Signal Hub — Portfolio/Risk Snapshot SSOT"
 tags: [architecture, risk, hub, world]
 author: "QMTL Team"
-last_modified: 2025-12-10
+last_modified: 2025-12-15
 ---
 
 {{ nav_links() }}
@@ -15,6 +15,7 @@ last_modified: 2025-12-10
 
 Related documents:
 - Archive (initial design): [archive/risk_signal_hub.md](../archive/risk_signal_hub.md)
+- Validation architecture (icebox, reference): [design/world_validation_architecture.md](../design/icebox/world_validation_architecture.md)
 - Operations runbook: [operations/risk_signal_hub_runbook.md](../operations/risk_signal_hub_runbook.md)
 
 ---
@@ -24,14 +25,14 @@ Related documents:
 ```mermaid
 flowchart LR
     GW[Gateway\n(rebalance/fill producers)] -->|HTTP POST /risk-hub| HUB[(Risk Signal Hub\nWS router + Storage)]
-    HUB -->|PortfolioSnapshotUpdated\nControlBus event| WS[WorldService\n(ExtendedValidation / Stress / Live workers)]
+    HUB -->|risk_snapshot_updated\nControlBus event| WS[WorldService\n(ExtendedValidation / Stress / Live workers)]
     HUB --> EXIT[Exit Engine\n(future)]
     HUB --> MON[Monitoring/Dashboards]
 ```
 
 - **Producers**: Gateway rebalance/fill paths POST snapshots into the hub; large covariance payloads can be offloaded as refs.
 - **Consumers**: WS ExtendedValidation/stress/live workers use hub lookups/events to compute Var/ES and stress. Exit Engine can subscribe to hub events to emit additional exit signals.
-- **Events**: `PortfolioSnapshotUpdated` on ControlBus triggers workers/monitoring downstream.
+- **Events**: `risk_snapshot_updated` on ControlBus triggers workers/monitoring downstream.
 
 ---
 

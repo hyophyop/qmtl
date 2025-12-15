@@ -49,7 +49,7 @@ last_modified: 2025-08-26
 ## 설계(Design)
 *소유자: Design Council*
 
-- `docs/design/yaml_config_overhaul.md`
+- `docs/design/icebox/yaml_config_overhaul.md`
 
 ## 가이드(Guides)
 *소유자: Developer Enablement*

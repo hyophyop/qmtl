@@ -1,6 +1,6 @@
 # Independent Validation 운영 모델
 
-이 문서는 [World 검증 계층 설계](../design/world_validation_architecture.md) §5.3(운영·거버넌스)에서 제안한 **독립 검증(Independent Validation)** 을 실제 저장소/CI 운영 관점에서 재현 가능하도록 정리합니다.
+이 문서는 [World 검증 계층 설계(icebox, 참고용)](../design/icebox/world_validation_architecture.md) §5.3(운영·거버넌스)에서 제안한 **독립 검증(Independent Validation)** 을 실제 저장소/CI 운영 관점에서 재현 가능하도록 정리합니다.
 
 ## 목적
 

@@ -1,10 +1,13 @@
 # QMTL UI Design
 
+!!! warning "Icebox (Reference-only)"
+    This document lives under `docs/en/design/icebox/` and is **not an active work item/SSOT**. Use it for background/reference only; promote adopted parts into `docs/en/architecture/` or code/tests.
+
 ## 0. Goals and Scope
 
 - Define a UI layer that visualizes and operates the existing Gateway, DAG Manager, and WorldService paths. No new backend; add a thin UI/CLI skin on top of current components.
 - Reuse the same configs/secrets (e.g., `config-cli`, environment variables) and start the UI via `qmtl ui` CLI for local/staging.
-- Keep the flows consistent with [`architecture/architecture.md`](../architecture/architecture.md), [`architecture/gateway.md`](../architecture/gateway.md), and [`architecture/dag-manager.md`](../architecture/dag-manager.md). Target users: strategy authors, runner/deployment owners, SRE/risk teams.
+- Keep the flows consistent with [`architecture/architecture.md`](../../architecture/architecture.md), [`architecture/gateway.md`](../../architecture/gateway.md), and [`architecture/dag-manager.md`](../../architecture/dag-manager.md). Target users: strategy authors, runner/deployment owners, SRE/risk teams.
 
 ## 1. User journeys and feature pillars
 

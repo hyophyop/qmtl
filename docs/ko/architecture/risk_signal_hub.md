@@ -2,7 +2,7 @@
 title: "Risk Signal Hub — 포트폴리오/리스크 스냅샷 SSOT"
 tags: [architecture, risk, hub, world]
 author: "QMTL Team"
-last_modified: 2025-12-10
+last_modified: 2025-12-15
 ---
 
 {{ nav_links() }}
@@ -15,7 +15,7 @@ last_modified: 2025-12-10
 
 관련 문서:
 - 아카이브(초기 설계): [archive/risk_signal_hub.md](../archive/risk_signal_hub.md)
-- 검증 아키텍처: [design/world_validation_architecture.md](../design/world_validation_architecture.md)
+- 검증 아키텍처(icebox, 참고용): [design/world_validation_architecture.md](../design/icebox/world_validation_architecture.md)
 - 운영 런북: [operations/risk_signal_hub_runbook.md](../operations/risk_signal_hub_runbook.md)
 
 ---
@@ -25,14 +25,14 @@ last_modified: 2025-12-10
 ```mermaid
 flowchart LR
     GW[Gateway\n(rebalance/fill producers)] -->|HTTP POST /risk-hub| HUB[(Risk Signal Hub\nWS 라우터 + Storage)]
-    HUB -->|PortfolioSnapshotUpdated\nControlBus event| WS[WorldService\n(ExtendedValidation / Stress / Live workers)]
+    HUB -->|risk_snapshot_updated\nControlBus event| WS[WorldService\n(ExtendedValidation / Stress / Live workers)]
     HUB --> EXIT[Exit Engine\n(향후)]
     HUB --> MON[Monitoring/Dashboards]
 ```
 
 - **생산자**: Gateway 리밸런스/체결 경로가 스냅샷을 Hub에 POST, 필요 시 큰 공분산은 ref로 offload.
 - **소비자**: WS ExtendedValidation/스트레스/라이브 워커가 Hub 조회/이벤트를 통해 Var/ES·stress 계산. Exit 엔진은 Hub 이벤트만 구독해 별도 exit 신호를 낼 수 있다.
-- **이벤트**: `PortfolioSnapshotUpdated`를 ControlBus로 발행, 워커/모니터링이 구독해 후속 작업을 트리거.
+- **이벤트**: ControlBus에 `risk_snapshot_updated` 이벤트를 발행해 워커/모니터링이 구독하도록 한다.
 
 ---
 

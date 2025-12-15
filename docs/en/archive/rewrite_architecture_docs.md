@@ -12,6 +12,6 @@ This is an archive pointer. The full content lives outside the mkdocs tree at
 
 - Source path: `../../docs_archive/rewrite_architecture_docs.md`
 - Summary: Core Loop-oriented rewrite guidelines whose substance has been folded into
-  `docs/en/architecture/*.md` and `docs/en/design/*.md`.
+  `docs/en/architecture/*.md` and `docs/en/design/icebox/*.md`.
 
 Open the source file above for the preserved text.

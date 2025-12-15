@@ -61,7 +61,7 @@ status: archived
 
 ### 해야 할 일
 
-- `architecture/architecture.md`·`world/world.md`·`design/worldservice_evaluation_runs_and_metrics_api.md`를 기준으로 다음을 문장으로 고정한다.
+- `architecture/architecture.md`·`world/world.md`·`design/icebox/worldservice_evaluation_runs_and_metrics_api.md`를 기준으로 다음을 문장으로 고정한다.
   - **WS SSOT 원칙:** 실행 모드/단계의 단일 진실 소스는 항상 WorldService의 `effective_mode`/정책 결과다.
   - Runner/SDK는 **client‑side `mode`를 제공하지 않으며**, 단계/모드 결정은 WS `effective_mode` + world 정책이 계약(SSOT)임을 문서에서 일관되게 강조한다.
 - World 정책 DSL에서 이미 존재하는 필드들(`data_currency`, `selection.gates`, `hysteresis` 등)을  
@@ -71,7 +71,7 @@ status: archived
 
 - 업데이트된 설계 문서:
   - WS SSOT·safe_mode·강등 규칙이 명확히 서술된 `architecture/architecture.md`/`world/world.md`
-  - Evaluation Run 개념이 설명된 `design/worldservice_evaluation_runs_and_metrics_api.md`
+  - Evaluation Run 개념이 설명된 `design/icebox/worldservice_evaluation_runs_and_metrics_api.md`
 - 이 로드맵 문서(`archive/core_loop_world_roadmap.md`)를 **작업자용 참조**로 링크.
 
 ---
@@ -115,7 +115,7 @@ status: archived
 ### 해야 할 일
 
 1. **모델 정의**
-   - `design/worldservice_evaluation_runs_and_metrics_api.md`의 정의를 기반으로,  
+   - `design/icebox/worldservice_evaluation_runs_and_metrics_api.md`의 정의를 기반으로,  
      WorldService 내부에 다음 스키마를 도입한다.
      - 키: `(world_id, strategy_id, evaluation_run_id)`
      - 상태: `submitted / backtest_running / evaluating / evaluated / activated / rejected / expired`
@@ -309,7 +309,7 @@ Phase 5의 “강한 검증/리스크 컷/스트레스”는 입력 데이터가
 	         - `qmtl world status <world> [--strategy <sid>]`  
 	           (캠페인 phase, 최근 evaluation run, `validation` 통과 여부, `governance.live_promotion.mode`, `pending_live_approval` 여부/사유 요약)
 	         - `qmtl world run-status <world> --strategy <sid> --run <id|latest>`  
-	           (상태/메트릭/스냅샷 링크; 관련 설계: `design/worldservice_evaluation_runs_and_metrics_api.md`)
+	           (상태/메트릭/스냅샷 링크; 관련 설계: `design/icebox/worldservice_evaluation_runs_and_metrics_api.md`)
 	       - 승인/거부(= `manual_approval` 모드에서만 활성):
 	         - `qmtl world live-approve <world> --strategy <sid> --run <run_id> --comment ...`
 	         - `qmtl world live-reject <world> --strategy <sid> --run <run_id> --comment ...`
@@ -377,4 +377,4 @@ Phase 5의 “강한 검증/리스크 컷/스트레스”는 입력 데이터가
    - live 자동 승격이 필요하더라도, 충분한 기간의 검증/캠페인·모니터링이 갖춰진 뒤,
      월드별 거버넌스 정책(`governance.live_promotion.mode=auto_apply`)로 제한된 환경에서만 opt‑in 하도록 계획한다.
 
-이 로드맵 하나만으로도 “Core Loop를 월드 중심으로 고도화한다”는 목적과 방향성을 잃지 않고, 각 단계에서 해야 할 일을 판단할 수 있어야 한다. 세부 API·스키마는 관련 설계 문서(`architecture/*.md`, `world/*.md`, `design/worldservice_evaluation_runs_and_metrics_api.md`)를 함께 참고하되, **“지금 이 변경이 전체 그림에서 어느 Phase인지”**는 항상 이 문서를 기준으로 정한다.
+이 로드맵 하나만으로도 “Core Loop를 월드 중심으로 고도화한다”는 목적과 방향성을 잃지 않고, 각 단계에서 해야 할 일을 판단할 수 있어야 한다. 세부 API·스키마는 관련 설계 문서(`architecture/*.md`, `world/*.md`, `design/icebox/worldservice_evaluation_runs_and_metrics_api.md`)를 함께 참고하되, **“지금 이 변경이 전체 그림에서 어느 Phase인지”**는 항상 이 문서를 기준으로 정한다.

@@ -4,7 +4,7 @@ tags:
   - architecture
   - overview
 author: "QMTL 팀"
-last_modified: 2025-09-12
+last_modified: 2025-12-15
 ---
 
 {{ nav_links() }}
@@ -19,15 +19,38 @@ last_modified: 2025-09-12
 관련 용어는 [아키텍처 용어집](../architecture/glossary.md)에서 DecisionEnvelope, ActivationEnvelope, ControlBus,
 EventStreamDescriptor와 같은 표준 명칭을 확인할 수 있습니다.
 
-## 연관 문서
-- [아키텍처 개요](architecture.md): 시스템 상위 설계.
-- [Gateway](gateway.md): 게이트웨이 구성 요소 명세.
-- [DAG Manager](dag-manager.md): DAG 매니저 설계.
-- [WorldService](worldservice.md): 월드 정책, 결정, 활성화.
-- [Core Loop 자동화](core_loop_world_automation.md): 캠페인 루프, 메트릭 소싱, live 승격 거버넌스.
-- [ControlBus](controlbus.md): SDK에서는 보이지 않는 내부 제어 버스.
+## 문서 지도
+
+### Overview
+- [아키텍처 개요](architecture.md): 시스템 상위 설계와 Core Loop 정렬.
+- [아키텍처 용어집](glossary.md): DecisionEnvelope, ExecutionDomain 등 표준 용어.
+
+### Control plane
+- [Gateway](gateway.md): 외부 단일 진입점, 프록시/캐시/스트림 중계.
+- [DAG Manager](dag-manager.md): 그래프/노드/큐 SSOT, Diff 및 큐 오케스트레이션.
+- [WorldService](worldservice.md): 월드 정책, 결정, 활성화, 할당/리밸런싱.
+- [ControlBus](controlbus.md): 내부 제어 이벤트 패브릭(Activation/Queue/Policy).
+
+### Data plane
+- [심리스 데이터 프로바이더 v2](seamless_data_provider_v2.md): 데이터 정합성·백필·SLA·관측.
+- [CCXT × Seamless 통합](ccxt-seamless-integrated.md): CCXT 기반 히스토리/라이브를 Seamless로 제공.
+
+### Execution & brokerage
+- [거래소 노드 세트](exchange_node_sets.md): 실행 레이어 구성(블랙박스 노드 세트).
+- [실행 레이어 노드](execution_nodes.md): 프리트레이드/사이징/실행/체결/리스크/타이밍 노드.
+- [실행 상태 머신과 TIF 정책](execution_state.md): 주문 상태 전이 및 TIF 의미론.
 - [Lean Brokerage Model](lean_brokerage_model.md): 브로커리지 통합 세부 사항.
+
+### Risk
 - [Risk Signal Hub](risk_signal_hub.md): 포트폴리오/리스크 스냅샷 SSOT.
+
+### Templates
+- [레이어드 템플릿 시스템](layered_template_system.md): 프로젝트/템플릿을 레이어로 조립하는 아키텍처.
+
+### Engineering notes
+- [SDK 레이어 가이드](../maintenance/engineering/sdk_layers.md): SDK 의존성 계층화 가이드.
+- [심리스 데이터 프로바이더 모듈화 노트](../maintenance/engineering/seamless_data_provider_modularity.md): SDP 리팩터링/모듈 경계 노트.
+- [RPC 어댑터 Command/Facade 설계안](../maintenance/engineering/rpc_adapters.md): RPC 어댑터 복잡도 저감 패턴.
 
 ## 아키텍처 계층 한눈에 보기
 

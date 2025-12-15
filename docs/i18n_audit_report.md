@@ -48,7 +48,7 @@ Sample lines:
 - L47: - `docs/architecture/worldservice.md`
 - L53: - `docs_archive/ccxt-seamless-legacy-audit.md`
 - L58: - `docs/architecture/seamless_data_provider_v2.md`
-- L59: - `docs/design/yaml_config_overhaul.md`
+- L59: - `docs/design/icebox/yaml_config_overhaul.md`
 - L65: - `docs/guides/build_nodeset_sdk.md`
 {% endraw %}
 

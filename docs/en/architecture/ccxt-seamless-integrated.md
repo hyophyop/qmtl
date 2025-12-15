@@ -1,3 +1,12 @@
+---
+title: "CCXT × Seamless Integrated Architecture"
+tags: [architecture, ccxt, seamless]
+author: "QMTL Team"
+last_modified: 2025-12-15
+---
+
+{{ nav_links() }}
+
 # CCXT × Seamless Integrated Architecture (High + Codex)
 
 ## 0. Purpose and Core Loop Position
@@ -682,3 +691,5 @@ Adhering to this integrated design guarantees a single, reusable CCXT + Seamless
 - Implement a ccxt.pro-based `LiveDataFeed` that mirrors polling semantics while leveraging WebSockets for tighter SLAs.
 - Explore cross-exchange synthetic series (for example, weighted midprice aggregations) as separate nodes that continue to honor coverage guarantees.
 - Evaluate trades-to-bar repair workflows when upstream OHLCV feeds exhibit persistent gaps, emitting provenance metadata for downstream audits.
+
+{{ nav_links() }}

@@ -1,5 +1,8 @@
 # Seamless 데이터 물질화/검증 표면 분리 설계
 
+!!! warning "Icebox (참고용, 현재 작업 대상 아님)"
+    이 문서는 `docs/ko/design/icebox/`에 보관된 참고용 설계 스케치입니다. **현재 작업 대상(SSOT)** 이 아니며, 필요 시 배경/아이디어 참고로만 사용하세요. 채택한 내용은 `docs/ko/architecture/` 또는 코드/테스트로 승격해 반영합니다.
+
 !!! warning "Status: draft"
     이 문서는 초안 상태입니다. 구현 과정에서 세부 동작과 API가 변경될 수 있습니다.
 
@@ -134,7 +137,7 @@ class MaterializeSeamlessJob:
 ## 7. 롤아웃 메모
 
 - 코드 변경 범위는 SDK 층에 국한(엔진 재사용), Core Loop CLI/WS 경로는 변경하지 않는다.  
-- 문서: 본 설계를 `../architecture/seamless_data_provider_v2.md`와 가이드에 링크하고, “데이터 물질화/검증 전용” 섹션을 추가해 범위·경계를 명시.  
+- 문서: 본 설계를 `../../architecture/seamless_data_provider_v2.md`와 가이드에 링크하고, “데이터 물질화/검증 전용” 섹션을 추가해 범위·경계를 명시.  
 - CLI 추가 시 별도 네임스페이스를 사용해 Runner.submit 흐름과 UI 충돌을 방지한다.  
 - 도입 절차: feature flag로 shadow 모드 → 팀/preset 단위 opt-in → 문제 없을 때 일반 공개. 롤백 시 flag로 즉시 차단. `qmtl --help`에서 data 네임스페이스와 core-loop 네임스페이스를 명확히 분리해 혼동을 줄인다.
 
@@ -157,9 +160,9 @@ class MaterializeSeamlessJob:
 
 ## 8. 참고 문서
 
-- [Seamless Data Provider v2 아키텍처](../architecture/seamless_data_provider_v2.md)  
-- [Seamless Data Provider 아키텍처](../architecture/seamless_data_provider_v2.md)  
-- 관련: [architecture/seamless_data_provider_v2.md](../architecture/seamless_data_provider_v2.md), [architecture/architecture.md Core Loop 요약](../architecture/architecture.md#core-loop-summary)
+- [Seamless Data Provider v2 아키텍처](../../architecture/seamless_data_provider_v2.md)  
+- [Seamless Data Provider 아키텍처](../../architecture/seamless_data_provider_v2.md)  
+- 관련: [architecture/seamless_data_provider_v2.md](../../architecture/seamless_data_provider_v2.md), [architecture/architecture.md Core Loop 요약](../../architecture/architecture.md#core-loop-summary)
 
 ---
 

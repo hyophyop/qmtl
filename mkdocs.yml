@@ -8,26 +8,32 @@ nav:
       - User Workflow: getting-started/workflow.md
   - Maintenance:
       - Linearity & Alpha Metrics Complexity Plan: maintenance/metrics/linearity_and_alpha_metrics_complexity.md
+      - Engineering Notes:
+          - SDK Layering: maintenance/engineering/sdk_layers.md
+          - Seamless Data Provider Modularization: maintenance/engineering/seamless_data_provider_modularity.md
+          - RPC Adapters Command/Facade Plan: maintenance/engineering/rpc_adapters.md
   - Architecture:
       - Overview: architecture/README.md
-      - SDK Layering: architecture/sdk_layers.md
-      - Architecture & World ID Flow: architecture/architecture.md
-      - Layered Template System: architecture/layered_template_system.md
-      - Seamless Data Provider v2: architecture/seamless_data_provider_v2.md
-      - Seamless Data Provider Modularization: architecture/seamless_data_provider_modularity.md
-      - CCXT × Seamless Integrated (High + Codex): architecture/ccxt-seamless-integrated.md
       - Glossary: architecture/glossary.md
-      - DAG Manager: architecture/dag-manager.md
-      - Gateway: architecture/gateway.md
-      - Risk Signal Hub: architecture/risk_signal_hub.md
-      - WorldService: architecture/worldservice.md
+      - Architecture & World ID Flow: architecture/architecture.md
+      - Control Plane:
+          - Gateway: architecture/gateway.md
+          - DAG Manager: architecture/dag-manager.md
+          - WorldService: architecture/worldservice.md
+          - ControlBus: architecture/controlbus.md
+      - Data Plane:
+          - Seamless Data Provider v2: architecture/seamless_data_provider_v2.md
+          - CCXT × Seamless Integrated (High + Codex): architecture/ccxt-seamless-integrated.md
+      - Execution & Brokerage:
+          - Exchange Node Sets: architecture/exchange_node_sets.md
+          - Execution Nodes: architecture/execution_nodes.md
+          - Execution State: architecture/execution_state.md
+          - Lean Brokerage Model: architecture/lean_brokerage_model.md
+      - Risk:
+          - Risk Signal Hub: architecture/risk_signal_hub.md
+      - Templates:
+          - Layered Template System: architecture/layered_template_system.md
       - Core Loop Automation: architecture/core_loop_world_automation.md
-      - ControlBus: architecture/controlbus.md
-      - Lean Brokerage Model: architecture/lean_brokerage_model.md
-      - Exchange Node Sets: architecture/exchange_node_sets.md
-      - Execution Nodes: architecture/execution_nodes.md
-      - Execution State: architecture/execution_state.md
-      - RPC Adapters Command/Facade Plan: architecture/rpc_adapters.md
   - Guides:
       - Overview: guides/README.md
       - Layered Templates Quick Start: guides/layered_templates_quickstart.md
@@ -99,16 +105,16 @@ nav:
       - Release: operations/release.md
       - CI: operations/ci.md
   - Design:
-      - QMTL UI: design/qmtl_ui.md
-      - World Validation Architecture: design/world_validation_architecture.md
-      - World Validation v1 Implementation Plan: design/world_validation_v1_implementation_plan.md
-      - World Validation v1.5 Implementation: design/world_validation_v1.5_implementation.md
-      - World Strategy Weighting v1.5 Design: design/world_strategy_weighting_v1.5_design.md
-      - Exit Engine Overview: design/exit_engine_overview.md
-      - Model Risk Management Framework: design/model_risk_management_framework.md
-      - WorldService Evaluation Runs & Metrics API: design/worldservice_evaluation_runs_and_metrics_api.md
-      - YAML-Only Configuration Overhaul: design/yaml_config_overhaul.md
-      - Seamless Materialize/Verify Surface: design/seamless_materialize_jobs.md
+      - Design Guide: design/README.md
+      - QMTL UI: design/icebox/qmtl_ui.md
+      - World Validation Architecture: design/icebox/world_validation_architecture.md
+      - World Validation v1 Implementation Plan: design/icebox/world_validation_v1_implementation_plan.md
+      - World Strategy Weighting v1.5 Design: design/icebox/world_strategy_weighting_v1.5_design.md
+      - Exit Engine Overview: design/icebox/exit_engine_overview.md
+      - Model Risk Management Framework: design/icebox/model_risk_management_framework.md
+      - WorldService Evaluation Runs & Metrics API: design/icebox/worldservice_evaluation_runs_and_metrics_api.md
+      - YAML-Only Configuration Overhaul: design/icebox/yaml_config_overhaul.md
+      - Seamless Materialize/Verify Surface: design/icebox/seamless_materialize_jobs.md
   - Reference:
       - Overview: reference/README.md
       - FAQ: reference/faq.md
@@ -167,15 +173,24 @@ plugins:
             "User Workflow": "사용자 워크플로"
             Maintenance Schedule: 유지보수 일정
             Architecture: 아키텍처
+            "Control Plane": "제어 플레인"
+            "Data Plane": "데이터 플레인"
+            "Execution & Brokerage": "실행 & 브로커리지"
+            "Engineering Notes": "엔지니어링 노트"
             Guides: 가이드
             Docs Internationalization: 문서 국제화
             "Layered Template System": "레이어드 템플릿 시스템"
+            Glossary: 용어집
             "Seamless Data Provider v2": "심리스 데이터 프로바이더 v2"
+            "Seamless Data Provider Modularization": "심리스 데이터 프로바이더 모듈화"
             "SDK Layering": "SDK 레이어"
             "CCXT × Seamless Integrated (High + Codex)": "CCXT × Seamless 통합 (High + Codex)"
             "Exchange Node Sets": "거래소 노드 세트"
             "Execution Nodes": "실행 노드"
             "Execution State": "실행 상태"
+            "Risk Signal Hub": "리스크 시그널 허브"
+            Risk: 리스크
+            "RPC Adapters Command/Facade Plan": "RPC 어댑터 Command/Facade 설계안"
             "WorldService/Alpha Radon Plan": "WorldService/Alpha Radon 계획"
             "Workflow Orchestration Radon Plan": "워크플로 오케스트레이션 Radon 계획"
             "Radon Metrics Snapshot (2025-11-14)": "라돈 지표 스냅샷 (2025-11-14)"
@@ -204,6 +219,7 @@ plugins:
             "Core Loop Automation": "Core Loop 자동화"
             "Rebalancing Schema Coordination": "리밸런싱 스키마 조율"
             Design: 설계
+            "Design Guide": "설계 문서 안내"
             QMTL UI: QMTL UI
             "World Validation Architecture": "World 검증 계층 설계"
             "Model Risk Management Framework": "모델 리스크 관리 프레임워크"

@@ -9,6 +9,9 @@ related: sr_integration_proposal.md
 
 # Operon 후속 통합 및 pyoperon 스파이크 노트
 
+!!! warning "Icebox (참고용, 현재 작업 대상 아님)"
+    이 문서는 `docs/ko/design/icebox/`에 보관된 참고용 스파이크 노트입니다. **현재 작업 대상(SSOT)** 이 아니며, 필요 시 배경/아이디어 참고로만 사용하세요. 채택한 내용은 `docs/ko/architecture/` 또는 코드/테스트로 승격해 반영합니다.
+
 !!! warning "범위"
     - 본 문서는 **Operon/pyoperon 기반 통합의 후속 과제**를 정리한 별도 노트입니다.  
     - QMTL SR 통합의 1차 엔진은 `PySR`을 기준으로 진행하며, Operon은 **추후 추가**합니다.  

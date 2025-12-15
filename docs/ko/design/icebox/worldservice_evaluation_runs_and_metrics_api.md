@@ -9,6 +9,9 @@ related_issue: "hyophyop/qmtl#1750"
 
 # WorldService 평가 런 & 메트릭 API 스케치
 
+!!! warning "Icebox (참고용, 현재 작업 대상 아님)"
+    이 문서는 `docs/ko/design/icebox/`에 보관된 참고용 설계 스케치입니다. **현재 작업 대상(SSOT)** 이 아니며, 필요 시 배경/아이디어 참고로만 사용하세요. 채택한 내용은 `docs/ko/architecture/` 또는 코드/테스트로 승격해 반영합니다.
+
 ## 0. 배경 & 동기
 
 이 문서는 qmtl v2 사용 경험(특히 `hft-factory-workspace` 베타 팩토리 v0; [hyophyop/qmtl#1750](https://github.com/hyophyop/qmtl/issues/1750))에서 나온 피드백을 바탕으로,
@@ -26,9 +29,9 @@ related_issue: "hyophyop/qmtl#1750"
 
 관련 문서:
 
-- [아키텍처 개요](../architecture/architecture.md), [WorldService](../architecture/worldservice.md)
-- [auto_returns 통합 설계](../archive/auto_returns_unified_design.md)
-- Core Loop 합의 요약: [architecture.md](../architecture/architecture.md#core-loop-summary)
+- [아키텍처 개요](../../architecture/architecture.md), [WorldService](../../architecture/worldservice.md)
+- [auto_returns 통합 설계](../../archive/auto_returns_unified_design.md)
+- Core Loop 합의 요약: [architecture.md](../../architecture/architecture.md#core-loop-summary)
 
 여기서 제안하는 API/스키마는 **초안(draft)** 이며, 실제 적용 전에 worldservice/gateway/SDK 팀과 함께 구체화·축소·분할해야 한다.
 

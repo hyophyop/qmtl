@@ -2,8 +2,10 @@
 title: "실행 레이어 노드"
 tags: [architecture, execution, nodes]
 author: "QMTL Team"
-last_modified: 2025-08-21
+last_modified: 2025-12-15
 ---
+
+{{ nav_links() }}
 
 # 실행 레이어 노드
 
@@ -84,3 +86,5 @@ micro = MicroBatchNode(router)
 - `Node(input=[...])`: 업스트림 노드 이터러블을 전달해 팬인 노드를 생성합니다.
 - `view[upstream][upstream.interval]`: `compute_fn` 내에서 각 업스트림의 최신 윈도에 접근합니다.
 - 이벤트 시간 게이팅은 가장 느린 업스트림 워터마크를 사용하며, 지연 데이터 처리는 노드의 `allowed_lateness`/`on_late` 정책을 따릅니다.
+
+{{ nav_links() }}

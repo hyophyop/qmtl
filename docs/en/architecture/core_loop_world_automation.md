@@ -2,7 +2,7 @@
 title: "Core Loop × WorldService — Campaign Automation and Promotion Governance"
 tags: [architecture, core-loop, worldservice, campaign, governance]
 author: "QMTL Team"
-last_modified: 2025-12-14
+last_modified: 2025-12-15
 ---
 
 {{ nav_links() }}
@@ -18,7 +18,7 @@ Related documents:
 - System blueprint: [architecture/architecture.md](architecture.md)
 - WorldService: [architecture/worldservice.md](worldservice.md)
 - Risk Signal Hub: [architecture/risk_signal_hub.md](risk_signal_hub.md)
-- Evaluation runs & metrics API (design): [design/worldservice_evaluation_runs_and_metrics_api.md](../design/worldservice_evaluation_runs_and_metrics_api.md)
+- Evaluation runs & metrics API (icebox, reference-only): [design/worldservice_evaluation_runs_and_metrics_api.md](../design/icebox/worldservice_evaluation_runs_and_metrics_api.md)
 - (Archive) Step-by-step roadmap: [archive/core_loop_world_roadmap.md](../archive/core_loop_world_roadmap.md)
 
 ---
@@ -31,7 +31,7 @@ flowchart LR
     SDK -->|submit payload| GW[Gateway]
     GW -->|/worlds/{id}/evaluate\n/activation\n/apply| WS[WorldService]
     GW -->|POST /risk-hub| HUB[(Risk Signal Hub)]
-    HUB -->|PortfolioSnapshotUpdated\nControlBus event| WS
+    HUB -->|risk_snapshot_updated\nControlBus event| WS
     SCHED[Scheduler/Loop\n(qmtl or external)] -->|POST /worlds/{id}/campaign/tick\n(+ execute recommended actions)| WS
 ```
 
@@ -99,4 +99,3 @@ Live promotion is primarily an operator/governance step, fixed per world policy.
   - Even with `auto_apply`, paper(dryrun) observation and validation gates are **not skipped**.
 - Fail-closed (required):
   - If the `risk_signal_hub` snapshot is missing/expired/stale, promotion is blocked and the blocking reason is recorded.
-

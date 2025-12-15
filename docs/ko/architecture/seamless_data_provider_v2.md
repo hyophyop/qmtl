@@ -2,8 +2,10 @@
 title: "심리스 데이터 프로바이더 v2 아키텍처"
 tags: [architecture, seamless, data]
 author: "QMTL Team"
-last_modified: 2025-12-06
+last_modified: 2025-12-15
 ---
+
+{{ nav_links() }}
 
 # 심리스 데이터 프로바이더 v2 아키텍처
 
@@ -203,3 +205,5 @@ uv run -m pytest -W error -n auto \
 
 향후 조정 사항(대시보드/런북 다듬기, Core Loop 로드맵와의 정합성 유지)은 Core Loop 로드맵의 P‑C / T3 항목과
 `docs/ko/operations/schema_registry_governance.md` 런북을 기준으로 관리합니다.
+
+{{ nav_links() }}

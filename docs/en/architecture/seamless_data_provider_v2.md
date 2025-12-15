@@ -1,3 +1,12 @@
+---
+title: "Seamless Data Provider v2 Architecture"
+tags: [architecture, seamless, data]
+author: "QMTL Team"
+last_modified: 2025-12-15
+---
+
+{{ nav_links() }}
+
 # Seamless Data Provider v2 Architecture
 
 ## 0. Purpose and Core Loop Position
@@ -208,3 +217,5 @@ Future adjustments (dashboard polish, runbook refinements, roadmap alignment)
 should be managed through the Core Loop roadmap’s P‑C / T3 track and the
 `docs/en/operations/schema_registry_governance.md` runbook rather than new
 runtime changes.
+
+{{ nav_links() }}

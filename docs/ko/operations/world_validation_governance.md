@@ -1,6 +1,6 @@
 # World Validation 거버넌스 (Override 재검토)
 
-이 문서는 `world_validation_architecture.md` §12.3(Invariant 3)를 운영 관점에서 재현 가능하도록, **approved override 재검토 큐·기한·SLA**를 표준화합니다.
+이 문서는 [World 검증 계층 설계(icebox, 참고용)](../design/icebox/world_validation_architecture.md) §12.3(Invariant 3)를 운영 관점에서 재현 가능하도록, **approved override 재검토 큐·기한·SLA**를 표준화합니다.
 
 ## 개념(요약)
 

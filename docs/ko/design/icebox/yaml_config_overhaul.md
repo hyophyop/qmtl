@@ -1,5 +1,8 @@
 # YAML 전용 구성 오버홀
 
+!!! warning "Icebox (참고용, 현재 작업 대상 아님)"
+    이 문서는 `docs/ko/design/icebox/`에 보관된 참고용 설계/로드맵 문서입니다. **현재 작업 대상(SSOT)** 이 아니며, 필요 시 배경/아이디어 참고로만 사용하세요. 채택한 내용은 `docs/ko/architecture/` 또는 코드/테스트로 승격해 반영합니다.
+
 !!! warning "Status: draft"
     이 문서는 초안 상태입니다. YAML 기반 구성 전환 작업의 진행에 따라 내용이 업데이트될 예정입니다.
 
@@ -76,4 +79,4 @@
 
 ## 참고
 - [이슈 #1337](https://github.com/hyophyop/qmtl/issues/1337) – 에픽 추적.
-- [운영 Config CLI](../operations/config-cli.md) – 업데이트 예정인 기존 CLI 사용 방법.
+- [운영 Config CLI](../../operations/config-cli.md) – 업데이트 예정인 기존 CLI 사용 방법.

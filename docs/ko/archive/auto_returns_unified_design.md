@@ -20,8 +20,8 @@ related_issue: "hyophyop/qmtl#1723"
     따라서 본 문서의 auto_returns 설계는 **새 구현에서 사용하지 않으며**, 역사적 참고용으로만 유지됩니다.  
     최신 설계는 다음 문서를 참조하세요:
     
-    - World 검증 계층 설계: `docs/ko/design/world_validation_architecture.md`
-    - 모델 리스크 관리 프레임워크: `docs/ko/design/model_risk_management_framework.md`
+    - World 검증 계층 설계(icebox, 참고용): `docs/ko/design/icebox/world_validation_architecture.md`
+    - 모델 리스크 관리 프레임워크(icebox, 참고용): `docs/ko/design/icebox/model_risk_management_framework.md`
 
 ## 0.1 v2 방향 전환: World 기반 평가 & dev/prod 스택
 
@@ -705,4 +705,4 @@ worlds:
 
 - [hyophyop/qmtl#1723](https://github.com/hyophyop/qmtl/issues/1723) — 원본 이슈
 - [hyophyop/hft-factory-strategies#9](https://github.com/hyophyop/hft-factory-strategies/issues/9) — 실제 PnL 검증 에픽
-- [`sr_integration_proposal.md`](../design/sr_integration_proposal.md) — SR 통합 설계
+- [`sr_integration_proposal.md`](../design/icebox/sr_integration_proposal.md) — SR 통합 설계
