@@ -31,8 +31,6 @@ on:
         description: "Gate: rule_error run ratio <= threshold"
         required: false
         default: "0.01"
-  schedule:
-    - cron: "23 3 * * 1" # Mondays 03:23 UTC
 
 permissions:
   contents: read
@@ -135,4 +133,3 @@ jobs:
           path: |
             validation_slo_report.md
             validation_slo_report.json
-

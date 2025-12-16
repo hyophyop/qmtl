@@ -11,8 +11,6 @@ on:
         description: "If true, do not delete rows"
         required: false
         default: "true"
-  schedule:
-    - cron: "17 3 * * 1" # Mondays 03:17 UTC
 
 permissions:
   contents: read
@@ -55,4 +53,3 @@ jobs:
         with:
           name: purge_report
           path: purge_report.json
-

@@ -35,8 +35,6 @@ on:
         description: "Policy file path in repo"
         required: false
         default: "docs/ko/world/sample_policy.yml"
-  schedule:
-    - cron: "49 2 * * 2" # Tuesdays 02:49 UTC
 
 permissions:
   contents: read
@@ -146,4 +144,3 @@ jobs:
           path: |
             policy_diff_history_report.json
             policy_diff_history_report.md
-

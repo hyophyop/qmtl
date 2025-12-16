@@ -7,8 +7,6 @@ on:
         description: "Comma-separated world ids (empty = all worlds)"
         required: false
         default: ""
-  schedule:
-    - cron: "5 4 * * *" # Daily 04:05 UTC
 
 permissions:
   contents: read
@@ -59,4 +57,3 @@ jobs:
           path: |
             override_queue.md
             override_queue.json
-
