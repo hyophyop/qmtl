@@ -67,7 +67,7 @@ class MemoryNodeRepository(NodeRepository):
             node_type=record.node_type,
             code_hash=record.code_hash,
             schema_hash=record.schema_hash,
-            schema_id=record.schema_id,
+            schema_compat_id=record.schema_compat_id,
             interval=record.interval,
             period=record.period,
             tags=list(record.tags),
@@ -90,7 +90,9 @@ class MemoryNodeRepository(NodeRepository):
                     node_type=data.get("node_type", ""),
                     code_hash=data.get("code_hash", ""),
                     schema_hash=data.get("schema_hash", ""),
-                    schema_id=data.get("schema_id", ""),
+                    schema_compat_id=(
+                        data.get("schema_compat_id") or data.get("schema_id", "")
+                    ),
                     interval=data.get("interval"),
                     period=data.get("period"),
                     tags=list(data.get("tags", [])),
@@ -148,7 +150,9 @@ class MemoryNodeRepository(NodeRepository):
                     node_type=data.get("node_type", ""),
                     code_hash=data.get("code_hash", ""),
                     schema_hash=data.get("schema_hash", ""),
-                    schema_id=data.get("schema_id", ""),
+                    schema_compat_id=(
+                        data.get("schema_compat_id") or data.get("schema_id", "")
+                    ),
                     interval=data.get("interval"),
                     period=data.get("period"),
                     tags=list(data.get("tags", [])),

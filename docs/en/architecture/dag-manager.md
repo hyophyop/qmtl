@@ -23,7 +23,9 @@ Additional references
 - Operations guides: [Timing Controls](../operations/timing_controls.md)
 
 !!! note "Deployment profile"
-    With `profile: dev`, missing Neo4j/Kafka DSNs fall back to in-memory graph and queue managers. With `profile: prod`, missing `dagmanager.neo4j_dsn` or `dagmanager.kafka_dsn` stops the process before startup.
+    With `profile: dev`, missing Neo4j/Kafka DSNs fall back to in-memory graph and queue managers. If ControlBus settings are empty, queue-update (ControlBus) event publishing is disabled.
+
+    With `profile: prod`, missing `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, or `dagmanager.controlbus_dsn`/`dagmanager.controlbus_queue_topic` stops the process before startup.
 
 !!! warning "In-memory mode is for development only"
     - Under `profile: prod`, the `dagmanager` server exits immediately and `qmtl config validate` reports errors when DSNs are absent.
@@ -55,10 +57,10 @@ Additional references
 
 ### 0-A.1 Commit-Log Message Keys and Partitioning
 
-- The partitioning key derives from `partition_key(node_id, interval, bucket_ts)`; Gateway uses the merged Kafka message key  
-  `"{partition_key(node_id, interval, bucket_ts)}:{input_window_hash}"`  
+- The partitioning key derives from `partition_key(node_id, interval, bucket_ts, compute_key?)`. When `compute_key` is present it appends `#ck=<compute_key>`, and missing `interval`/`bucket_ts` are normalized to `0`. Gateway uses the merged Kafka message key  
+  `"{partition_key(node_id, interval, bucket_ts, compute_key?)}:{input_window_hash}"`  
   so log compaction keeps a canonical record per execution key while retaining uniqueness per input window.
-- Consumers deduplicate with `(node_id, bucket_ts, input_window_hash)`.
+- Consumers deduplicate with `(node_id, bucket_ts, input_window_hash, compute_key?)`.
 
 ---
 
@@ -79,6 +81,19 @@ Additional references
 (ComputeNode)-[:EMITS]->(Queue)
 (VersionSentinel)-[:HAS]->(ComputeNode)
 (Artifact)-[:USED_BY]->(ComputeNode)
+```
+
+### 1.1-A Schema compatibility identifier field
+
+- The canonical field name inside DAG Manager is `schema_compat_id`. The proto (`BufferInstruction`) and Neo4j properties use the same name.
+- For input compatibility, DAG JSON temporarily accepts legacy `schema_id`, but it is normalized to `schema_compat_id` during processing.
+- If existing Neo4j data only has `schema_id`, backfill it with the query below.
+
+```cypher
+MATCH (c:ComputeNode)
+WHERE (c.schema_compat_id IS NULL OR c.schema_compat_id = '')
+  AND c.schema_id IS NOT NULL AND c.schema_id <> ''
+SET c.schema_compat_id = c.schema_id
 ```
 
 ### 1.2 Indexes & Constraints
@@ -161,7 +176,7 @@ Usage and enforcement:
 ### 2.1 Input/Output Definition
 
 * **Input:** `DiffReq{strategy_id, dag_json, world_id?, execution_domain?, as_of?, partition?, dataset_fingerprint?}` (~10-500 KiB)
-* **Output:** stream `DiffChunk{queue_map[], sentinel_id, version}`
+* **Output:** stream `DiffChunk{queue_map, sentinel_id, buffer_nodes, version, crc32?}`
 
 ### 2.2 Step-by-Step Logic
 
@@ -196,13 +211,18 @@ Usage and enforcement:
 
 | Direction | Protocol | Endpoint                     | Payload          | Response             | Retry/Timeout          | Purpose                 |
 | --------- | -------- | ---------------------------- | ---------------- | -------------------- | ---------------------- | ----------------------- |
-| G->D       | gRPC     | `DiffService.DiffRequest`    | DAG              | `DiffChunk` stream   | Exponential backoff 0.5->4 s x5 | Diff + topic mapping       |
-| G->D       | gRPC     | `AdminService.Cleanup`       | `strategy_id`    | Ack                  | 1 retry                | Reference-count decref   |
-| G->D       | gRPC     | `AdminService.GetQueueStats` | filter           | Stats                | 300 ms                 | Monitoring              |
-| G->D       | gRPC     | `HealthCheck.Ping`           | -                | Pong                 | 30 s interval          | Liveness                |
-| G->D       | HTTP     | `/admin/gc-trigger`          | id               | 202                  | 2 retries              | Manual GC               |
-| G->D       | gRPC     | `AdminService.RedoDiff`      | `sentinel_id`    | DiffResult           | Manual                 | Re-diff / rollback      |
+| G->D       | gRPC     | `DiffService.Diff`           | `DiffRequest`    | `DiffChunk` stream   | Exponential backoff 0.5->4 s x5 | Diff + topic mapping       |
+| G->D       | gRPC     | `DiffService.AckChunk`       | `ChunkAck`       | `ChunkAck`           | -                      | Stream ACK              |
+| G->D       | gRPC     | `AdminService.Cleanup`       | `CleanupRequest(strategy_id)` | `CleanupResponse` | 1 retry | Manual GC trigger (strategy id unused in current implementation) |
+| G->D       | gRPC     | `AdminService.GetQueueStats` | `QueueStatsRequest(filter)` | `QueueStats` | 300 ms | Monitoring |
+| G->D       | gRPC     | `TagQuery.GetQueues`         | `TagQueryRequest(tags, interval, match_mode)` | `TagQueryReply` | - | Tag-based queue lookup |
+| G->D       | gRPC     | `HealthCheck.Status`         | `StatusRequest`  | `StatusReply`        | 30 s interval          | Liveness                |
+| G->D       | HTTP     | `/status`                    | -                | 200 + health payload | 30 s interval          | Status check            |
+| G->D       | HTTP     | `/admin/gc-trigger`          | id               | 202 + `processed[]`  | 2 retries              | Manual GC               |
+| G->D       | gRPC     | `AdminService.RedoDiff`      | `sentinel_id`, `dag_json` | DiffResult | Manual | Re-diff / rollback      |
 | D->G       | ControlBus | `queue` topic              | queue_update/gc  | At-least-once        | -                      | Queue events            |
+
+Note: `AdminService.Cleanup` and `/admin/gc-trigger` accept identifiers, but the current implementation runs a full GC sweep and does not use the IDs.
 
 For rollout procedures see the [Canary Rollout Guide](../operations/canary_rollout.md).
 
@@ -256,16 +276,22 @@ DAG Manager publishes control-plane updates about queue availability and tag res
   "type": "QueueUpdated",
   "tags": ["BTC", "price"],
   "interval": 60,
-  "queues": ["q1", "q2"],
-  "etag": "q:BTC.price:60:77",
+  "queues": [
+    {"queue": "q1", "global": false},
+    {"queue": "q2", "global": true}
+  ],
+  "match_mode": "any",
+  "version": 1,
+  "etag": "q:BTC.price:60:1",
+  "idempotency_key": "queue_updated:BTC.price:60:any:1",
   "ts": "2025-08-28T09:00:00Z"
 }
 ```
 
 Semantics
 
-- Partition key: `hash(tags, interval)`; ordering is guaranteed per partition only.
-- At-least-once delivery; consumers deduplicate by `etag`.
+- Partition key: Kafka key is `",".join(tags)` and the broker hash determines the partition (ordering is guaranteed per key only).
+- At-least-once delivery; consumers deduplicate by `etag` or `idempotency_key`.
 - Gateways subscribe and rebroadcast via WebSocket. The SDK `TagQueryManager` heals divergences via periodic HTTP reconciliation.
 
 ```mermaid

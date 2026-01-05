@@ -55,7 +55,7 @@ def _make_record(node_id: str) -> NodeRecord:
         node_type=str(payload["node_type"]),
         code_hash=str(payload["code_hash"]),
         schema_hash=str(payload["schema_hash"]),
-        schema_id=str(payload["schema_compat_id"]),
+        schema_compat_id=str(payload["schema_compat_id"]),
         interval=int(payload["interval"]),
         period=int(payload["period"]),
         tags=list(payload["tags"]),

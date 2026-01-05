@@ -38,7 +38,7 @@ def test_hash_compare_and_queue_upsert(diff_service, fake_repo, fake_queue):
         [],
         None,
         False,
-        topic_name("asset", "N", "c1", "v1"),
+        topic_name("asset", "N", "A", "v1"),
     )
 
     request = make_diff_request(
@@ -50,12 +50,12 @@ def test_hash_compare_and_queue_upsert(diff_service, fake_repo, fake_queue):
 
     chunk = diff_service.diff(request)
 
-    expected_a = topic_name("asset", "N", "c1", "v1")
-    expected_b = topic_name("asset", "N", "c2", "v1")
+    expected_a = topic_name("asset", "N", "A", "v1")
+    expected_b = topic_name("asset", "N", "B", "v1")
 
     assert chunk.queue_map[partition_with_context("A", None, None)] == expected_a
     assert chunk.queue_map[partition_with_context("B", None, None)] == expected_b
-    assert fake_queue.calls == [("asset", "N", "c2", "v1", False, None)]
+    assert fake_queue.calls == [("asset", "N", "B", "v1", False, None)]
 
 
 def test_compute_key_isolation_and_metrics(diff_service, fake_repo, fake_queue, diff_metrics):
@@ -70,7 +70,7 @@ def test_compute_key_isolation_and_metrics(diff_service, fake_repo, fake_queue, 
         [],
         None,
         False,
-        topic_name("asset", "N", "c1", "v1"),
+        topic_name("asset", "N", "A", "v1"),
     )
 
     dag_live = json.dumps(
@@ -108,7 +108,15 @@ def test_compute_key_isolation_and_metrics(diff_service, fake_repo, fake_queue, 
 def test_sentinel_insert_and_stream(diff_service, fake_repo, fake_stream):
     request = make_diff_request(
         strategy_id="strategy",
-        nodes=[dag_node("A", code_hash="c1", schema_hash="s1")],
+        nodes=[
+            dag_node("A", code_hash="c1", schema_hash="s1"),
+            {
+                "node_id": "strategy-sentinel",
+                "node_type": "VersionSentinel",
+                "version": "v1",
+            },
+        ],
+        meta={"compute_context": {"execution_domain": "live"}},
     )
 
     chunk = diff_service.diff(request)
@@ -116,6 +124,40 @@ def test_sentinel_insert_and_stream(diff_service, fake_repo, fake_stream):
     assert fake_repo.sentinels == [("strategy-sentinel", ["A"], "v1")]
     assert fake_stream.chunks[0] == chunk
     assert chunk.sentinel_id == "strategy-sentinel"
+
+
+def test_sentinel_insert_skipped_without_version_node(diff_service, fake_repo):
+    request = make_diff_request(
+        strategy_id="strategy",
+        nodes=[dag_node("A", code_hash="c1", schema_hash="s1")],
+    )
+
+    diff_service.diff(request)
+
+    assert fake_repo.sentinels == []
+
+
+def test_sentinel_insert_skipped_in_safe_mode(diff_service, fake_repo):
+    request = make_diff_request(
+        strategy_id="strategy",
+        nodes=[
+            dag_node("A", code_hash="c1", schema_hash="s1"),
+            {
+                "node_id": "strategy-sentinel",
+                "node_type": "VersionSentinel",
+                "version": "v1",
+            },
+        ],
+        meta={
+            "compute_context": {
+                "execution_domain": "backtest",
+            }
+        },
+    )
+
+    diff_service.diff(request)
+
+    assert fake_repo.sentinels == []
 
 
 def test_version_extracted_from_sentinel_node(diff_service, fake_repo, fake_queue):
@@ -129,6 +171,7 @@ def test_version_extracted_from_sentinel_node(diff_service, fake_repo, fake_queu
                 "version": "release-2025.09",
             },
         ],
+        meta={"compute_context": {"execution_domain": "live"}},
     )
 
     chunk = diff_service.diff(request)
@@ -197,7 +240,7 @@ def test_stream_ack_window_allows_pipelining(fake_repo, fake_queue):
             node_type="N",
             code_hash="code",
             schema_hash="schema",
-            schema_id="schema-id",
+            schema_compat_id="schema-id",
             interval=None,
             period=None,
             tags=[],
@@ -248,7 +291,7 @@ def test_stream_ack_window_handles_slow_ack(fake_repo, fake_queue):
             node_type="N",
             code_hash="code",
             schema_hash="schema",
-            schema_id="schema-id",
+            schema_compat_id="schema-id",
             interval=None,
             period=None,
             tags=[],
@@ -275,11 +318,19 @@ def test_sentinel_gap_metric_increment(diff_service, fake_repo, diff_metrics):
         None,
         [],
         None,
-        topic_name("asset", "N", "c1", "v1"),
+        topic_name("asset", "N", "A", "v1"),
     )
 
     request = make_diff_request(
-        nodes=[dag_node("A", code_hash="c1", schema_hash="s1")],
+        nodes=[
+            dag_node("A", code_hash="c1", schema_hash="s1"),
+            {
+                "node_id": "s-sentinel",
+                "node_type": "VersionSentinel",
+                "version": "v1",
+            },
+        ],
+        meta={"compute_context": {"execution_domain": "live"}},
     )
 
     diff_service.diff(request)
@@ -298,7 +349,8 @@ def test_sentinel_weight_event_emitted_when_version_changes(diff_service):
                     "version": version,
                     "weight": 0.42,
                 },
-            ]
+            ],
+            meta={"compute_context": {"execution_domain": "live"}},
         )
         diff_service.diff(request)
         return diff_service.consume_weight_events()

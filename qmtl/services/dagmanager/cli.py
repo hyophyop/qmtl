@@ -69,7 +69,7 @@ class _MemRepo(NodeRepository):
                 node_type="",
                 code_hash="",
                 schema_hash="",
-                schema_id="",
+                schema_compat_id="",
                 interval=None,
                 period=None,
                 tags=[],
@@ -91,19 +91,19 @@ class _MemQueue(QueueManager):
         self,
         asset: str,
         node_type: str,
-        code_hash: str,
+        node_id: str,
         version: str,
         *,
         dry_run: bool = False,
         namespace: object | None = None,
     ) -> str:
-        key = (asset, node_type, code_hash, version, dry_run, namespace)
+        key = (asset, node_type, node_id, version, dry_run, namespace)
         topic = self.topics.get(key)
         if not topic:
             topic = topic_name(
                 asset,
                 node_type,
-                code_hash,
+                node_id,
                 version,
                 dry_run=dry_run,
                 namespace=namespace,

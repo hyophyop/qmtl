@@ -55,7 +55,7 @@ def test_kafka_queue_store_lists_orphans_only():
             node_type="",
             code_hash="",
             schema_hash="",
-            schema_id="",
+            schema_compat_id="",
             interval=60,
             period=None,
             tags=[],
