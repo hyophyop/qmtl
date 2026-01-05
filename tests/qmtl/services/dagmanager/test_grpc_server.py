@@ -628,7 +628,9 @@ async def test_grpc_diff_emits_sentinel_weight_and_gateway_consumes():
                         ]
                     }
                 )
-                request = dagmanager_pb2.DiffRequest(strategy_id="s", dag_json=dag_json)
+                request = dagmanager_pb2.DiffRequest(
+                    strategy_id="s", dag_json=dag_json, execution_domain="live"
+                )
                 async for chunk in stub.Diff(request):
                     await stub.AckChunk(
                         dagmanager_pb2.ChunkAck(sentinel_id=chunk.sentinel_id, chunk_id=0)

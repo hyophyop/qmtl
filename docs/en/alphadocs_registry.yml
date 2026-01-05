@@ -35,7 +35,7 @@
   status: implemented
   modules:
     - qmtl/runtime/transforms/order_book_clustering_collapse.py
-- doc: docs/architecture/lean_brokerage_model.md
+- doc: docs/en/architecture/lean_brokerage_model.md
   status: implemented
   modules:
     - qmtl/runtime/brokerage/buying_power.py

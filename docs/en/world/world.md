@@ -9,8 +9,9 @@ and demotion.
 > previously proposed rename to "Realm" was shelved and is retained only as an
 > archived design note for historical context.
 
-- References: `docs/architecture/architecture.md`, `docs/architecture/gateway.md`,
-  `docs/architecture/dag-manager.md`
+- References: `docs/en/architecture/architecture.md`, `docs/en/architecture/gateway.md`,
+  `docs/en/architecture/dag-manager.md`
+- Design (icebox, reference-only): [Strategy/node distillation](../design/icebox/strategy_distillation.md)
 - Repo boundary: only reusable utilities/nodes/gateway extensions live under
   `qmtl/`. Strategy (alpha) implementations belong under repository‑root
   `strategies/`.

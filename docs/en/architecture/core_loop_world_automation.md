@@ -19,6 +19,7 @@ Related documents:
 - WorldService: [architecture/worldservice.md](worldservice.md)
 - Risk Signal Hub: [architecture/risk_signal_hub.md](risk_signal_hub.md)
 - Evaluation runs & metrics API (icebox, reference-only): [design/worldservice_evaluation_runs_and_metrics_api.md](../design/icebox/worldservice_evaluation_runs_and_metrics_api.md)
+- Strategy/node distillation (icebox, reference-only): [design/strategy_distillation.md](../design/icebox/strategy_distillation.md)
 - (Archive) Step-by-step roadmap: [archive/core_loop_world_roadmap.md](../archive/core_loop_world_roadmap.md)
 
 ---

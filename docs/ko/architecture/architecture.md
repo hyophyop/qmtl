@@ -35,8 +35,8 @@ last_modified: 2025-12-06
 
 ## 배포 프로필
 
-- **dev**: 로컬 개발용 기본값이다. Redis/Kafka/Neo4j/ControlBus가 비어 있으면 인메모리 대체 구현을 사용하며, 빠르게 실험하거나 튜닝할 때 적합하다.
-- **prod**: 모든 컴포넌트가 영속 백엔드를 사용해야 한다. `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_brokers`/`controlbus_topics`, `gateway.commitlog_bootstrap`/`commitlog_topic`, `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, `worldservice.server.redis`, `worldservice.server.controlbus_brokers`/`controlbus_topic`가 누락되면 부팅 전에 오류를 반환한다.
+- **dev**: 로컬 개발용 기본값이다. 일부 백엔드는 인메모리 대체 또는 비활성으로 동작한다. 예: DAG Manager는 `dagmanager.neo4j_dsn`/`dagmanager.kafka_dsn`이 비어 있으면 인메모리 그래프/큐 매니저로 폴백하며, WorldService는 `worldservice.server.redis`가 비어 있으면 인메모리 activation store를 사용한다. Gateway는 `gateway.redis_dsn`이 비어 있으면 인메모리 Redis를 사용하고, `gateway.controlbus_brokers`/`gateway.controlbus_topics` 또는 `gateway.commitlog_bootstrap`/`gateway.commitlog_topic`이 비어 있으면 해당 기능을 비활성화한다.
+- **prod**: 모든 컴포넌트가 영속 백엔드를 사용해야 한다. `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_brokers` + `gateway.controlbus_topics`, `gateway.commitlog_bootstrap` + `gateway.commitlog_topic`, `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, `dagmanager.controlbus_dsn`/`dagmanager.controlbus_queue_topic`, `worldservice.server.redis`, `worldservice.server.controlbus_brokers` + `worldservice.server.controlbus_topic`가 누락되면 부팅 전에 오류를 반환한다.
 
 `qmtl config validate --target all`는 `profile: prod`에서 필수 항목이 빠지면 경고 대신 오류를 보고하며, Gateway CLI 역시 동일한 조건을 강제해 혼합 모드(일부만 인메모리)를 차단한다.
 
@@ -97,7 +97,7 @@ QMTL 아키텍처 전반의 **핵심 설계 가치**는 다음 한 문장으로 
 
 - `ValidationPipeline`이 Sharpe/MDD/선형성 등 지표 계산과 정책 기반 PASS/FAIL 판정을 수행하고,
   Runner.submit은 `auto_returns` 전처리로 명시적 returns가 없는 전략도 가능한 한 백테스트 평가를 진행한다.
-- WorldService `/evaluate` 결과(active/weight/contribution)와 `DecisionEnvelope`/`ActivationEnvelope`는
+- WorldService `/worlds/{world_id}/evaluate` 결과(active/weight/contribution)와 `DecisionEnvelope`/`ActivationEnvelope`는
   Runner/CLI `SubmitResult.ws.*`에 그대로 매핑되고, 로컬 `ValidationPipeline` 출력은 `precheck` 섹션으로 분리되어
   “validation → activation → capital allocation” 흐름이 한눈에 이어진다.
 
@@ -108,7 +108,7 @@ QMTL 아키텍처 전반의 **핵심 설계 가치**는 다음 한 문장으로 
   스냅샷이 누락/오래되면 `qmtl world allocations -w <id>`로 새로고침하라는 안내를 함께 출력한다.
 - Core Loop 표면은 평가/활성(제안)과 배분(적용)을 **표준 두 단계 루프**로 고정한다:  
   1) `Runner.submit(..., world=...)` → WS 평가/활성화,  
-  2) `/allocations`·`/rebalancing/*` 및 `qmtl world allocations|rebalance-*` CLI로 자본 배분/리밸런싱을 적용한다.  
+  2) `/allocations`·`/rebalancing/plan`·`/rebalancing/apply` 및 `qmtl world allocations|rebalance-*` CLI로 자본 배분/리밸런싱을 적용한다.  
   적용/실행은 감사 가능한 운영 단계로 남기고, `qmtl world apply <id> --run-id <id> [--plan-file ...]` 같은 명시적 경로와 run_id/etag 기반 추적을 기본 규약으로 사용한다.
 
 ### 기본 원칙: 단순성 > 하위 호환성
@@ -687,7 +687,7 @@ QMTL은 **append-only commit log** 설계를 채택하여 모든 상태 변화�
 
 1. 각 ComputeNode의 출력은 고유 Kafka 토픽(큐)에 append되어, 과거 데이터를 필요 시 재생(replay)할 수 있다.
 2. DAG Manager는 큐 생성/갱신과 `QueueUpdated`, `sentinel_weight`와 같은 컨트롤 이벤트를 ControlBus 토픽에 발행한다.
-3. Gateway는 전략 제출을 `gateway.ingest` 로그에 기록한 뒤 Diff 결과를 처리하고, 오프셋을 Redis에 저장해 최소 한 번(at-least-once) 처리 보장한다.
+3. Gateway는 전략 제출 이벤트를 `gateway.commitlog_topic`(기본값: `gateway.ingest`)에 기록한 뒤 Diff 결과를 처리하고, 오프셋을 Redis에 저장해 최소 한 번(at-least-once) 처리 보장한다.
 4. WorldService 역시 활성/결정 이벤트를 동일한 커밋 로그에 남겨 감사(audit)와 롤백을 지원한다.
 
 이와 같은 로그 기반 설계는 서비스별 **소유권 경계**를 명확히 하며, 장애 발생 시 정확한 시점으로 상태를 복원할 수 있는 토대를 제공한다.

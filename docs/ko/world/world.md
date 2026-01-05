@@ -24,7 +24,8 @@ Runner.submit / CLI와의 연결 지점(입력: returns/metrics, 출력: status/
 
 - **용어 안내:** QMTL 전 구간에서 공식 용어는 "World"다. 과거 "Realm"으로의 변경 제안은 채택되지 않았으며, 관련 내용은 참고용 보관 문서에만 남아 있다.
 
-- 기준 문서: ./docs/architecture/architecture.md, ./docs/architecture/gateway.md, ./docs/architecture/dag-manager.md
+- 기준 문서: `docs/ko/architecture/architecture.md`, `docs/ko/architecture/gateway.md`, `docs/ko/architecture/dag-manager.md`
+- 설계(icebox, 참고용): [전략/노드 자동 증류](../design/icebox/strategy_distillation.md)
 - 저장소 경계: qmtl/에는 재사용 가능한 유틸/노드/게이트웨이 확장만 추가한다. 전략(알파) 구현은 루트 strategies/ 폴더에 둔다.
 - 데이터 핸들러 기본값(결정 #1653): `SeamlessDataProvider`(`qmtl/runtime/sdk/seamless_data_provider.py`)가 히스토리/백필 경로의 기본 데이터 핸들러다. 기본값을 다른 핸들러로 바꾸지 말고, 필요한 경우 [심리스 v2 설계](../architecture/seamless_data_provider_v2.md)의 프리셋·플러그인 경로 안에서 확장하거나 감싸서 사용한다.
 
@@ -61,7 +62,7 @@ Runner.submit / CLI와의 연결 지점(입력: returns/metrics, 출력: status/
   3) Unfreeze: 주문 허용(게이트 OFF)
   - 모든 단계는 idempotent run_id로 추적하고 실패 시 롤백 포인트를 남긴다.
 
-노드/태그/큐 상태 등 세부 실행 상태는 DAG Manager/SDK의 정의를 그대로 따른다. (참고: ./docs/architecture/dag-manager.md)
+노드/태그/큐 상태 등 세부 실행 상태는 DAG Manager/SDK의 정의를 그대로 따른다. (참고: `docs/ko/architecture/dag-manager.md`)
 
 ## 4. 평가 정책 DSL(간결형)
 

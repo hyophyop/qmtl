@@ -1,19 +1,19 @@
 {
   "documents": [
     {
-      "path": "docs/index.md",
+      "path": "docs/en/index.md",
       "status": "complete",
       "owner": "core",
       "last_updated": "2025-08-21T03:22:01.482610+00:00"
     },
     {
-      "path": "docs/guides/sdk_tutorial.md",
+      "path": "docs/en/guides/sdk_tutorial.md",
       "status": "review",
       "owner": "docs-team",
       "last_updated": "2025-08-21T03:22:01.482610+00:00"
     },
     {
-      "path": "docs/architecture/architecture.md",
+      "path": "docs/en/architecture/architecture.md",
       "status": "draft",
       "owner": "alice",
       "last_updated": "2025-08-21T03:22:01.478610+00:00"

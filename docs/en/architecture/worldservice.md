@@ -23,10 +23,19 @@ WorldService is the system of record (SSOT) for Worlds. It owns:
 !!! note "Deployment profile"
     With `profile: dev`, WorldService uses an in-memory activation store when Redis is not configured. With `profile: prod`, missing `worldservice.server.redis` fails fast before startup; in-memory mode is not allowed.
 
+!!! note "Risk Signal Hub integration"
+    - WorldService receives and stores portfolio/risk snapshots via the `/risk-hub/*` router, and the ExtendedValidation/stress/live workers perform VaR/ES and stress calculations via hub queries/events.
+    - Dev profile: uses only in-memory/SQLite + fakeredis cache; covariance and similar artifacts are inline (ref offload disabled).
+    - Prod profile: uses Postgres `risk_snapshots` + Redis cache, and can enable S3/Redis blob offload via hub settings when needed.
+    - Gateway only pushes snapshots to the hub; the hub consumers are WorldService (and the exit engine).
+
 !!! warning "Default-safe"
 - Do not default to live when inputs are missing or ambiguous; downgrade to compute-only (backtest) if `execution_domain` is empty or omitted. WS API calls must not persist live by default.
 - With `allow_live=false` (default), activation/domain switches must not move to live even if operators request it. Only promote when policy validation passes (required signals, hysteresis, dataset_fingerprint anchored).
 - When clients omit `execution_domain`, world nodes and validation caches are stored under `backtest` by default. Explicitly set the intended domain in API payloads to avoid accidental live scope.
+
+!!! note "Policy engine implementation status"
+    The current `/worlds/{world_id}/decide` endpoint decides `effective_mode` and TTL/reasons only based on the world’s `allow_live` flag, the presence of bindings/decisions, and history metadata (dataset_fingerprint, coverage, etc.). The finer-grained scoring/hysteresis/required signal sets (StrategySeries-based) and domain-specific edge override integrations described in the policy docs are not implemented yet. When the WorldService policy engine is ready, we will integrate that evaluation logic and SSOT into this path.
 
 !!! note "Design intent"
 - WS produces `effective_mode` (policy string); Gateway maps it to `execution_domain` and propagates via a shared compute context. SDK/Runner do not choose modes and treat the mapped domain as input only. Stale/unknown decisions default to compute-only with order gates OFF.
@@ -51,9 +60,9 @@ Related: [Core Loop × WorldService — Campaign Automation and Promotion Govern
 - WS evaluation results (active/weight/contribution/violations) are the **single world-level source of truth**, surfaced directly by SDK/Runner; `ValidationPipeline` stays as a hint/local pre-check only.
 - `DecisionEnvelope`/`ActivationEnvelope` schemas and Runner/CLI `SubmitResult` are aligned so “submit strategy → inspect world decision” reads as a single flow.
 - Contract (aligned)
-  - `/worlds/{id}/evaluate` produces `DecisionEnvelope`/`ActivationEnvelope` that map directly to `SubmitResult.ws.decision/activation`; CLI `--output json` emits the same WS/Precheck-separated structure.
+  - `/worlds/{world_id}/evaluate` produces `DecisionEnvelope`/`ActivationEnvelope` that map directly to `SubmitResult.ws.decision/activation`; CLI `--output json` emits the same WS/Precheck-separated structure.
   - Local `ValidationPipeline` output lives only in `SubmitResult.precheck`; `status/weight/rank/contribution` SSOT is always WS.
-  - `ActivationEnvelope` (`GET/PUT /worlds/{id}/activation`) shares the same schema as `SubmitResult.ws.activation`, exposing `active/weight/etag/run_id/state_hash`.
+  - `ActivationEnvelope` (`GET/PUT /worlds/{world_id}/activation`) shares the same schema as `SubmitResult.ws.activation`, exposing `active/weight/etag/run_id/state_hash`.
 
 #### ExecutionDomain / effective_mode
 
@@ -62,7 +71,7 @@ Related: [Core Loop × WorldService — Campaign Automation and Promotion Govern
 
 #### World-Level Allocation / Rebalancing
 
-- `/allocations` and `/rebalancing/*` compute and record world and cross-world allocation plans; Runner.submit/CLI surface the latest snapshot (world/strategy totals, etag/updated_at, staleness) for the submitted world as read-only context and hint users to refresh with `qmtl world allocations -w <id>` when missing or stale.
+- `/allocations`, `/rebalancing/plan`, and `/rebalancing/apply` compute and record world and cross-world allocation plans; Runner.submit/CLI surface the latest snapshot (world/strategy totals, etag/updated_at, staleness) for the submitted world as read-only context and hint users to refresh with `qmtl world allocations -w <id>` when missing or stale.
 - The submission/evaluation loop and the world allocation loop are a **standard two-step flow** with WS as SSOT for evaluation/activation/allocation and apply/rebalancing remaining an auditable, operator-led step (`qmtl world apply <id> --run-id <id> [--plan-file ...]`) anchored by run_id/etag tracking.
 
 ---
@@ -111,28 +120,28 @@ SSOT boundary: WVG objects are not stored by DAG Manager. WS owns their lifecycl
 ## 2. API Surface (summary)
 
 CRUD
-- POST /worlds | GET /worlds | GET /worlds/{id} | PUT /worlds/{id} | DELETE /worlds/{id}
+- POST /worlds | GET /worlds | GET /worlds/{world_id} | PUT /worlds/{world_id} | DELETE /worlds/{world_id}
 
 Policies
-- POST /worlds/{id}/policies  (upload new version)
-- GET /worlds/{id}/policies   (list) | GET /worlds/{id}/policies/{v}
-- POST /worlds/{id}/set-default?v=V
+- POST /worlds/{world_id}/policies  (upload new version)
+- GET /worlds/{world_id}/policies   (list) | GET /worlds/{world_id}/policies/{v}
+- POST /worlds/{world_id}/set-default?v=V
 
 Bindings
-- POST /worlds/{id}/bindings        (upsert WSB: bind `strategy_id` to world)
-- GET  /worlds/{id}/bindings        (list; filter by `strategy_id`)
+- POST /worlds/{world_id}/bindings        (upsert WSB: bind `strategy_id` to world)
+- GET  /worlds/{world_id}/bindings        (list; filter by `strategy_id`)
 
 Purpose
 - WSB ensures a `(world_id, strategy_id)` root exists in the WVG for each submission. For operational isolation and resource control, running separate processes per world is recommended when strategies target multiple worlds.
 
 Decisions & Control
-- GET /worlds/{id}/decide?as_of=... -> DecisionEnvelope
-- POST /worlds/{id}/decisions       (replace world strategy set via DecisionsRequest)
-- GET /worlds/{id}/activation?strategy_id=...&side=... -> ActivationEnvelope
-- PUT /worlds/{id}/activation          (manual override; optional TTL)
-- POST /worlds/{id}/evaluate           (plan only)
-- POST /worlds/{id}/apply              (2-Phase apply; requires run_id)
-- GET /worlds/{id}/audit               (paginated stream)
+- GET /worlds/{world_id}/decide?as_of=... -> DecisionEnvelope
+- POST /worlds/{world_id}/decisions       (replace world strategy set via DecisionsRequest)
+- GET /worlds/{world_id}/activation?strategy_id=...&side=... -> ActivationEnvelope
+- PUT /worlds/{world_id}/activation          (manual override; optional TTL)
+- POST /worlds/{world_id}/evaluate           (plan only)
+- POST /worlds/{world_id}/apply              (2-Phase apply; requires run_id)
+- GET /worlds/{world_id}/audit               (paginated stream)
 
 RBAC: world-scope roles (owner, reader, operator). Sensitive ops (`apply`, `activation PUT`) require operator.
 
@@ -284,6 +293,9 @@ gating_policy:
 - The `snapshot`/`share_policy` combination must comply with the Feature Artifact Plane rules (Sec.1.4). Strategy Plane uses copy-on-write, whereas the Feature Plane is shared only as read-only replicas.
 - `risk_limits`, `divergence_guards`, and the `execution_model` are evaluated during pre-promotion validation. Failures reject the Apply and leave the world frozen.
 
+!!! note "Relationship between the internal canonical schema and presets"
+    The `gating_policy` structure in this section defines the **internal canonical schema (SSOT)** of the WorldService policy engine. Core Loop simplification and policy presets aim to reduce the world/policy configuration surface that users must write directly; they are **not intended to reduce the expressiveness** of the gating/risk/observability policies representable by this schema. Presets/overrides and external policy tools should be treated as higher-level interfaces that compile into this canonical schema, and we should be able to re-expose it via separate entry points for advanced/operational flows when needed.
+
 ---
 
 ## 5. Allocation & Rebalancing APIs (normative)
@@ -336,14 +348,13 @@ Clock Discipline
 
 ## 7. Observability & SLOs
 
-Metrics example
-- world_decide_latency_ms_p95, world_apply_duration_ms_p95
-- activation_skew_seconds, promotion_fail_total, demotion_fail_total
-- registry_write_fail_total, audit_backlog_depth
-- cross_context_cache_hit_total (target=0; violation blocks promotions)
-
-Skew Metrics
-- `activation_skew_seconds` is measured as the difference between the event `ts` and the time the SDK processes it, aggregated p95 per world.
+Metrics (current implementation)
+- Apply: `world_apply_run_total`, `world_apply_failure_total`
+- Allocation snapshots: `world_allocation_snapshot_total`, `world_allocation_snapshot_stale_total`, `world_allocation_snapshot_stale_ratio`
+- Risk Hub processing: `risk_hub_snapshot_processed_total`, `risk_hub_snapshot_failed_total`, `risk_hub_snapshot_processing_latency_seconds`
+- Validation event processing: `validation_event_processed_total`, `validation_event_failed_total`, `validation_event_processing_latency_seconds`
+- Workers: `extended_validation_run_total`, `extended_validation_run_latency_seconds`, `live_monitoring_run_total`
+- Domain isolation: `cross_context_cache_hit_total` (target=0; violation blocks promotions)
 
 Alerts
 - Decision failures, explicit status polling failures, stale activation cache at Gateway

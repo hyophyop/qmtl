@@ -28,7 +28,7 @@ def run(argv: List[str] | None = None) -> None:
     selection = parser.add_mutually_exclusive_group(required=True)
     selection.add_argument(
         "--preset",
-        help=_("Preset configuration to use (see docs/architecture/layered_template_system.md)"),
+        help=_("Preset configuration to use (see docs/ko/architecture/layered_template_system.md)"),
     )
     selection.add_argument(
         "--layers",

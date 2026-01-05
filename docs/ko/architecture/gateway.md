@@ -31,8 +31,13 @@ spec_version: v1.2
  - 레퍼런스: [Brokerage API](../reference/api/brokerage.md), [Commit‑Log 설계](../reference/commit_log.md), [World/Activation API](../reference/api_world.md)
 
 !!! note "배포 프로필"
-    `profile: dev`에서는 Redis/ControlBus/Commit‑Log 설정이 비어 있으면 인메모리 대체 구현을 사용합니다. `profile: prod`에서는 `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_brokers`/`controlbus_topics`, `gateway.commitlog_bootstrap`/`commitlog_topic`이 모두 채워져 있지 않으면 Gateway가 기동 전에 실패합니다.
-    `profile: dev`에서 커밋 로그 필드를 비우면 게이트웨이는 단순히 커밋 로그 라이터를 비활성화하고 정보 로그를 남깁니다.
+    `profile: dev`에서는 일부 백엔드가 “로컬 대체/비활성”로 동작합니다.
+
+    - `gateway.redis_dsn`이 비어 있으면 인메모리 Redis로 대체합니다.
+    - `gateway.controlbus_brokers`/`gateway.controlbus_topics`가 비어 있으면 ControlBus 컨슈머를 비활성화합니다.
+    - `gateway.commitlog_bootstrap`/`gateway.commitlog_topic`이 비어 있으면 Commit‑Log 라이터/컨슈머를 비활성화합니다.
+
+    `profile: prod`에서는 `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_brokers`/`gateway.controlbus_topics`, `gateway.commitlog_bootstrap`/`gateway.commitlog_topic`이 누락되면 Gateway가 기동 전에 실패합니다.
 
 !!! note "Risk Signal Hub 연동"
 - 게이트웨이는 리밸런스/체결 이후 포트폴리오 스냅샷(weights, covariance_ref/행렬, as_of)을 hub에 push 하는 생산자 역할만 수행합니다.  
@@ -154,6 +159,15 @@ paths:
 Clients SHOULD specify ``match_mode`` to control tag matching behavior. When
 omitted, Gateway defaults to ``any`` for backward compatibility.
 
+!!! note "추가 엔드포인트 (현재 구현)"
+    아래 OpenAPI 발췌는 핵심 경로만 포함합니다. 현재 구현에는 다음 경로들도 존재하며, 공개/내부 표면은 배포 프로필과 인증/권한 정책에 따라 달라질 수 있습니다(근거: `qmtl/services/gateway/routes/**`).
+
+    - 전략: ``POST /strategies/dry-run`` , ``GET /strategies/{strategy_id}/history``
+    - 이벤트/스키마: ``GET /events/jwks`` , ``GET /events/schema`` (WebSocket 구독은 별도)
+    - 인제스트/리플레이: ``POST /fills`` , ``POST /fills/replay``
+    - 관측성: ``GET /metrics``
+    - 리밸런싱: ``POST /rebalancing/execute`` (및 WorldService 프록시 ``/rebalancing/plan``)
+
 **Example Request (compressed 32 KiB DAG JSON omitted)**
 
 ```http
@@ -190,6 +204,15 @@ Content‑Type: application/json
 `paper/sim → dryrun`, `live → live`, `shadow`(운영자 전용)이며, WS 결정이 없거나 오래된
 상태에서 `live` 요청은 compute-only(backtest)로 강등됩니다.
 
+**POST /strategies — HTTP Status**
+
+| HTTP Status         | Meaning                                 | Typical Cause      |
+| ------------------- | --------------------------------------- | ------------------ |
+|  202 Accepted       |  Ingest successful, StrategyID returned | Nominal            |
+|  400 Bad Request   |  Submission rejected                     | NodeID validation failure (`E_CHECKSUM_MISMATCH`, `E_NODE_ID_FIELDS`, `E_NODE_ID_MISMATCH`) |
+|  409 Conflict       |  Duplicate StrategyID within TTL        | Same DAG re‑submit (`E_DUPLICATE`) |
+|  422 Unprocessable  |  Schema validation failure              | `StrategySubmit` payload invalid (FastAPI/Pydantic 422) |
+
 **Example Queue Lookup**
 
 ```http
@@ -197,12 +220,10 @@ GET /queues/by_tag?tags=t1,t2&interval=60&match_mode=any HTTP/1.1
 Authorization: Bearer <jwt>
 ```
 
-| HTTP Status         | Meaning                                 | Typical Cause      |
-| ------------------- | --------------------------------------- | ------------------ |
-|  202 Accepted       |  Ingest successful, StrategyID returned | Nominal            |
-|  400 Bad Request   |  CRC mismatch between SDK and Gateway  | NodeID CRC failure  |
-|  409 Conflict       |  Duplicate StrategyID within TTL        | Same DAG re‑submit |
-|  422 Unprocessable  |  Schema validation failure              | DAG JSON invalid    |
+| HTTP Status         | Meaning                          | Typical Cause      |
+| ------------------- | -------------------------------- | ------------------ |
+|  200 OK             |  Queue lookup successful         | Nominal            |
+|  422 Unprocessable  |  Query parameter validation fail | Missing/invalid `tags` or `interval` |
 
 ---
 
@@ -210,7 +231,7 @@ Authorization: Bearer <jwt>
 
 This section summarizes the once‑and‑only‑once layer required by issue #544.
 
-- Ownership: For each execution key `(node_id, interval, bucket_ts)`, a single worker acquires ownership before executing. Gateway uses a DB advisory lock (Postgres `pg_try_advisory_lock`) with optional Kafka‑based coordination driven by `gateway.ownership.*` settings (bootstrap/topic/group). The Kafka path grants ownership when the worker's consumer group owns the partition for the key and falls back to Postgres when unavailable.
+- Ownership: For each execution key `(node_id, interval, bucket_ts)`, a single worker acquires ownership before executing. Gateway uses a DB advisory lock (Postgres `pg_try_advisory_lock`) with optional Kafka‑based coordination driven by `gateway.ownership.mode`, `gateway.ownership.bootstrap`, `gateway.ownership.topic`, `gateway.ownership.group_id` (plus retry/backoff knobs). The Kafka path grants ownership when the worker's consumer group owns the partition for the key and falls back to Postgres when unavailable.
 - Commit log: Results are published via a transactional, idempotent Kafka producer to a compacted topic. The message value is `(node_id, bucket_ts, input_window_hash, payload)`.
 - Message key: The Kafka message key is built as `"{partition_key(node_id, interval, bucket_ts)}:{input_window_hash}"` ensuring compaction on a stable prefix while preserving uniqueness per input window.
 - Deduplication: Downstream consumers deduplicate on the triple `(node_id, bucket_ts, input_window_hash)` and increment `commit_duplicate_total` when duplicates are observed.
@@ -231,7 +252,7 @@ The architecture document (§3) defines the deterministic NodeID used across Gat
 Clarifications
 - NodeID MUST NOT include `world_id`. World isolation is enforced at the WVG layer and via world-scoped queue namespaces (e.g., `topic_prefix`), not in the global ID.
 - TagQueryNode canonicalization: do not include the dynamically resolved upstream queue set in `dependencies`. Instead, capture the query spec in `params_canon` (normalized `query_tags` sorted, `match_mode`, and `interval`). Runtime queue discovery and growth are delivered via ControlBus → SDK TagQueryManager; NodeID remains stable across discoveries.
-- Gateway는 `node_type`, `code_hash`, `config_hash`, `schema_hash`, `schema_compat_id`가 빠진 제출을 `E_NODE_ID_FIELDS`로 거부하며, 제공된 `node_id`가 정규 `compute_node_id()` 출력과 다를 경우 `E_NODE_ID_MISMATCH`를 반환합니다. 두 오류 모두 SDK 클라이언트가 BLAKE3 계약에 따라 DAG를 재생성할 수 있도록 실행 가능한 힌트를 포함합니다.
+- Gateway는 `node_type`, `code_hash`, `config_hash`, `schema_hash`, `schema_compat_id`가 빠진 제출을 `E_NODE_ID_FIELDS`로 거부하며, 제공된 `node_id`가 정규 `compute_node_id()` 출력과 다를 경우 `E_NODE_ID_MISMATCH`를 반환합니다. `node_ids_crc32`(CRC32) 불일치의 경우 `E_CHECKSUM_MISMATCH`를 반환합니다. 세 오류 모두 SDK 클라이언트가 BLAKE3 계약에 따라 DAG를 재생성할 수 있도록 실행 가능한 힌트를 포함합니다.
 
 인제스트 직후, Gateway는 전략 코드 변경 없이 롤백과 카나리아 트래픽 제어를 조율할 수 있도록 DAG에 `VersionSentinel` 노드를 삽입합니다. 이 동작은 기본 활성화되어 있으며 ``insert_sentinel`` 구성으로 제어합니다. ``--no-sentinel`` 플래그로 비활성화할 수 있습니다.
 
@@ -240,7 +261,7 @@ Clarifications
 - Execution domains are derived centrally by Gateway from WorldService decisions (see §S0) and propagated via the shared `ComputeContext`; SDK treats the result as input only.
 - VersionSentinel is default-on to enable rollout/rollback/traffic-split without strategy changes; disable only in low‑risk, low‑frequency environments.
 
-Gateway는 AOF가 활성화된 Redis에 FSM을 영속화하고, 중요한 이벤트를 PostgreSQL WAL(Write-Ahead Log)에도 미러링합니다. 이는 아키텍처(§2)에서 설명한 Redis 장애 시나리오를 완화합니다.
+Gateway는 FSM을 Redis 및 데이터베이스(이벤트 로그)로 기록합니다. Redis AOF/데이터베이스 WAL 등 내구성 보장은 애플리케이션 로직이 아니라 **배포/인프라 설정**으로 강제되어야 합니다. 이는 아키텍처(§2)에서 설명한 Redis 장애 시나리오를 완화합니다.
 
 When resolving `TagQueryNode` dependencies, the Runner's **TagQueryManager**
 invokes ``resolve_tags()`` which issues a ``/queues/by_tag`` request. Gateway
@@ -248,7 +269,7 @@ consults DAG Manager for queues matching `(tags, interval)` and returns the list
 so that TagQueryNode instances remain network‑agnostic and only nodes lacking
 upstream queues execute locally.
 
-Gateway also listens (via ControlBus) for `sentinel_weight` CloudEvents emitted by DAG Manager. Upon receiving an update, the in-memory routing table is adjusted and the new weight broadcast to SDK clients via WebSocket. The effective ratio per version is exported as the Prometheus gauge `gateway_sentinel_traffic_ratio{version="<id>"}`.
+Gateway also listens (via ControlBus) for `sentinel_weight` CloudEvents emitted by DAG Manager. Upon receiving an update, Gateway updates local metrics and broadcasts the new weight to SDK clients via WebSocket. The effective ratio per version is exported as the Prometheus gauge `gateway_sentinel_traffic_ratio{version="<id>"}`.
 
 WorldService에서 발행하는 `rebalancing_planned` ControlBus 이벤트 역시 Gateway가 중복을 제거한 뒤 WebSocket `rebalancing` 토픽(CloudEvent 타입 `rebalancing.planned`)으로 중계하며, 계획 건수와 자동 실행 시도를 나타내는 지표(`rebalance_plans_observed_total`, `rebalance_plan_last_delta_count`, `rebalance_plan_execution_attempts_total`, `rebalance_plan_execution_failures_total`)를 기록한다.
 
@@ -261,9 +282,7 @@ WorldService에서 발행하는 `rebalancing_planned` ControlBus 이벤트 역�
   수신해 노드 버퍼를 자동 초기화한다.
 * **Local DAG Fallback Queue** – DAG Manager가 응답하지 않을 때 제출된 전략 ID는
   메모리에 임시 저장되며 서비스가 복구되면 Redis 큐로 플러시된다.
-* **Sentinel Traffic Δ 확인 루프** – `traffic_weight` 변경 후 Gateway 라우팅
-  테이블과 SDK 로컬 라우터가 5초 이내 동기화됐는지를 `sentinel_skew_seconds`
-  지표로 측정한다.
+* **Sentinel weight 적용 지연** – `traffic_weight` 변경 후 Gateway가 해당 ratio를 로컬 메트릭에 반영하기까지의 지연을 `sentinel_skew_seconds` 지표로 측정한다.
 
 ### Gateway CLI 옵션
 
@@ -300,7 +319,7 @@ qmtl service gateway --config qmtl/examples/qmtl.yml
 ## S4 · Ownership & Commit‑Log Design
 
 - **Ownership** — Gateway는 제출 요청 큐(FIFO)와 전략별 FSM만을 관리하며, 그래프나 큐, 월드 상태의 단일 소스는 아니다. Diff 이후 생성되는 토픽과 그 생명주기는 DAG Manager가 소유하고, 월드 정책과 활성 상태는 WorldService가 책임진다.
-- **Commit Log** — 모든 전략 제출은 처리 전에 `gateway.ingest` 토픽(Redpanda/Kafka)에 append된다. Gateway는 오프셋을 Redis에 저장해 재시도 시점을 복원하며, DAG Manager와 WorldService가 발행하는 ControlBus 이벤트를 구독해 SDK로 중계한다. 이러한 로그 기반 경계는 장애 시 재생(replay)과 감사를 가능하게 한다.
+- **Commit Log** — 모든 전략 제출은 처리 전에 `gateway.ingest` 토픽(Redpanda/Kafka)에 append된다. Gateway의 commit-log 컨슈머는 Kafka consumer group offset commit을 사용하며(처리 성공 후 커밋), 중복 제거 및 메트릭을 제공한다. DAG Manager와 WorldService가 발행하는 ControlBus 이벤트를 구독해 SDK로 중계한다. 이러한 로그 기반 경계는 장애 시 재생(replay)과 감사를 가능하게 한다.
 
 ---
 
@@ -375,5 +394,5 @@ POST /events/subscribe
   - 파티션 키는 `qmtl/services/dagmanager/kafka_admin.py:partition_key(node_id, interval, bucket)`에 정의되어 커밋 로그 라이터에서 사용됩니다.
   - 트랜잭셔널 커밋 로그 라이터/컨슈머가 구현되어 있으며(`qmtl/services/gateway/commit_log.py`, `qmtl/services/gateway/commit_log_consumer.py`), 중복 제거와 메트릭을 제공합니다.
   - OwnershipManager는 Postgres 어드바이저리 락을 폴백으로 사용해 Kafka 소유권을 조정하며(`qmtl/services/gateway/ownership.py`). Kafka 파티션 소유권은 `KafkaPartitionOwnership` 구현과 `gateway.ownership` 설정을 통해 연결되며, 핸드오프 시 `owner_reassign_total`을 기록합니다.
-  - 큐가 전역 소유인 경우 SDK/Gateway 통합은 로컬 실행을 건너뜁니다(`qmtl/services/gateway/worker.py` 참조).
+  - 큐가 전역 소유인 경우 로컬 실행을 건너뛰는 동작은 SDK 쪽 큐 매핑 적용/필터링에서 수행됩니다(예: TagQueryNode의 `global=true` 엔트리를 제외). Gateway `worker.py`가 이 정책의 기준 구현은 아닙니다(`qmtl/runtime/sdk/tag_manager_service.py` 참조).
   - 카오스/소크 스타일의 중복 제거 테스트가 `tests/qmtl/services/gateway/test_commit_log_soak.py`에 존재합니다.

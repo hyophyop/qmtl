@@ -81,7 +81,7 @@ async def test_scheduler_reprocesses_old_nodes():
         [],
         None,
         False,
-        topic_name("asset", "N", "c", "v1"),
+        topic_name("asset", "N", "A", "v1"),
     )
     repo.mark_buffering("A", timestamp_ms=0)
     diff = FakeDiff()

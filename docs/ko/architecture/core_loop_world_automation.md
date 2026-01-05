@@ -19,6 +19,7 @@ last_modified: 2025-12-15
 - WorldService 아키텍처: [architecture/worldservice.md](worldservice.md)
 - Risk Signal Hub: [architecture/risk_signal_hub.md](risk_signal_hub.md)
 - 평가 런/메트릭 API(icebox, 참고용): [design/worldservice_evaluation_runs_and_metrics_api.md](../design/icebox/worldservice_evaluation_runs_and_metrics_api.md)
+- 전략/노드 자동 증류(icebox, 참고용): [design/strategy_distillation.md](../design/icebox/strategy_distillation.md)
 - (아카이브) 단계별 작업 로드맵: [archive/core_loop_world_roadmap.md](../archive/core_loop_world_roadmap.md)
 
 ---

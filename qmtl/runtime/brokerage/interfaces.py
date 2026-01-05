@@ -1,6 +1,6 @@
 """Abstract interfaces for brokerage model components."""
 
-# Source: docs/architecture/lean_brokerage_model.md
+# Source: docs/ko/architecture/lean_brokerage_model.md
 
 from __future__ import annotations
 

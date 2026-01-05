@@ -62,3 +62,7 @@ Purge guidance:
 - Overrides:
   - Approved overrides must include reason/actor/timestamp, and
     keep the run’s `/history` for later review.
+
+## Related
+
+- Design (icebox, reference-only): [Strategy/node distillation](../design/icebox/strategy_distillation.md)

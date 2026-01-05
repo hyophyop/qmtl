@@ -107,6 +107,7 @@ nav:
   - Design:
       - Design Guide: design/README.md
       - QMTL UI: design/icebox/qmtl_ui.md
+      - Strategy Distillation: design/icebox/strategy_distillation.md
       - World Validation Architecture: design/icebox/world_validation_architecture.md
       - World Validation v1 Implementation Plan: design/icebox/world_validation_v1_implementation_plan.md
       - World Strategy Weighting v1.5 Design: design/icebox/world_strategy_weighting_v1.5_design.md

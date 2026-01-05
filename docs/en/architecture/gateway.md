@@ -31,7 +31,19 @@ Additional references
 - Reference: [Brokerage API](../reference/api/brokerage.md), [Commit-Log Design](../reference/commit_log.md), [World/Activation API](../reference/api_world.md)
 
 !!! note "Deployment profile"
-    With `profile: dev`, missing Redis/ControlBus/Commit-Log settings fall back to in-memory shims. With `profile: prod`, missing `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_brokers`/`controlbus_topics`, or `gateway.commitlog_bootstrap`/`commitlog_topic` stops Gateway before it starts.
+    With `profile: dev`, some backends run in “local fallback/disabled” mode:
+
+    - If `gateway.redis_dsn` is empty, Gateway uses an in-memory Redis shim.
+    - If `gateway.controlbus_brokers`/`gateway.controlbus_topics` are empty, the ControlBus consumer is disabled.
+    - If `gateway.commitlog_bootstrap`/`gateway.commitlog_topic` are empty, the Commit-Log writer/consumer are disabled.
+
+    With `profile: prod`, missing `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_brokers`/`gateway.controlbus_topics`, or `gateway.commitlog_bootstrap`/`gateway.commitlog_topic` stops Gateway before it starts.
+
+!!! note "Risk Signal Hub integration"
+    - Gateway acts only as a producer that pushes post-rebalance/fill portfolio snapshots (weights, covariance_ref/matrix, as_of) to the hub.
+    - Configuration: inject tokens and the inline/offload criteria via the `risk_hub` block in `qmtl.yml`. In the dev profile, only inline + fakeredis are used and offload (blob/file/S3) is disabled. Redis/S3 offload is used only in the prod profile.
+    - The consumer role (VaR/ES calculation, stress re-simulation) is handled on the WorldService side via hub events/queries; Gateway does not read the hub directly.
+    - ControlBus/queue routing remains consistent with the existing activation/decision streams, and hub events are subscribed to by WorldService and the exit engine.
 
 > This extended edition enlarges the previous document by approx. 75 % and adopts an explicit, graduate-level rigor. All threat models, formal API contracts, latency distributions, and CI/CD semantics are fully enumerated.
 > Legend: **Sx** = Section, **Rx** = Requirement, **Ax** = Assumption.
@@ -153,6 +165,15 @@ paths:
 Clients SHOULD specify ``match_mode`` to control tag matching behavior. When
 omitted, Gateway defaults to ``any`` for backward compatibility.
 
+!!! note "Additional endpoints (current implementation)"
+    The OpenAPI excerpt below includes only the core paths. The current implementation also exposes the following routes; whether each is public or internal depends on the deployment profile and auth/ACL policy (evidence: `qmtl/services/gateway/routes/**`).
+
+    - Strategies: ``POST /strategies/dry-run``, ``GET /strategies/{strategy_id}/history``
+    - Events/schemas: ``GET /events/jwks``, ``GET /events/schema`` (WebSocket subscriptions are separate)
+    - Ingest/replay: ``POST /fills``, ``POST /fills/replay``
+    - Observability: ``GET /metrics``
+    - Rebalancing: ``POST /rebalancing/execute`` (and the WorldService-proxied ``/rebalancing/plan``)
+
 **Example Request (compressed 32 KiB DAG JSON omitted)**
 
 ```http
@@ -190,6 +211,15 @@ from WorldService `effective_mode` and normalised by Gateway. Alias mapping is
 `shadow` is operator-only. When WS is stale or unavailable, `live` hints are
 downgraded to compute-only (backtest).
 
+**POST /strategies — HTTP Status**
+
+| HTTP Status         | Meaning                                 | Typical Cause      |
+| ------------------- | --------------------------------------- | ------------------ |
+|  202 Accepted       |  Ingest successful, StrategyID returned | Nominal            |
+|  400 Bad Request   |  Submission rejected                     | NodeID validation failure (`E_CHECKSUM_MISMATCH`, `E_NODE_ID_FIELDS`, `E_NODE_ID_MISMATCH`) |
+|  409 Conflict       |  Duplicate StrategyID within TTL        | Same DAG re-submit (`E_DUPLICATE`) |
+|  422 Unprocessable  |  Schema validation failure              | `StrategySubmit` payload invalid (FastAPI/Pydantic 422) |
+
 **Example Queue Lookup**
 
 ```http
@@ -197,12 +227,10 @@ GET /queues/by_tag?tags=t1,t2&interval=60&match_mode=any HTTP/1.1
 Authorization: Bearer <jwt>
 ```
 
-| HTTP Status         | Meaning                                 | Typical Cause      |
-| ------------------- | --------------------------------------- | ------------------ |
-|  202 Accepted       |  Ingest successful, StrategyID returned | Nominal            |
-|  400 Bad Request   |  CRC mismatch between SDK and Gateway  | NodeID CRC failure  |
-|  409 Conflict       |  Duplicate StrategyID within TTL        | Same DAG re-submit |
-|  422 Unprocessable  |  Schema validation failure              | DAG JSON invalid    |
+| HTTP Status         | Meaning                          | Typical Cause      |
+| ------------------- | -------------------------------- | ------------------ |
+|  200 OK             |  Queue lookup successful         | Nominal            |
+|  422 Unprocessable  |  Query parameter validation fail | Missing/invalid `tags` or `interval` |
 
 ---
 
@@ -210,7 +238,7 @@ Authorization: Bearer <jwt>
 
 This section summarizes the once-and-only-once layer required by issue #544.
 
-- Ownership: For each execution key `(node_id, interval, bucket_ts)`, a single worker acquires ownership before executing. Gateway uses a DB advisory lock (Postgres `pg_try_advisory_lock`) with optional Kafka-based coordination driven by `gateway.ownership.*` config (bootstrap/topic/group). The Kafka path claims ownership when the worker's consumer group owns the partition for the key and falls back to Postgres when unavailable.
+- Ownership: For each execution key `(node_id, interval, bucket_ts)`, a single worker acquires ownership before executing. Gateway uses a DB advisory lock (Postgres `pg_try_advisory_lock`) with optional Kafka-based coordination driven by `gateway.ownership.mode`, `gateway.ownership.bootstrap`, `gateway.ownership.topic`, `gateway.ownership.group_id` (plus retry/backoff knobs). The Kafka path claims ownership when the worker's consumer group owns the partition for the key and falls back to Postgres when unavailable.
 - Commit log: Results are published via a transactional, idempotent Kafka producer to a compacted topic. The message value is `(node_id, bucket_ts, input_window_hash, payload)`.
 - Message key: The Kafka message key is built as `"{partition_key(node_id, interval, bucket_ts)}:{input_window_hash}"` ensuring compaction on a stable prefix while preserving uniqueness per input window.
 - Deduplication: Downstream consumers deduplicate on the triple `(node_id, bucket_ts, input_window_hash)` and increment `commit_duplicate_total` when duplicates are observed.
@@ -231,7 +259,7 @@ The architecture document (Sec.3) defines the deterministic NodeID used across G
 Clarifications
 - NodeID MUST NOT include `world_id`. World isolation is enforced at the WVG layer and via world-scoped queue namespaces (e.g., `topic_prefix`), not in the global ID.
 - TagQueryNode canonicalization: do not include the dynamically resolved upstream queue set in `dependencies`. Instead, capture the query spec in `params_canon` (normalized `query_tags` sorted, `match_mode`, and `interval`). Runtime queue discovery and growth are delivered via ControlBus -> SDK TagQueryManager; NodeID remains stable across discoveries.
-- Gateway rejects any node submission missing `node_type`, `code_hash`, `config_hash`, `schema_hash`, or `schema_compat_id` with `E_NODE_ID_FIELDS` and returns `E_NODE_ID_MISMATCH` when the provided `node_id` does not equal the canonical `compute_node_id()` output. Both errors include actionable hints so SDK clients can regenerate DAGs with the BLAKE3 contract.
+- Gateway rejects any node submission missing `node_type`, `code_hash`, `config_hash`, `schema_hash`, or `schema_compat_id` with `E_NODE_ID_FIELDS` and returns `E_NODE_ID_MISMATCH` when the provided `node_id` does not equal the canonical `compute_node_id()` output. For `node_ids_crc32` (CRC32) mismatches, Gateway returns `E_CHECKSUM_MISMATCH`. All three errors include actionable hints so SDK clients can regenerate DAGs with the BLAKE3 contract.
 
 Immediately after ingest, Gateway inserts a `VersionSentinel` node into the DAG so that rollbacks and canary traffic control can be orchestrated without strategy code changes. This behaviour is enabled by default and controlled by the ``insert_sentinel`` configuration field; it may be disabled with the ``--no-sentinel`` CLI flag.
 
@@ -240,7 +268,7 @@ Immediately after ingest, Gateway inserts a `VersionSentinel` node into the DAG 
 - Execution domains are derived centrally by Gateway from WorldService decisions (see Sec.S0) and propagated via the shared `ComputeContext`; SDK treats the result as input only.
 - VersionSentinel is default-on to enable rollout/rollback/traffic-split without strategy changes; disable only in low-risk, low-frequency environments.
 
-Gateway persists its FSM in Redis with AOF enabled and mirrors crucial events in PostgreSQL's Write-Ahead Log. This mitigates the Redis failure scenario described in the architecture (Sec.2).
+Gateway records its FSM in Redis and in a database-backed event log. Durability guarantees such as Redis AOF and database WAL semantics must be enforced by **deployment/infra configuration**, not by application logic. This mitigates the Redis failure scenario described in the architecture (Sec.2).
 
 When resolving `TagQueryNode` dependencies, the Runner's **TagQueryManager**
 invokes ``resolve_tags()`` which issues a ``/queues/by_tag`` request. Gateway
@@ -248,7 +276,7 @@ consults DAG Manager for queues matching `(tags, interval)` and returns the list
 so that TagQueryNode instances remain network-agnostic and only nodes lacking
 upstream queues execute locally.
 
-Gateway also listens (via ControlBus) for `sentinel_weight` CloudEvents emitted by DAG Manager. Upon receiving an update, the in-memory routing table is adjusted and the new weight broadcast to SDK clients via WebSocket. The effective ratio per version is exported as the Prometheus gauge `gateway_sentinel_traffic_ratio{version="<id>"}`.
+Gateway also listens (via ControlBus) for `sentinel_weight` CloudEvents emitted by DAG Manager. Upon receiving an update, Gateway updates local metrics and broadcasts the new weight to SDK clients via WebSocket. The effective ratio per version is exported as the Prometheus gauge `gateway_sentinel_traffic_ratio{version="<id>"}`.
 
 Rebalancing plans from WorldService are delivered on the `rebalancing_planned` ControlBus topic. Gateway deduplicates the events, broadcasts them over the WebSocket `rebalancing` topic (CloudEvent type `rebalancing.planned`), and records metrics capturing plan volume and automatic execution (`rebalance_plans_observed_total`, `rebalance_plan_last_delta_count`, `rebalance_plan_execution_attempts_total`, `rebalance_plan_execution_failures_total`).
 
@@ -257,7 +285,7 @@ Rebalancing plans from WorldService are delivered on the `rebalancing_planned` C
 * **NodeID CRC pipeline** - Gateway recomputes each `node_id` and cross-checks it with the SDK value via the `crc32` field on diff requests/responses. A mismatch returns HTTP 400.
 * **TagQueryNode runtime expansion** - When Gateway discovers a new `(tags, interval)` queue, it emits a `tagquery.upsert` CloudEvent. The Runner's **TagQueryManager** consumes the event and primes node buffers automatically.
 * **Local DAG fallback queue** - If DAG Manager is unavailable, submitted strategy IDs are buffered in memory and flushed to the Redis queue once the service recovers.
-* **Sentinel traffic delta verification loop** - After `traffic_weight` updates, Gateway compares its routing table with SDK-local routers and measures convergence within 5 seconds via the `sentinel_skew_seconds` metric.
+* **Sentinel weight application latency** - After `traffic_weight` updates, Gateway measures the time until it applies the ratio locally and exports the skew via the `sentinel_skew_seconds` metric.
 
 ### Gateway CLI Options
 
@@ -300,7 +328,7 @@ Each stage emits `ValidationIssue` payloads that are rendered as a CLI table and
 ## S4 - Ownership & Commit-Log Design
 
 - **Ownership** - Gateway manages the submission FIFO queue and each strategy's FSM. It is not the SSOT for the graph, queues, or worlds. Topics created after a diff and their lifecycle belong to DAG Manager, while world policy and activation state belong to WorldService.
-- **Commit Log** - Every strategy submission is appended to the `gateway.ingest` topic (Redpanda/Kafka) before processing. Gateway stores offsets in Redis to resume retries and subscribes to ControlBus events emitted by DAG Manager and WorldService so it can relay them to the SDK. This log boundary enables replay and auditing after failures.
+- **Commit Log** - Every strategy submission is appended to the `gateway.ingest` topic (Redpanda/Kafka) before processing. Gateway’s commit-log consumer uses Kafka consumer group offset commits (committing after successful processing) and provides deduplication and metrics. Gateway subscribes to ControlBus events emitted by DAG Manager and WorldService so it can relay them to the SDK. This log boundary enables replay and auditing after failures.
 
 ---
 
@@ -375,5 +403,5 @@ See also: World API Reference (reference/api_world.md) and Schemas (reference/sc
   - Partition key is defined in `qmtl/services/dagmanager/kafka_admin.py:partition_key(node_id, interval, bucket)` and used by the commit-log writer.
   - Transactional commit-log writer/consumer are implemented (`qmtl/services/gateway/commit_log.py`, `qmtl/services/gateway/commit_log_consumer.py`) with deduplication and metrics.
   - OwnershipManager coordinates Kafka ownership with Postgres advisory locks fallback (`qmtl/services/gateway/ownership.py`). Kafka partition ownership is implemented by `KafkaPartitionOwnership` (wired via `gateway.ownership` config), and `owner_reassign_total` is recorded on handoff.
-  - SDK/Gateway integration skips local execution when queues are globally owned (see `qmtl/services/gateway/worker.py`).
+  - The “skip local execution when queues are globally owned” behaviour is implemented on the SDK side when applying queue mappings (e.g., filtering out `global=true` entries for TagQueryNode). Gateway `worker.py` is not the canonical implementation of this policy (see `qmtl/runtime/sdk/tag_manager_service.py`).
   - Chaos/soak style dedup tests exist under `tests/qmtl/services/gateway/test_commit_log_soak.py`.

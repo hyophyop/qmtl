@@ -1,6 +1,6 @@
 """Fill model implementations for different order types and TIF policies."""
 
-# Source: docs/architecture/lean_brokerage_model.md
+# Source: docs/ko/architecture/lean_brokerage_model.md
 
 from __future__ import annotations
 

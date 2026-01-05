@@ -68,18 +68,18 @@ class FakeQueue(QueueManager):
         self,
         asset,
         node_type,
-        code_hash,
+        node_id,
         version,
         *,
         dry_run=False,
         namespace=None,
     ):
-        call = (asset, node_type, code_hash, version, dry_run, namespace)
+        call = (asset, node_type, node_id, version, dry_run, namespace)
         self.calls.append(call)
         return topic_name(
             asset,
             node_type,
-            code_hash,
+            node_id,
             version,
             dry_run=dry_run,
             namespace=namespace,

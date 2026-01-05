@@ -144,7 +144,7 @@ nodeset = builder.attach(signal, world_id="demo", execution=custom_exec)
 - ExecutionNode
   - 입력: 사이징된 주문, 마켓 데이터(OHLCV/호가), 브로커리지 프로파일
   - 출력: 시뮬레이트/페이퍼 체결 또는 라이브 모드의 OrderPayload
-  - 기반: `qmtl/runtime/brokerage/*`, `qmtl/runtime/sdk/execution_modeling.py`
+  - 기반: `qmtl/runtime/brokerage/*`, `qmtl/runtime/sdk/execution_modeling/`
 
 - OrderPublishNode
   - 입력: OrderPayload

@@ -26,12 +26,12 @@ def test_topic_name_applies_namespace_prefix() -> None:
     topic = topic_name(
         "asset",
         "node",
-        "abcdef123456",
+        "blake3:abcdef123456",
         "v1",
         namespace={"world_id": "World-1", "execution_domain": "DryRun"},
     )
     assert topic.startswith("world-1.dryrun.")
-    assert topic.endswith("asset_node_abcdef_v1")
+    assert topic.endswith("asset_node_abcdef12_v1")
 
 
 def test_normalize_namespace_accepts_mapping_input() -> None:

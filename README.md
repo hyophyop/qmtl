@@ -8,7 +8,7 @@ QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). Its arch
 2. **WorldService** – the single source of truth for policy and activation state.
 3. **ControlBus** – an internal event bus bridged to clients through a tokenized WebSocket.
 
-SDKs submit strategies through the Gateway, but activation and queue updates along with strategy file controls are delivered from the ControlBus via `/events/subscribe` over that WebSocket. See [architecture.md](docs/architecture/architecture.md) for full details.
+SDKs submit strategies through the Gateway, but activation and queue updates along with strategy file controls are delivered from the ControlBus via `/events/subscribe` over that WebSocket. See [architecture.md](docs/en/architecture/architecture.md) for full details (Korean canonical: `docs/ko/architecture/architecture.md`).
 
 Use the DAG Manager CLI to preview DAG structures:
 
@@ -225,7 +225,7 @@ qmtl service dagmanager diff --file dag.json --target localhost:50051
 
 Customize the sample YAML files in `qmtl/examples/` to match your environment.
 
-See [gateway.md](docs/architecture/gateway.md) and [dag-manager.md](docs/architecture/dag-manager.md) for more
+See [gateway.md](docs/en/architecture/gateway.md) and [dag-manager.md](docs/en/architecture/dag-manager.md) for more
 information on configuration and advanced usage.
 
 ### WorldService

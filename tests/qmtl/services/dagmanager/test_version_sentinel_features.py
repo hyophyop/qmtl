@@ -22,7 +22,14 @@ def test_canary_weight_inferred_from_meta(diff_service, diff_metrics):
     """Traffic weights embedded in DAG meta should emit sentinel events."""
 
     dag_json = build_dag(
-        [dag_node("alpha", code_hash="c1", schema_hash="s1")],
+        [
+            dag_node("alpha", code_hash="c1", schema_hash="s1"),
+            {
+                "node_id": "strategy-sentinel",
+                "node_type": "VersionSentinel",
+                "version": "release-2025.10",
+            },
+        ],
         meta={
             "version": "release-2025.10",
             "traffic_weight": 0.25,
@@ -33,6 +40,7 @@ def test_canary_weight_inferred_from_meta(diff_service, diff_metrics):
         strategy_id="strategy",
         dag_json=dag_json,
         world_id="world-main",
+        execution_domain="live",
     )
 
     chunk = diff_service.diff(request)
@@ -68,11 +76,13 @@ def test_sentinel_weight_cache_is_world_scoped(diff_service):
         strategy_id="strategy",
         dag_json=dag_json,
         world_id="world-main",
+        execution_domain="live",
     )
     shadow_request = DiffRequest(
         strategy_id="strategy",
         dag_json=dag_json,
         world_id="world-shadow",
+        execution_domain="live",
     )
 
     diff_service.diff(main_request)

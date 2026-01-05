@@ -144,7 +144,7 @@ nodeset = builder.attach(signal, world_id="demo", execution=custom_exec)
 - ExecutionNode
   - Inputs: Sized order, Market data (OHLCV/quotes), Brokerage profile
   - Outputs: Execution fills (simulate/paper) or OrderPayload (live)
-  - Backed by: `qmtl/runtime/brokerage/*`, `qmtl/runtime/sdk/execution_modeling.py`
+  - Backed by: `qmtl/runtime/brokerage/*`, `qmtl/runtime/sdk/execution_modeling/`
 
 - OrderPublishNode
   - Inputs: OrderPayload

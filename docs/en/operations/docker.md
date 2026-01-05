@@ -114,8 +114,8 @@ docker build -t qmtl:dev .
   - `tests/project/test_docker_compose_e2e.py` (validates expected services present)
 - Docs and README:
   - `README.md` (E2E quickstart)
-  - `docs/operations/e2e_testing.md`
-  - `docs/architecture/dag-manager.md` (integration note)
+  - `docs/en/operations/e2e_testing.md`
+  - `docs/en/architecture/dag-manager.md` (integration note)
 
 ## Related
 

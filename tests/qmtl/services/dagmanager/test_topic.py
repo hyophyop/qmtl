@@ -22,19 +22,19 @@ class FakeAdmin:
 
 
 def test_topic_name_generation():
-    existing = {"btc_Indicator_abcdef_v1"}
+    existing = {"btc_Indicator_abcdef12_v1"}
     name = topic_name(
         "btc",
         "Indicator",
-        "abcdef123456",
+        "blake3:abcdef123456",
         "v1",
         existing=existing,
     )
-    assert name == "btc_Indicator_abcdef12_v1"
+    assert name == "btc_Indicator_abcdef1234_v1"
     sim = topic_name(
         "btc",
         "Indicator",
-        "abcdef123456",
+        "blake3:abcdef123456",
         "v1",
         dry_run=True,
     )
@@ -45,7 +45,7 @@ def test_topic_name_with_namespace():
     name = topic_name(
         "btc",
         "Indicator",
-        "abcdef123456",
+        "blake3:abcdef123456",
         "v1",
         namespace={"world": "W1", "domain": "Live"},
     )

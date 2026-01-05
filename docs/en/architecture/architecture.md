@@ -34,8 +34,8 @@ Bootstrap workflows and operational validation steps live in
 
 ## Deployment profiles
 
-- **dev**: Default for local development. Missing Redis/Kafka/Neo4j/ControlBus DSNs fall back to in-memory stubs to speed up experiments.
-- **prod**: Requires persistent backends across the stack. Missing `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_brokers`/`controlbus_topics`, `gateway.commitlog_bootstrap`/`commitlog_topic`, `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, `worldservice.server.redis`, or `worldservice.server.controlbus_brokers`/`controlbus_topic` causes startup to fail.
+- **dev**: Default for local development. Some backends run in in-memory fallback or disabled mode. For example: DAG Manager falls back to in-memory graph/queue managers when `dagmanager.neo4j_dsn`/`dagmanager.kafka_dsn` are empty; WorldService uses an in-memory activation store when `worldservice.server.redis` is empty. Gateway uses an in-memory Redis shim when `gateway.redis_dsn` is empty, and disables features when `gateway.controlbus_brokers`/`gateway.controlbus_topics` or `gateway.commitlog_bootstrap`/`gateway.commitlog_topic` are empty.
+- **prod**: Requires persistent backends across the stack. Missing `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_brokers` + `gateway.controlbus_topics`, `gateway.commitlog_bootstrap` + `gateway.commitlog_topic`, `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, `dagmanager.controlbus_dsn`/`dagmanager.controlbus_queue_topic`, `worldservice.server.redis`, or `worldservice.server.controlbus_brokers` + `worldservice.server.controlbus_topic` causes startup to fail.
 
 `qmtl config validate --target all` reports errors (not warnings) when `profile: prod` omits required DSNs, and the Gateway CLI enforces the same rule to prevent mixed modes (partial in-memory fallbacks).
 
@@ -112,14 +112,14 @@ From the user’s perspective, QMTL’s **Core Loop** is:
 #### 0.1.3 Auto Evaluation → Tradable Transition
 
 - `ValidationPipeline` computes Sharpe/MDD/linearity metrics and performs policy‑based PASS/FAIL checks, and `auto_returns` pre‑processing lets Runner.submit derive returns when explicit series are missing.
-- WorldService evaluation outputs (active/weight/contribution) map directly into Runner/CLI results, while local `ValidationPipeline` output is shown only in `precheck` so WS remains the SSOT for `status/weight/rank/contribution`.
+- WorldService `/worlds/{world_id}/evaluate` outputs (active/weight/contribution) map directly into Runner/CLI results, while local `ValidationPipeline` output is shown only in `precheck` so WS remains the SSOT for `status/weight/rank/contribution`.
 
 #### 0.1.4 World‑Level Capital Allocation
 
 - WorldService computes world and cross‑world allocation plans through `/allocations` and its internal rebalancing engine, and Runner.submit/CLI surface the latest snapshot for the submitted world (world/strategy shares, etag/updated_at, staleness hints) as read‑only context.
 - The Core Loop treats evaluation/activation vs. allocation as a **two‑step standard flow**:  
   1) `Runner.submit(..., world=...)` → WS evaluation/activation, and  
-  2) allocation/rebalancing via `/allocations` and `/rebalancing/*` (`qmtl world allocations|rebalance-*`).  
+  2) allocation/rebalancing via `/allocations`, `/rebalancing/plan`, and `/rebalancing/apply` (`qmtl world allocations|rebalance-*`).  
   Apply/rebalancing stays as an auditable operational step with `run_id`/`etag` tracking (`qmtl world apply <id> --run-id <id> [--plan-file ...]`).
 
 ### Core Principle: Simplicity > Backward Compatibility
@@ -561,8 +561,9 @@ replayable:
 1. Each ComputeNode emits to a dedicated Kafka topic, allowing historical replay.
 2. DAG Manager records queue creation/updates and publishes `QueueUpdated` and
    `sentinel_weight` events to the ControlBus topic.
-3. Gateway appends strategy submissions to the `gateway.ingest` log before
-   diffing, storing offsets in Redis for at-least-once processing.
+3. Gateway appends strategy submissions to `gateway.commitlog_topic` (default:
+   `gateway.ingest`) before diffing, storing offsets in Redis for at-least-once
+   processing.
 4. WorldService records activation/decision events to the same log for audit and
    rollback support.
 
@@ -618,6 +619,6 @@ The golden-signal To-Be is materialised in the dashboards/SLOs documented in `..
 - Policy bundles should declare `share_policy`, edge overrides, and risk limits
   explicitly so promotion pipelines remain auditable.
 - Keep layer templates loosely coupled and document changes in
-  `docs/architecture/layered_template_system.md`.
+  `docs/en/architecture/layered_template_system.md`.
 
 {{ nav_links() }}
