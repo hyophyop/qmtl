@@ -26,7 +26,7 @@ def test_schema_change_buffering_flag(diff_service, fake_repo, fake_queue):
         [],
         None,
         False,
-        topic_name("asset", "N", "c1", "v1"),
+        topic_name("asset", "N", "A", "v1"),
     )
 
     request = make_diff_request(
@@ -42,7 +42,7 @@ def test_schema_change_buffering_flag(diff_service, fake_repo, fake_queue):
 
     chunk = diff_service.diff(request)
 
-    expected_a = topic_name("asset", "N", "c1", "v1")
+    expected_a = topic_name("asset", "N", "A", "v1")
 
     assert chunk.queue_map[partition_with_context("A", None, None)] == expected_a
     assert not chunk.new_nodes

@@ -37,7 +37,7 @@ WorldService는 월드의 단일 진실 소스(SSOT)입니다. 다음을 소유�
 - 클라이언트가 `execution_domain`을 생략하면 월드 노드·검증 캐시는 기본적으로 `backtest`로 저장됩니다. 의도한 도메인을 명시적으로 넣어야 live 범위로 잘못 저장되는 일을 막을 수 있습니다.
 
 !!! note "정책 엔진 구현 상태"
-현재 `/worlds/{id}/decide` 엔드포인트는 월드의 `allow_live` 플래그, 바인딩/결정 존재 여부, 히스토리 메타데이터(dataset_fingerprint·coverage 등)만을 기준으로 `effective_mode`와 TTL/사유를 결정합니다. 아직 정책 문서의 정밀 점수화·히스테리시스·필수 지표 집합(StrategySeries 기반)·도메인별 엣지 오버라이드 연동은 미구현 상태이며, 향후 WorldService 정책 엔진이 준비되면 해당 평가 로직과 SSOT를 이 경로에 통합합니다.
+현재 `/worlds/{world_id}/decide` 엔드포인트는 월드의 `allow_live` 플래그, 바인딩/결정 존재 여부, 히스토리 메타데이터(dataset_fingerprint·coverage 등)만을 기준으로 `effective_mode`와 TTL/사유를 결정합니다. 아직 정책 문서의 정밀 점수화·히스테리시스·필수 지표 집합(StrategySeries 기반)·도메인별 엣지 오버라이드 연동은 미구현 상태이며, 향후 WorldService 정책 엔진이 준비되면 해당 평가 로직과 SSOT를 이 경로에 통합합니다.
 
 !!! note "설계 의도"
 - WS는 `effective_mode`(정책 문자열)를 산출하고, Gateway는 이를 `execution_domain`으로 매핑해 공유 컴퓨트 컨텍스트로 전파합니다. SDK/Runner는 모드를 선택하지 않으며 입력으로만 취급합니다. 오래되었거나 알 수 없는 결정은 기본적으로 compute‑only(주문 게이트 OFF)로 처리합니다.
@@ -60,9 +60,9 @@ QMTL 전체의 핵심 가치인 **“전략 로직에만 집중하면 시스템�
 - WS 평가 결과(active/weight/contribution/violations)가 **월드 차원의 단일 출처**이며, SDK/Runner는 이를 그대로 사용자에게 노출하고 `ValidationPipeline`은 힌트·로컬 사전 검사 역할로 한정된다.
 - `DecisionEnvelope`/`ActivationEnvelope` 스키마와 Runner/CLI `SubmitResult` 구조가 일치하도록 정리해 “전략 제출 → 월드 평가 결과 확인”이 한눈에 이어진다.
 - 계약 (정렬 상태)
-  - `/worlds/{id}/evaluate` → `DecisionEnvelope`/`ActivationEnvelope` 값이 `SubmitResult.ws.decision/activation`에 그대로 매핑됩니다. CLI `--output json`은 WS/Precheck가 분리된 동일 JSON을 출력합니다.
+  - `/worlds/{world_id}/evaluate` → `DecisionEnvelope`/`ActivationEnvelope` 값이 `SubmitResult.ws.decision/activation`에 그대로 매핑됩니다. CLI `--output json`은 WS/Precheck가 분리된 동일 JSON을 출력합니다.
   - 로컬 `ValidationPipeline` 출력은 `SubmitResult.precheck`에만 담기며, `status/weight/rank/contribution`의 SSOT는 WS입니다.
-  - `ActivationEnvelope`(`GET/PUT /worlds/{id}/activation`) 필드와 `SubmitResult.ws.activation` 필드가 동일 스키마를 사용해 활성/weight/etag/run_id/state_hash를 노출합니다.
+  - `ActivationEnvelope`(`GET/PUT /worlds/{world_id}/activation`) 필드와 `SubmitResult.ws.activation` 필드가 동일 스키마를 사용해 활성/weight/etag/run_id/state_hash를 노출합니다.
 
 #### ExecutionDomain / effective_mode
 
@@ -71,7 +71,7 @@ QMTL 전체의 핵심 가치인 **“전략 로직에만 집중하면 시스템�
 
 #### 월드 자본 배분 / 리밸런싱
 
-- `/allocations`, `/rebalancing/*`가 world/world‑간 자본 배분 플랜을 계산·기록하고, Runner.submit/CLI는 제출된 world의 최신 스냅샷(월드/전략 총합 비중, etag/updated_at, stale 여부)을 읽기 전용으로 노출하며, 스냅샷이 없거나 오래되면 `qmtl world allocations -w <id>` 새로고침 안내를 함께 출력한다.
+- `/allocations`, `/rebalancing/plan`, `/rebalancing/apply`가 world/world‑간 자본 배분 플랜을 계산·기록하고, Runner.submit/CLI는 제출된 world의 최신 스냅샷(월드/전략 총합 비중, etag/updated_at, stale 여부)을 읽기 전용으로 노출하며, 스냅샷이 없거나 오래되면 `qmtl world allocations -w <id>` 새로고침 안내를 함께 출력한다.
 - 전략 제출/평가 루프와 world allocation 루프는 “표준 두 단계 루프”로 문서화되어 있으며, 적용·실행은 승인/감사 가능한 별도 플로우로 남긴 채 `qmtl world apply <id> --run-id <id> [--plan-file ...]` 같은 명시적 경로와 run_id/etag 기반 감사 추적을 기본 규약으로 사용한다.
 
 ---
@@ -116,28 +116,28 @@ SSOT 경계: WVG 객체는 DAG Manager가 저장하지 않습니다. WS가 수�
 ## 2. API 표면(요약)
 
 CRUD
-- POST /worlds | GET /worlds | GET /worlds/{id} | PUT /worlds/{id} | DELETE /worlds/{id}
+- POST /worlds | GET /worlds | GET /worlds/{world_id} | PUT /worlds/{world_id} | DELETE /worlds/{world_id}
 
 정책(Policies)
-- POST /worlds/{id}/policies  (upload new version)
-- GET /worlds/{id}/policies   (list) | GET /worlds/{id}/policies/{v}
-- POST /worlds/{id}/set-default?v=V
+- POST /worlds/{world_id}/policies  (upload new version)
+- GET /worlds/{world_id}/policies   (list) | GET /worlds/{world_id}/policies/{v}
+- POST /worlds/{world_id}/set-default?v=V
 
 바인딩(Bindings)
-- POST /worlds/{id}/bindings        (upsert WSB: bind `strategy_id` to world)
-- GET  /worlds/{id}/bindings        (list; filter by `strategy_id`)
+- POST /worlds/{world_id}/bindings        (upsert WSB: bind `strategy_id` to world)
+- GET  /worlds/{world_id}/bindings        (list; filter by `strategy_id`)
 
 목적
 - WSB는 각 제출마다 WVG에 `(world_id, strategy_id)` 루트가 존재하도록 보장합니다. 다중 월드를 대상으로 할 경우, 운영 격리와 자원 제어를 위해 월드별 별도 프로세스를 권장합니다.
 
 결정 및 제어
-- GET /worlds/{id}/decide?as_of=... → DecisionEnvelope
-- POST /worlds/{id}/decisions       (replace world strategy set via DecisionsRequest)
-- GET /worlds/{id}/activation?strategy_id=...&side=... → ActivationEnvelope
-- PUT /worlds/{id}/activation          (manual override; optional TTL)
-- POST /worlds/{id}/evaluate           (plan only)
-- POST /worlds/{id}/apply              (2‑Phase apply; requires run_id)
-- GET /worlds/{id}/audit               (paginated stream)
+- GET /worlds/{world_id}/decide?as_of=... → DecisionEnvelope
+- POST /worlds/{world_id}/decisions       (replace world strategy set via DecisionsRequest)
+- GET /worlds/{world_id}/activation?strategy_id=...&side=... → ActivationEnvelope
+- PUT /worlds/{world_id}/activation          (manual override; optional TTL)
+- POST /worlds/{world_id}/evaluate           (plan only)
+- POST /worlds/{world_id}/apply              (2‑Phase apply; requires run_id)
+- GET /worlds/{world_id}/audit               (paginated stream)
 
 RBAC: 월드 범위 롤(owner, reader, operator). 민감 작업(`apply`, `activation PUT`)은 operator 권한이 필요합니다.
 
@@ -345,14 +345,13 @@ WorldService는 월드 비중과 전략 슬리브를 조정하기 위한 두 가
 
 ## 7. 관측(Observability) & SLO
 
-메트릭 예시
-- `world_decide_latency_ms_p95`, `world_apply_duration_ms_p95`
-- `activation_skew_seconds`, `promotion_fail_total`, `demotion_fail_total`
-- `registry_write_fail_total`, `audit_backlog_depth`
-- `cross_context_cache_hit_total`(목표=0; 위반 시 프로모션 차단)
-
-Skew 메트릭
-- `activation_skew_seconds`는 이벤트 `ts`와 SDK 처리 시각의 차이를 월드별 p95로 집계합니다.
+메트릭(현재 구현)
+- Apply: `world_apply_run_total`, `world_apply_failure_total`
+- Allocation snapshot: `world_allocation_snapshot_total`, `world_allocation_snapshot_stale_total`, `world_allocation_snapshot_stale_ratio`
+- Risk Hub 처리: `risk_hub_snapshot_processed_total`, `risk_hub_snapshot_failed_total`, `risk_hub_snapshot_processing_latency_seconds`
+- Validation 이벤트 처리: `validation_event_processed_total`, `validation_event_failed_total`, `validation_event_processing_latency_seconds`
+- Workers: `extended_validation_run_total`, `extended_validation_run_latency_seconds`, `live_monitoring_run_total`
+- 도메인 격리: `cross_context_cache_hit_total`(목표=0; 위반 시 프로모션 차단)
 
 알림
 - 결정 실패, 명시적 상태 폴링 실패, Gateway의 오래된 활성화 캐시

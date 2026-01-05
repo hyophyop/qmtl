@@ -31,20 +31,20 @@ last_modified: 2025-08-26
 ## 아키텍처
 *소유자: Architecture Guild*
 
-- `docs/architecture/README.md`
-- `docs/architecture/architecture.md`
-- `docs/architecture/ccxt-seamless-integrated.md`
-- `docs/architecture/controlbus.md`
-- `docs/architecture/dag-manager.md`
-- `docs/architecture/exchange_node_sets.md`
-- `docs/architecture/execution_nodes.md`
-- `docs/architecture/execution_state.md`
-- `docs/architecture/gateway.md`
-- `docs/architecture/glossary.md`
-- `docs/architecture/layered_template_system.md`
-- `docs/architecture/lean_brokerage_model.md`
-- `docs/architecture/seamless_data_provider_v2.md`
-- `docs/architecture/worldservice.md`
+- `docs/ko/architecture/README.md`
+- `docs/ko/architecture/architecture.md`
+- `docs/ko/architecture/ccxt-seamless-integrated.md`
+- `docs/ko/architecture/controlbus.md`
+- `docs/ko/architecture/dag-manager.md`
+- `docs/ko/architecture/exchange_node_sets.md`
+- `docs/ko/architecture/execution_nodes.md`
+- `docs/ko/architecture/execution_state.md`
+- `docs/ko/architecture/gateway.md`
+- `docs/ko/architecture/glossary.md`
+- `docs/ko/architecture/layered_template_system.md`
+- `docs/ko/architecture/lean_brokerage_model.md`
+- `docs/ko/architecture/seamless_data_provider_v2.md`
+- `docs/ko/architecture/worldservice.md`
 
 ## 설계(Design)
 *소유자: Design Council*

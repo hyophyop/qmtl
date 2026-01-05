@@ -62,3 +62,7 @@ WorldService의 Evaluation Store는 `EvaluationRun`과 그 변경 이력을 **�
 - 오버라이드:
   - 승인(approved)은 사유/승인자/타임스탬프를 포함해야 하며,
     추후 재검토를 위해 관련 run의 `/history`를 함께 보관합니다.
+
+## 관련
+
+- 설계(icebox, 참고용): [전략/노드 자동 증류](../design/icebox/strategy_distillation.md)

@@ -12,7 +12,7 @@ This note reviews replacing the term **World** with **Realm** across QMTL.
 
 ## Impact Scope
 
-Renaming touches documentation, configuration paths, APIs, and tooling.  A rough search shows over one hundred references to "World" in architecture, operations, and reference docs.  Key surfaces include `docs/world/*.md`, `docs/architecture/worldservice.md`, the World API reference, and the activation runbook.  Code samples and configuration snippets also assume `config/worlds/<id>.yml` and `qmtl world` CLI verbs.
+Renaming touches documentation, configuration paths, APIs, and tooling. A rough search shows over one hundred references to "World" in architecture, operations, and reference docs. Key surfaces include `docs/en/world/*.md`, `docs/en/architecture/worldservice.md`, the World API reference, and the activation runbook. Code samples and configuration snippets also assume `config/worlds/<id>.yml` and `qmtl world` CLI verbs.
 
 ## Prototype: config/realms
 

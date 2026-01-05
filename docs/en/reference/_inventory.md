@@ -31,20 +31,20 @@ last_modified: 2025-08-26
 ## Architecture
 *Owner: Architecture Guild*
 
-- `docs/architecture/README.md`
-- `docs/architecture/architecture.md`
-- `docs/architecture/ccxt-seamless-integrated.md`
-- `docs/architecture/controlbus.md`
-- `docs/architecture/dag-manager.md`
-- `docs/architecture/exchange_node_sets.md`
-- `docs/architecture/execution_nodes.md`
-- `docs/architecture/execution_state.md`
-- `docs/architecture/gateway.md`
-- `docs/architecture/glossary.md`
-- `docs/architecture/layered_template_system.md`
-- `docs/architecture/lean_brokerage_model.md`
-- `docs/architecture/seamless_data_provider_v2.md`
-- `docs/architecture/worldservice.md`
+- `docs/en/architecture/README.md`
+- `docs/en/architecture/architecture.md`
+- `docs/en/architecture/ccxt-seamless-integrated.md`
+- `docs/en/architecture/controlbus.md`
+- `docs/en/architecture/dag-manager.md`
+- `docs/en/architecture/exchange_node_sets.md`
+- `docs/en/architecture/execution_nodes.md`
+- `docs/en/architecture/execution_state.md`
+- `docs/en/architecture/gateway.md`
+- `docs/en/architecture/glossary.md`
+- `docs/en/architecture/layered_template_system.md`
+- `docs/en/architecture/lean_brokerage_model.md`
+- `docs/en/architecture/seamless_data_provider_v2.md`
+- `docs/en/architecture/worldservice.md`
 
 ## Design
 *Owner: Design Council*

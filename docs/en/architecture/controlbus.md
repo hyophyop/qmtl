@@ -33,11 +33,13 @@ Non‑Goals
 
 ## 1. Topology & Semantics
 
-- Transport: Kafka/Redpanda recommended, or equivalent pub/sub; namespaces `control.*`
-- Topics (example)
-  - `control.activation` partitioned by `world_id`
-  - `control.queues` partitioned by `hash(tags, interval)`
-  - `control.policy` partitioned by `world_id`
+- Transport: Kafka/Redpanda recommended, or equivalent pub/sub. Topic names are provided via deployment/service configuration; `control.*` is a recommended namespace.
+- Topics (example: a split-topic layout that Gateway subscribes to)
+  - `activation` partitioned by `world_id`
+  - `control.activation.ack` partitioned by `world_id` (activation acknowledgements)
+  - `queue` partitioned by `",".join(tags)` (Gateway preserves ordering per tag combination)
+  - `policy` partitioned by `world_id`
+  - `sentinel_weight` partitioned by `sentinel_id`
 - Ordering: guaranteed within partition only; consumers must handle duplicates and gaps
 - Delivery: at‑least‑once; idempotent consumers via `etag`/`run_id`
 
@@ -71,6 +73,26 @@ ActivationUpdated (versioned)
 - `requires_ack=true` indicates Gateway MUST confirm receipt via the ControlBus acknowledgement channel before reopening order flow. Until that acknowledgement lands, Gateway/SDK keep order gates closed.
 - `sequence` is the per-run monotonic counter produced by [`ApplyRunState.next_sequence()`]({{ code_url('qmtl/services/worldservice/run_state.py#L47') }}). Consumers enforce increasing order and trigger resync when gaps are detected.
 
+ActivationAck (versioned)
+```json
+{
+  "type": "ActivationAck",
+  "version": 1,
+  "world_id": "crypto_mom_1h",
+  "run_id": "7a1b4c...",
+  "sequence": 17,
+  "phase": "unfreeze",
+  "etag": "act:crypto_mom_1h:abcd:long:42",
+  "ts": "2025-08-28T09:00:00Z",
+  "ack_ts": "2025-08-28T09:00:00Z",
+  "idempotency_key": "activation_ack:crypto_mom_1h:7a1b4c...:17:unfreeze:1"
+}
+```
+
+- `ActivationAck` is the acknowledgement message that Gateway publishes to the response channel (e.g., `control.activation.ack`) after it receives `ActivationUpdated.requires_ack=true`.
+- The partition key is `world_id`; within a world, consumers should observe monotonic `sequence` ordering.
+- Consumers deduplicate by `idempotency_key` or `(world_id, run_id, sequence, phase)`.
+
 QueueUpdated (versioned)
 ```json
 {
@@ -78,9 +100,29 @@ QueueUpdated (versioned)
   "version": 1,
   "tags": ["BTC", "price"],
   "interval": 60,
-  "queues": ["q1", "q2"],
-  "etag": "q:BTC.price:60:77",
+  "queues": [
+    {"queue": "q1", "global": false},
+    {"queue": "q2", "global": true}
+  ],
+  "match_mode": "any",
+  "etag": "q:BTC.price:60:1",
+  "idempotency_key": "queue_updated:BTC.price:60:any:1",
   "ts": "2025-08-28T09:00:00Z"
+}
+```
+
+SentinelWeightUpdated (versioned)
+```json
+{
+  "type": "SentinelWeightUpdated",
+  "version": 1,
+  "sentinel_id": "s_123",
+  "weight": 0.25,
+  "sentinel_version": "v1.2.3",
+  "world_id": "crypto_mom_1h",
+  "etag": "sw:s_123:v1.2.3:0.250000:1",
+  "ts": "2025-08-28T09:00:00Z",
+  "idempotency_key": "sentinel_weight_updated:s_123:v1.2.3:0.250000:1"
 }
 ```
 
@@ -109,9 +151,9 @@ PolicyUpdated (versioned)
 
 ## 3-A. Activation acknowledgement channel
 
-- For every Freeze/Unfreeze event, Gateway publishes an acknowledgement containing the latest `sequence` to ControlBus (e.g., `control.activation.ack`) or an equivalent response channel (SHALL). The payload MUST include `world_id`, `run_id`, and `sequence` so operators can reconcile state.
+- For every Freeze/Unfreeze event (especially when `requires_ack=true`), Gateway publishes an `ActivationAck` message containing the latest `sequence` to the ControlBus response channel (e.g., `control.activation.ack`) (SHALL). The payload MUST include `world_id`, `run_id`, and `sequence` so operators can reconcile state.
 - WorldService and operational tooling SHOULD monitor the acknowledgement stream for missing sequences or timeouts and pause/rollback apply runs when anomalies surface.
-- Gateway SHOULD delay sending ControlBus acknowledgements if downstream SDK/WebSocket clients have not acknowledged receipt, keeping freeze semantics intact.
+- In the current implementation, Gateway publishes ACKs immediately after receiving ControlBus `activation` events (`qmtl/services/gateway/controlbus_consumer.py`, `qmtl/services/gateway/controlbus_ack.py`). A “two-stage ack” that waits for downstream SDK/WebSocket acknowledgements is treated as an optional extension.
 
 ---
 
@@ -126,8 +168,9 @@ PolicyUpdated (versioned)
 ## 5. Observability
 
 Metrics
-- controlbus_publish_latency_ms, fanout_lag_ms, dropped_subscribers_total
-- replay_queue_depth, partition_skew_seconds
+- Gateway (ControlBus consume/ACK): `controlbus_lag_ms`, `controlbus_apply_ack_total`, `controlbus_apply_ack_latency_ms`
+- Gateway (WebSocket fan-out): `event_fanout_total`, `ws_dropped_subscribers_total`, `ws_connections_total`
+- DAG Manager (queue lag): `queue_lag_seconds`, `queue_lag_threshold_seconds`
 
 Runbooks
 - Recreate consumer groups, increase partitions per world count, backfill via HTTP reconcile endpoints at Gateway/WorldService/DAG Manager
@@ -145,7 +188,7 @@ Runbooks
 ## 7. Initial Snapshot & Delegated WS (Optional)
 
 - Initial snapshot: first message per topic SHOULD be a full snapshot or include a `state_hash` so clients can confirm convergence without a full GET.
-- Clients MAY probe `/worlds/{id}/{topic}/state_hash` via Gateway to check for divergence before fetching a snapshot.
+- Clients MAY probe `/worlds/{world_id}/{topic}/state_hash` via Gateway to check for divergence before fetching a snapshot.
 - Delegated WS (feature‑flagged): Gateway may return an alternate `alt_stream_url` that points to a dedicated event streamer tier sitting in front of ControlBus.
   - Tokens are short‑lived JWTs with claims: `aud=controlbus`, `sub=<user|svc>`, `world_id`, `strategy_id`, `topics`, `jti`, `iat`, `exp`. Key ID (`kid`) is conveyed in the JWT header.
   - Streamer verifies JWKS/claims and bridges to ControlBus; default deployment keeps this disabled.

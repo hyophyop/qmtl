@@ -20,6 +20,7 @@ status: draft
 관련 문서:
 
 - World 검증 계층 설계: [world_validation_architecture.md](world_validation_architecture.md)
+- 전략/노드 자동 증류(icebox): [strategy_distillation.md](strategy_distillation.md)
 - World 사양: [world/world.md](../../world/world.md)
 - 아키텍처 개요: [architecture/architecture.md](../../architecture/architecture.md)
 - WorldService 평가 런 & 메트릭 API: [worldservice_evaluation_runs_and_metrics_api.md](worldservice_evaluation_runs_and_metrics_api.md)

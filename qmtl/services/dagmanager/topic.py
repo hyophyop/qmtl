@@ -106,10 +106,21 @@ _TOPIC_CONFIG = {
 }
 
 
+def _node_id_digest(node_id: str) -> str:
+    """Return the digest portion of a canonical ``blake3:``-prefixed NodeID."""
+
+    if not node_id:
+        return ""
+    prefix, sep, rest = node_id.partition(":")
+    if sep and prefix.lower() == "blake3" and rest:
+        return rest
+    return node_id
+
+
 def topic_name(
     asset: str,
     node_type: str,
-    code_hash: str,
+    node_id: str,
     version: str,
     *,
     dry_run: bool = False,
@@ -119,17 +130,18 @@ def topic_name(
     """Return unique topic name per spec.
 
     The name follows ``{asset}_{node_type}_{short_hash}_{version}{_sim?}`` where
-    ``short_hash`` initially uses the first six characters of ``code_hash`` and
-    grows by two characters until the name is unique within ``existing``.
+    ``short_hash`` starts from the first eight characters of the NodeID digest
+    and grows by two characters until the name is unique within ``existing``.
     """
 
+    digest = _node_id_digest(node_id)
     taken = set(existing or [])
-    length = 6
+    length = 8
     suffix = "_sim" if dry_run else ""
 
-    # First try by growing the short hash up to the full hash length
-    while length <= len(code_hash):
-        short_hash = code_hash[:length]
+    # First try by growing the short hash up to the full digest length
+    while length <= len(digest):
+        short_hash = digest[:length]
         base = f"{asset}_{node_type}_{short_hash}_{version}{suffix}"
         name = ensure_namespace(base, namespace)
         if name not in taken:
@@ -137,7 +149,7 @@ def topic_name(
         length += 2
 
     # Fall back to numeric suffix if all hash-length attempts collide
-    base = f"{asset}_{node_type}_{code_hash}_{version}{suffix}"
+    base = f"{asset}_{node_type}_{digest}_{version}{suffix}"
     base = ensure_namespace(base, namespace)
     if base not in taken:
         return base

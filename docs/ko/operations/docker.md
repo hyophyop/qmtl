@@ -108,8 +108,8 @@ docker build -t qmtl:dev .
   - `tests/project/test_docker_compose_e2e.py` (예상 서비스 확인)
 - 문서 및 README:
   - `README.md` (E2E 퀵스타트)
-  - `docs/operations/e2e_testing.md`
-  - `docs/architecture/dag-manager.md` (통합 메모)
+  - `docs/ko/operations/e2e_testing.md`
+  - `docs/ko/architecture/dag-manager.md` (통합 메모)
 
 ## 관련 문서
 

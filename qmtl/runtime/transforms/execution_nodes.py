@@ -2,7 +2,7 @@
 
 This module provides reusable nodes for the execution layer of a strategy
 pipeline. The nodes mirror the design described in
-`docs/architecture/exchange_node_sets.md` and are intended to be composed
+`docs/ko/architecture/exchange_node_sets.md` and are intended to be composed
 behind a signal node.
 
 Currently includes:
@@ -27,7 +27,7 @@ class PreTradeGateNode(Node):
     """Gate order intents using activation and brokerage checks.
 
     The node passes through valid orders or returns a structured rejection
-    reason when blocked. See ``docs/architecture/exchange_node_sets.md`` for
+    reason when blocked. See ``docs/ko/architecture/exchange_node_sets.md`` for
     design details.
     """
 
@@ -73,7 +73,7 @@ class SizingNode(Node):
     ``target_percent``. If ``quantity`` is provided, the order is passed
     through unchanged. Otherwise, the appropriate helper from
     :mod:`qmtl.runtime.sdk.portfolio` is used to compute the quantity based on the
-    provided portfolio snapshot. See ``docs/architecture/exchange_node_sets.md``
+    provided portfolio snapshot. See ``docs/ko/architecture/exchange_node_sets.md``
     for design details.
     """
 

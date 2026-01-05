@@ -75,12 +75,14 @@ class ActivationAckProducer:
             return
         now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         payload = {
+            "type": "ActivationAck",
             "version": 1,
             "world_id": world_id,
             "run_id": run_id,
             "sequence": sequence,
             "phase": phase,
             "etag": etag,
+            "ts": now,
             "ack_ts": now,
             "idempotency_key": f"activation_ack:{world_id}:{run_id}:{sequence or 0}:{phase or 'unknown'}:1",
         }

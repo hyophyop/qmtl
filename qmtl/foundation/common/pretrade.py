@@ -1,6 +1,6 @@
 """Standardized pre-trade rejection reasons and helpers.
 
-# Source: docs/architecture/gateway.md
+# Source: docs/ko/architecture/gateway.md
 """
 
 from __future__ import annotations

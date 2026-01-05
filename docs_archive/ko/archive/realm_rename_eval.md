@@ -19,7 +19,7 @@ last_modified: 2025-08-21
 
 ## 영향 범위(Impact Scope)
 
-용어 변경은 문서, 구성 경로, API, 툴링에 모두 영향을 줍니다. 대략적인 검색으로 아키텍처/운영/레퍼런스 문서에서 "World" 참조가 100건 이상 확인됩니다. 핵심 대상은 `docs/world/*.md`, `docs/architecture/worldservice.md`, World API 레퍼런스, 활성화 런북 등입니다. 코드 샘플과 구성 스니펫 또한 `config/worlds/<id>.yml`, `qmtl world` CLI 동사를 전제로 작성되어 있습니다.
+용어 변경은 문서, 구성 경로, API, 툴링에 모두 영향을 줍니다. 대략적인 검색으로 아키텍처/운영/레퍼런스 문서에서 "World" 참조가 100건 이상 확인됩니다. 핵심 대상은 `docs/ko/world/*.md`, `docs/ko/architecture/worldservice.md`, World API 레퍼런스, 활성화 런북 등입니다. 코드 샘플과 구성 스니펫 또한 `config/worlds/<id>.yml`, `qmtl world` CLI 동사를 전제로 작성되어 있습니다.
 
 ## 프로토타입: config/realms
 

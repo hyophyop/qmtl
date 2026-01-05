@@ -1,6 +1,6 @@
 """Brokerage model components for QMTL."""
 
-# Source: docs/architecture/lean_brokerage_model.md
+# Source: docs/ko/architecture/lean_brokerage_model.md
 
 from .order import Order, Fill, Account, OrderType, TimeInForce, AccountType
 from .interfaces import BuyingPowerModel, FeeModel, SlippageModel, FillModel

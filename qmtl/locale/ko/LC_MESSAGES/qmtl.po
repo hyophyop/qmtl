@@ -108,8 +108,8 @@ msgstr "추가 문서: docs/reference/templates.md"
 msgid "Project directory to create scaffolding"
 msgstr "스캐폴딩을 생성할 프로젝트 디렉터리"
 
-msgid "Preset configuration to use (see docs/architecture/layered_template_system.md)"
-msgstr "사용할 프리셋 구성 (docs/architecture/layered_template_system.md 참조)"
+msgid "Preset configuration to use (see docs/ko/architecture/layered_template_system.md)"
+msgstr "사용할 프리셋 구성 (docs/ko/architecture/layered_template_system.md 참조)"
 
 msgid "Comma-separated list of layers to include (e.g., data,signal)"
 msgstr "포함할 레이어의 쉼표-구분 목록 (예: data,signal)"

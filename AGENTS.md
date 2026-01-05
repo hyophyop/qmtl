@@ -19,8 +19,9 @@ For general contribution and testing policies, see the repository root [AGENTS.m
 
 ## Architecture
 
-- Implementations must adhere to the specifications in `docs/architecture/architecture.md`,
-  `docs/architecture/gateway.md` and `docs/architecture/dag-manager.md`.
+- Implementations must adhere to the specifications in `docs/ko/architecture/architecture.md`,
+  `docs/ko/architecture/gateway.md` and `docs/ko/architecture/dag-manager.md` (canonical Korean docs;
+  English translations live under `docs/en/architecture/`).
 - Do not place alpha or strategy modules in `qmtl/`; only reusable feature extraction or
   data-processing utilities belong here. All alpha logic should live in the root project's
   `strategies/` directory.

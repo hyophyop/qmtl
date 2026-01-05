@@ -323,7 +323,7 @@ Metadata drives both CLI prompts and documentation (e.g., surfaced through
 
 - Keep layer templates loosely coupled. Shared utilities belong in `qmtl/foundation/`.
 - Version templates using semantic tags. The CLI verifies compatibility between template versions and the target QMTL release.
-- Record changelog entries in `docs/architecture/layered_template_system.md` when adding layers or presets so downstream teams can update pipelines deliberately.
+- Record changelog entries in `docs/en/architecture/layered_template_system.md` when adding layers or presets so downstream teams can update pipelines deliberately.
 - Whenever a layer introduces new Python dependencies, update `pyproject.toml` extras and the CI workflows that bake template tests.
 
 {{ nav_links() }}

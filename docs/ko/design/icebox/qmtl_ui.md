@@ -17,10 +17,11 @@
 - 전략 캔버스 & DAG 빌더: 노드 기반으로 데이터 소스 → 피처 추출(qmtl utils) → 시뮬레이션/실행 파이프라인을 구성·버전 관리.
 - 프로젝트/포트폴리오 뷰: 전략별 상태, 최근 실행, 성능 지표(수익률·MDD·샤프·슬리피지 등), 자산군/거래소별 분포.
 - 실험/백테스트 허브: 파라미터 스윕, A/B 비교, 실험 기록·메모·아티팩트(로그, 결과 파일) 보관, 재현 실행.
+- 거버넌스 & 자동 증류(초안): 무결성/현실 실행/과적합 통제/리스크 예산 지표를 기반으로, 전략/노드의 승격·강등·템플릿화를 자동 제안하고 수동 승인(override)로 닫힌 루프를 만든다.
 - 런북 & 스케줄러: 정기/이벤트 기반 실행 예약, 재시도·타임아웃 정책, DAG 상태(대기/진행/성공/실패) 실시간 스트림.
 - 데이터 소스 & 커넥션: 거래소/API 키 상태, 레이트리밋/쿼터 대시보드, 헬스 체크 및 키 만료 알림.
 - 모니터링/알림: 지표·오더 이벤트·지연 시간·에러율 알림(이메일/웹훅/슬랙), 규칙 기반 리스크 가드(포지션/노출/슬리피지 한도).
-- 리스크 & 자본 관리: 실시간 포지션/주문/PnL, VaR/워스트케이스 시나리오, 드로다운 알림, 손절/트레일링 스톱 정책 UI.
+- 리스크 & 자본 관리: 실시간 포지션/주문/PnL, VaR/워스트케이스 시나리오, 드로우다운 알림, 손절/트레일링 스톱 정책 UI.
 - 배포 파이프라인: 스테이징→프로덕션 승격, 변경 요약(diff), 롤백/롤포워드, 환경 변수·시크릿 스코프 관리.
 - 감사/추적성 & 협업: 실행 로그, 입력 파라미터, 코드/노드 버전, 사용자 액션 이력; 역할·권한(RBAC), 공유 링크, 코멘트/승인 워크플로.
 - 템플릿 & 예제: 자주 쓰는 전략/노드 템플릿 갤러리, 빠른 시작 마법사, 문서/아키텍처 다이어그램 인라인 노출.
@@ -73,6 +74,7 @@ flowchart LR
 - 전략/실험 메타: 실행 ID, NodeSet/Template 버전, 입력 파라미터, 사용 preset/world, 로그 핑거프린트.
 - 리스크/포지션: WorldService/Execution Nodes의 포지션, 주문 내역, 슬리피지/레이트리밋 이벤트를 주기적으로 스냅샷.
 - 관측성: 지연 시간, 에러율, 캐시 히트율, 비용 추정치를 UI 서버에서 집계 후 캐시(역시 ControlBus 이벤트 기반).
+- 검증/무결성(초안): PnL 회계 정합성 인바리언트(daily/trades/strategy 합 일치), 실행/마찰 모델 프로파일(수수료·슬리피지·펀딩), 탐색 강도/복잡도(시도 수, 파라미터 수), 과적합 통제 지표(PBO/DSR/부트스트랩 성공확률)와 그 계산 입력(run_manifest 스냅샷).
 
 ## 6. 운영·보안
 
@@ -80,7 +82,48 @@ flowchart LR
 - 감사 로그: UI에서 발생한 액션(실행/중단/승격/롤백/설정 변경)을 별도 스트림으로 기록해 ControlBus 또는 전용 감사 채널로 전송한다.
 - 실패 전략: Gateway·Dag Manager·WorldService 장애 시 UI는 읽기 전용 모드로 자동 전환하고, 재시도/대체 엔드포인트를 안내한다.
 
-## 7. 범위 외 및 후속 과제
+## 7. 거버넌스 & 자동 증류(초안)
+
+핵심 목표는 “전략 로직/노드 설계 → 제출/실행 → 평가 지표 누적 → 자동 제안 → 승인/반려 및 근거 기록”의 루프를 UI에서 닫는 것이다. 자동 제안은 **정책/검증을 우회하지 않으며**, 최종 적용은 WorldPolicy/Activation/Allocation 경로를 통해서만 일어난다.
+
+관련 문서(설계/운영 SSOT는 개별 문서에 유지):
+
+- World 검증 계층: [world_validation_architecture.md](world_validation_architecture.md)
+- MRM/거버넌스: [model_risk_management_framework.md](model_risk_management_framework.md)
+- 전략/노드 자동 증류(icebox, 참고용): [strategy_distillation.md](strategy_distillation.md)
+- Evaluation Store 운영: [operations/evaluation_store.md](../../operations/evaluation_store.md)
+- 결정성 런북(NodeID/TagQuery): [operations/determinism.md](../../operations/determinism.md)
+
+### 7.1 UI가 제공해야 하는 뷰(예)
+
+- **무결성(Integrity) 대시보드**
+  - 회계 SSOT 기준(예: realized PnL/fees 포함 방식)을 고정하고, `daily_*` 합 == `trades_*` 합 == `strategy_*` 합 인바리언트를 slice별로 검증해 노출.
+  - “0으로 떨어진 fee/friction”, 누락/불연속, 반올림/정밀도 문제를 경고로 승격.
+- **실행 현실성(Execution realism) & 스트레스**
+  - 수수료(메이커/테이커), 슬리피지(스프레드/임팩트/변동성 함수), 펀딩(가능한 경우) 가정을 프로파일로 관리하고 실행별로 고정(run_manifest).
+  - 슬리피지 스트레스(예: +1/+2/+5bps) 시나리오 결과를 함께 표시해 “엣지 vs 마찰” 경계를 빠르게 판단.
+- **과적합 통제(Validation rigor)**
+  - DSR/PSR, (선택) CSCV 기반 PBO, fold 분산/부호 뒤집힘, 탐색 강도(search_intensity) 등을 한 화면에서 보여주고 승격 게이트로 연결.
+  - 블록 부트스트랩 기반 성공확률(예: `P(total_pnl>0)`, `P(max_dd<x)`)을 “위원회형” 리포트 형태로 출력.
+- **리스크 셸(Risk shell) 라이브러리**
+  - 알파(방향/진입 근거)와 리스크(노출/킬스위치/예산)·실행(주문/체결 가정)을 분리한 템플릿을 제공하고 전략에 조합.
+  - HV 확장 실패를 “알파 문제 vs 리스크 구조 문제”로 분리하기 위해, max_open_positions/클러스터 캡/vol targeting 같은 포트폴리오 제약을 단일 축 실험으로 쉽게 적용.
+- **증류(Distillation) 보드**
+  - DAG 노드/피처/게이트(예: ATR gate) 단위로 재사용성/안정성/기여도(예: ablation uplift, cohort-level robustness)를 집계해 “표준 노드/템플릿” 후보를 자동 추천.
+  - 추천 결과는 승인/반려/보류 상태와 근거를 남기며, 승인 시 템플릿 갤러리/WorldPolicy에 반영(사람이 읽는 changelog 포함).
+
+```mermaid
+flowchart TD
+  Submit[Submit/Run] --> Eval[EvaluationRun & Metrics]
+  Eval --> Store[Evaluation Store]
+  Store --> Distiller[Distiller (strategy/node)]
+  Distiller --> UI[QMTL UI]
+  UI --> Decision[Approve/Reject/Override]
+  Decision --> Policy[WorldPolicy / Templates]
+  Policy --> Activation[Activation/Allocation]
+```
+
+## 8. 범위 외 및 후속 과제
 
 - 모바일 UX, 멀티 테넌시, 외부 아이덴티티 연동은 후속 범위로 둔다.
 - UI 빌드/배포 파이프라인, 퍼포먼스 예산, 접근성 체크리스트는 별도 문서로 확장한다.

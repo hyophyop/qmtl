@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Design drift check: compare docs spec versions with code constants.
 
-Checks ``docs/architecture/*.md`` front-matter for ``spec_version`` and ensures
-they match the versions declared in ``qmtl/spec.py`` (``ARCH_SPEC_VERSIONS``).
+The documentation tree is locale-scoped (mkdocs i18n). This checker reads the
+default locale from ``mkdocs.yml`` and validates the corresponding docs under
+``docs/<default_locale>/architecture/*.md`` (falling back to the legacy
+non-i18n path when present).
 
 Exit codes:
 - 0: OK or no docs declare ``spec_version``
@@ -20,7 +22,43 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-ARCH_DIR = ROOT / "docs" / "architecture"
+
+
+def _default_locale(root: Path) -> str:
+    mkdocs_path = root / "mkdocs.yml"
+    try:
+        import yaml  # type: ignore
+
+        data = yaml.safe_load(mkdocs_path.read_text(encoding="utf-8"))
+        plugins = data.get("plugins", []) or []
+        for ent in plugins:
+            if not (isinstance(ent, dict) and "i18n" in ent):
+                continue
+            i18n_cfg = ent.get("i18n")
+            if not isinstance(i18n_cfg, dict):
+                break
+            for lang in i18n_cfg.get("languages", []) or []:
+                if isinstance(lang, dict) and lang.get("default") is True:
+                    loc = lang.get("locale")
+                    if loc:
+                        return str(loc)
+            break
+    except Exception:
+        # Default locale is Korean by policy; fall back defensively.
+        return "ko"
+    return "ko"
+
+
+def _architecture_dir(root: Path) -> Path | None:
+    default_locale = _default_locale(root)
+    candidates = [
+        root / "docs" / default_locale / "architecture",
+        root / "docs" / "architecture",  # legacy, pre-i18n
+    ]
+    for cand in candidates:
+        if cand.exists():
+            return cand
+    return None
 
 
 def _read_front_matter(path: Path) -> dict[str, str]:
@@ -59,8 +97,8 @@ def check_design_drift(root: Path = ROOT) -> tuple[int, str]:
     except Exception as exc:  # pragma: no cover - defensive
         return 2, f"Failed to load foundation spec: {exc}"
 
-    arch_dir = root / "docs" / "architecture"
-    if not arch_dir.exists():
+    arch_dir = _architecture_dir(root)
+    if arch_dir is None:
         return 0, "No architecture docs; skipping design drift check"
 
     warnings: list[str] = []
@@ -74,7 +112,7 @@ def check_design_drift(root: Path = ROOT) -> tuple[int, str]:
 
         if code_ver is None and doc_ver is not None:
             warnings.append(
-                f"Doc {md} declares spec_version={doc_ver} but no code mapping exists (qmtl/spec.py)"
+                f"Doc {md} declares spec_version={doc_ver} but no code mapping exists (qmtl/foundation/spec.py)"
             )
             continue
 

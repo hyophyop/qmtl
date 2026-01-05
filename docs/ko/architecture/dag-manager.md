@@ -153,11 +153,12 @@ qmtl service dagmanager export-schema --uri bolt://localhost:7687 --user neo4j -
 - **스키마/코드 경계**: `schema_compat_id`와 `code_hash`가 바뀔 때만 새 NodeID가 나온다. Minor/patch 스키마 변경은 동일 NodeID를 유지하되 버퍼링·검증 경로에서 처리한다.
 - **입력 정규화**: 모든 의존성은 NodeID 기준 사전식 정렬, 파라미터는 숫자 정밀도 고정·불변 JSON 직렬화(키 정렬)로 정규화한다. 비결정적 필드와 표시 전용 메타데이터는 해시 전에 제거한다.
 
-**관측·검증 패턴 (향후 #1784/#1786 메트릭·알람 연계)**
-- NodeID CRC: Gateway/SDK가 재계산한 NodeID를 `crc32` 필드로 교차 검증한다. 불일치 시 400 및 메트릭 `nodeid_crc_mismatch_total`을 적재하고, 샘플 로그에 `submitted_node_id`, `recomputed_node_id`, `strategy_id`를 포함한다.
-- 재계산 드리프트: DAG Manager는 저장된 `node_id`와 재계산 값이 다를 경우 `nodeid_drift_total`을 증가시키고 ControlBus 경고 이벤트를 발행한다. 정상 케이스도 주기적으로 샘플링해 `nodeid_recalc_latency_ms` 히스토그램으로 노출한다.
-- TagQuery 안정성: TagQuery 실행 시 정규화된 질의 스펙 해시(`tagquery_spec_hash`)와 해결된 업스트림 집합 크기(`resolved_queue_count`)를 로그/메트릭으로 남긴다. 동일 스펙에서 NodeID 재계산 불일치가 감지되면 `tagquery_nodeid_mismatch_total`을 올리고 SDK 측 캐시를 강제 무효화한다.
-- 도메인 격리: `cross_context_cache_hit_total`(이미 §1.4에서 정의)을 DAG Manager/SDK 공통 메트릭으로 필수화한다. 값이 0 초과일 때는 캐시 재사용을 차단하고 알람으로 승격한다.
+**관측·검증 패턴**
+- NodeID 불변식 위반: Gateway가 제출 노드의 정식 NodeID를 재계산하고, 불일치 시 400을 반환하며 `nodeid_checksum_mismatch_total`, `nodeid_missing_fields_total{field,node_type}`, `nodeid_mismatch_total{node_type}`를 증가시킨다(관련 구현: Gateway).
+- TagQuery 불변식 위반: TagQueryNode에서 재계산 불일치가 감지되면 Gateway가 `tagquery_nodeid_mismatch_total`을 증가시키고(베스트 에포트) SDK/Runner가 캐시를 무효화하도록 유도한다.
+- 도메인 격리: `cross_context_cache_hit_total`(§1.4)을 DAG Manager/SDK 공통 메트릭으로 필수화한다. 값이 0 초과이면 캐시 재사용을 차단하고(정책) 알람으로 승격한다.
+
+TODO (#1784/#1786): DAG Manager 측의 NodeID 재계산 드리프트/지연(히스토그램) 및 TagQuery 스펙 해시/해결 큐 카디널리티 로깅·메트릭은 별도 작업으로 추가한다.
 
 ### 1.4 도메인 범위 ComputeKey (신규)
 

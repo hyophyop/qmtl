@@ -33,11 +33,13 @@ ControlBus는 핵심 서비스에서 Gateway로 제어 플레인 업데이트(�
 
 ## 1. 토폴로지와 의미론
 
-- 전송: Kafka/Redpanda 권장, 동등한 pub/sub 가능; 네임스페이스는 `control.*`
-- 토픽(예)
-  - `control.activation` — 파티션 키: `world_id`
-  - `control.queues` — 파티션 키: `hash(tags, interval)`
-  - `control.policy` — 파티션 키: `world_id`
+- 전송: Kafka/Redpanda 권장, 동등한 pub/sub 가능. 토픽명은 배포/서비스 구성에서 주입되며 네임스페이스는 `control.*`를 권장합니다.
+- 토픽(예: Gateway가 구독하는 분리형 토픽 구성)
+  - `activation` — 파티션 키: `world_id`
+  - `control.activation.ack` — 파티션 키: `world_id` (Activation ACK 응답)
+  - `queue` — 파티션 키: `",".join(tags)` (Gateway가 태그 조합별 순서를 유지)
+  - `policy` — 파티션 키: `world_id`
+  - `sentinel_weight` — 파티션 키: `sentinel_id`
 - 순서 보장: 파티션 내부에서만 보장; 컨슈머는 중복 및 간헐적 공백을 처리해야 함
 - 전달 보장: 적어도 한 번(at‑least‑once); `etag`/`run_id`로 아이템포턴시 구현
 
@@ -71,6 +73,26 @@ ActivationUpdated (버전 관리됨)
 - `requires_ack=true` 이벤트는 Gateway가 동일 run의 Freeze/Unfreeze 상태를 수신했음을 ControlBus 응답 채널을 통해 확인(ack)해야 함을 의미한다(SHALL). ACK가 도착하기 전까지 Gateway/SDK는 주문 게이트를 해제할 수 없다.
 - `sequence`는 [`ApplyRunState.next_sequence()`]({{ code_url('qmtl/services/worldservice/run_state.py#L47') }})에서 생성되는 run별 단조 증가 값이다. 컨슈머는 증가 순서를 강제하고 누락된 시퀀스가 감지되면 재동기화를 시도해야 한다(SHOULD).
 
+ActivationAck (버전 관리됨)
+```json
+{
+  "type": "ActivationAck",
+  "version": 1,
+  "world_id": "crypto_mom_1h",
+  "run_id": "7a1b4c...",
+  "sequence": 17,
+  "phase": "unfreeze",
+  "etag": "act:crypto_mom_1h:abcd:long:42",
+  "ts": "2025-08-28T09:00:00Z",
+  "ack_ts": "2025-08-28T09:00:00Z",
+  "idempotency_key": "activation_ack:crypto_mom_1h:7a1b4c...:17:unfreeze:1"
+}
+```
+
+- `ActivationAck`는 Gateway가 `ActivationUpdated.requires_ack=true` 이벤트를 수신한 뒤 응답 채널(예: `control.activation.ack`)로 게시하는 확인 메시지다.
+- 파티션 키는 `world_id`이며, 동일 월드 내에서 `sequence` 증가 순서를 유지해야 한다.
+- 컨슈머는 `idempotency_key` 또는 `(world_id, run_id, sequence, phase)` 조합으로 중복을 제거해야 한다.
+
 QueueUpdated (버전 관리됨)
 ```json
 {
@@ -78,9 +100,29 @@ QueueUpdated (버전 관리됨)
   "version": 1,
   "tags": ["BTC", "price"],
   "interval": 60,
-  "queues": ["q1", "q2"],
-  "etag": "q:BTC.price:60:77",
+  "queues": [
+    {"queue": "q1", "global": false},
+    {"queue": "q2", "global": true}
+  ],
+  "match_mode": "any",
+  "etag": "q:BTC.price:60:1",
+  "idempotency_key": "queue_updated:BTC.price:60:any:1",
   "ts": "2025-08-28T09:00:00Z"
+}
+```
+
+SentinelWeightUpdated (버전 관리됨)
+```json
+{
+  "type": "SentinelWeightUpdated",
+  "version": 1,
+  "sentinel_id": "s_123",
+  "weight": 0.25,
+  "sentinel_version": "v1.2.3",
+  "world_id": "crypto_mom_1h",
+  "etag": "sw:s_123:v1.2.3:0.250000:1",
+  "ts": "2025-08-28T09:00:00Z",
+  "idempotency_key": "sentinel_weight_updated:s_123:v1.2.3:0.250000:1"
 }
 ```
 
@@ -109,9 +151,9 @@ PolicyUpdated (버전 관리됨)
 
 ## 3-A. Activation ACK 응답 경로
 
-- Freeze/Unfreeze 이벤트마다 Gateway는 최신 `sequence`와 연관된 ACK 메시지를 ControlBus(예: `control.activation.ack`) 또는 동일하게 구성된 응답 채널로 게시해야 한다(SHALL). 메시지에는 최소한 `world_id`, `run_id`, `sequence`가 포함되어야 하며, 운영팀이 재동기화 상태를 판단할 수 있어야 한다.
+- Freeze/Unfreeze 이벤트(특히 `requires_ack=true`)마다 Gateway는 최신 `sequence`와 연관된 `ActivationAck` 메시지를 ControlBus 응답 채널(예: `control.activation.ack`)로 게시해야 한다(SHALL). 메시지에는 최소한 `world_id`, `run_id`, `sequence`가 포함되어야 하며, 운영팀이 재동기화 상태를 판단할 수 있어야 한다.
 - WorldService 및 운영 도구는 ACK 스트림을 모니터링하여 누락된 시퀀스나 타임아웃을 감지하고 필요 시 Apply를 중단·롤백한다(SHOULD).
-- Gateway는 SDK/WebSocket 구독자로부터 하위 ACK가 누락된 경우 ControlBus ACK 전송을 보류해 freeze 상태가 유지되도록 해야 한다.
+- 현재 구현에서 Gateway는 ControlBus `activation` 이벤트를 수신하면 ACK를 즉시 게시한다(`qmtl/services/gateway/controlbus_consumer.py`, `qmtl/services/gateway/controlbus_ack.py`). SDK/WebSocket 하위 ACK를 대기하는 “2단 ACK”는 선택적 확장으로 취급한다.
 
 ---
 
@@ -126,8 +168,9 @@ PolicyUpdated (버전 관리됨)
 ## 5. 가시성(Observability)
 
 메트릭
-- `controlbus_publish_latency_ms`, `fanout_lag_ms`, `dropped_subscribers_total`
-- `replay_queue_depth`, `partition_skew_seconds`
+- Gateway(ControlBus 소비/ACK): `controlbus_lag_ms`, `controlbus_apply_ack_total`, `controlbus_apply_ack_latency_ms`
+- Gateway(WebSocket 팬아웃): `event_fanout_total`, `ws_dropped_subscribers_total`, `ws_connections_total`
+- DAG Manager(큐 지연): `queue_lag_seconds`, `queue_lag_threshold_seconds`
 
 런북
 - 컨슈머 그룹 재생성, 월드 수 증가에 따른 파티션 증설, Gateway/WorldService/DAG Manager의 HTTP 동기화(reconcile) 엔드포인트를 통한 백필
@@ -145,7 +188,7 @@ PolicyUpdated (버전 관리됨)
 ## 7. 초기 스냅샷과 위임 WS(선택)
 
 - 초기 스냅샷: 각 토픽의 첫 메시지는 전체 스냅샷이거나 `state_hash`를 포함해야 합니다. 클라이언트는 전체 GET 없이도 수렴 여부를 확인할 수 있습니다.
-- 클라이언트는 스냅샷을 가져오기 전 Gateway의 `/worlds/{id}/{topic}/state_hash`로 분기(divergence) 여부를 점검할 수 있습니다.
+- 클라이언트는 스냅샷을 가져오기 전 Gateway의 `/worlds/{world_id}/{topic}/state_hash`로 분기(divergence) 여부를 점검할 수 있습니다.
 - 위임 WebSocket(피처 플래그): Gateway는 ControlBus 앞단의 전용 이벤트 스트리머 계층을 가리키는 `alt_stream_url`을 반환할 수 있습니다.
   - 토큰은 단수명의 JWT이며 다음 클레임을 가집니다: `aud=controlbus`, `sub=<user|svc>`, `world_id`, `strategy_id`, `topics`, `jti`, `iat`, `exp`. 키 식별자(`kid`)는 JWT 헤더에 포함됩니다.
   - 스트리머는 JWKS/클레임을 검증하고 ControlBus에 브릿지합니다. 기본 배포에서는 비활성화 상태입니다.

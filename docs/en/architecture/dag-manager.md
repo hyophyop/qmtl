@@ -132,11 +132,12 @@ The following schema objects are idempotent and must be re-applied on boot.
 - **Schema/code boundary:** Only changes to `schema_compat_id` or `code_hash` produce a new NodeID. Minor/patch schema changes keep the same NodeID and are handled via buffering/validation paths.
 - **Input normalization:** Dependencies are sorted by NodeID, and parameters use fixed-precision, deterministic JSON serialization. Drop non-deterministic fields and display-only metadata before hashing.
 
-**Observability and validation patterns (for #1784/#1786 metrics/alerts)**
-- NodeID CRC: Gateway/SDK recompute NodeIDs and cross-check with the `crc32` field. Mismatches return 400 and increment `nodeid_crc_mismatch_total`; sample logs should include `submitted_node_id`, `recomputed_node_id`, and `strategy_id`.
-- Recompute drift: DAG Manager increments `nodeid_drift_total` and emits a ControlBus warning event when the stored `node_id` diverges from a recomputation. Periodically sample healthy cases and expose `nodeid_recalc_latency_ms` as a histogram.
-- TagQuery stability: At execution time, log the normalized query spec hash (`tagquery_spec_hash`) and the resolved upstream cardinality (`resolved_queue_count`). If recomputation from the same spec disagrees with the stored NodeID, raise `tagquery_nodeid_mismatch_total` and force an SDK cache invalidation.
-- Domain isolation: Enforce `cross_context_cache_hit_total` (defined in Sec.1.4) as a shared DAG Manager/SDK metric. When above zero, block cache reuse and escalate to an alert.
+**Observability and validation patterns**
+- NodeID invariant violations: Gateway recomputes canonical NodeIDs for submitted nodes. On mismatch it returns 400 and increments `nodeid_checksum_mismatch_total`, `nodeid_missing_fields_total{field,node_type}`, and `nodeid_mismatch_total{node_type}` (Gateway-owned instrumentation).
+- TagQuery invariant violations: when TagQueryNode recomputation mismatches are detected, Gateway increments `tagquery_nodeid_mismatch_total` (best-effort) and downstream SDK/Runner should invalidate caches.
+- Domain isolation: enforce `cross_context_cache_hit_total` (Sec.1.4) as a shared DAG Manager/SDK metric. When above zero, block cache reuse and escalate to an alert.
+
+TODO (#1784/#1786): add DAG Manager-side NodeID recompute drift/latency instrumentation and TagQuery spec-hash/resolved-cardinality logging/metrics.
 
 ### 1.4 VersionSentinel Layout
 
