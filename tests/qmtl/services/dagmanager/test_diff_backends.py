@@ -28,7 +28,7 @@ def test_integration_with_backends():
             "node_id": "A",
             "code_hash": "c1",
             "schema_hash": "s1",
-            "topic": topic_name("asset", "N", "c1", "v1"),
+            "topic": topic_name("asset", "N", "A", "v1"),
         }
     ]
     driver = FakeDriver(records)
@@ -43,17 +43,23 @@ def test_integration_with_backends():
         nodes=[
             dag_node("A", code_hash="c1", schema_hash="s1"),
             dag_node("B", code_hash="c2", schema_hash="s2"),
-        ]
+            {
+                "node_id": "sid-sentinel",
+                "node_type": "VersionSentinel",
+                "version": "v1",
+            },
+        ],
+        meta={"compute_context": {"execution_domain": "live"}},
     )
 
     chunk = service.diff(request)
 
-    expected_a = topic_name("asset", "N", "c1", "v1")
-    expected_b = topic_name("asset", "N", "c2", "v1")
+    expected_a = topic_name("asset", "N", "A", "v1")
+    expected_b = topic_name("asset", "N", "B", "v1")
 
     assert chunk.queue_map == {
-        partition_with_context("A", None, None): expected_a,
-        partition_with_context("B", None, None): expected_b,
+        partition_with_context("A", None, None, execution_domain="live"): expected_a,
+        partition_with_context("B", None, None, execution_domain="live"): expected_b,
     }
     assert any("sid" in params for _, params in driver.session_obj.run_calls)
     assert admin.created and admin.created[0][0] == expected_b
@@ -75,7 +81,7 @@ def test_integration_with_memory_repo(tmp_path):
             [],
             None,
             False,
-            topic_name("asset", "N", "c1", "v1"),
+            topic_name("asset", "N", "A", "v1"),
         )
     )
 
@@ -92,8 +98,8 @@ def test_integration_with_memory_repo(tmp_path):
 
     chunk = service.diff(request)
 
-    expected_a = topic_name("asset", "N", "c1", "v1")
-    expected_b = topic_name("asset", "N", "c2", "v1")
+    expected_a = topic_name("asset", "N", "A", "v1")
+    expected_b = topic_name("asset", "N", "B", "v1")
 
     assert chunk.queue_map == {
         partition_with_context("A", None, None): expected_a,
