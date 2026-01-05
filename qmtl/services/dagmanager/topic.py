@@ -126,6 +126,7 @@ def topic_name(
     dry_run: bool = False,
     existing: Iterable[str] | None = None,
     namespace: object | None = None,
+    legacy_code_hash: str | None = None,
 ) -> str:
     """Return unique topic name per spec.
 
@@ -138,6 +139,14 @@ def topic_name(
     taken = set(existing or [])
     length = 8
     suffix = "_sim" if dry_run else ""
+
+    if legacy_code_hash:
+        legacy_short = legacy_code_hash[:6]
+        if legacy_short:
+            legacy_base = f"{asset}_{node_type}_{legacy_short}_{version}{suffix}"
+            legacy_name = ensure_namespace(legacy_base, namespace)
+            if legacy_name in taken:
+                return legacy_name
 
     # First try by growing the short hash up to the full digest length
     while length <= len(digest):

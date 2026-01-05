@@ -96,6 +96,7 @@ class _MemQueue(QueueManager):
         *,
         dry_run: bool = False,
         namespace: object | None = None,
+        legacy_code_hash: str | None = None,
     ) -> str:
         key = (asset, node_type, node_id, version, dry_run, namespace)
         topic = self.topics.get(key)
@@ -107,6 +108,7 @@ class _MemQueue(QueueManager):
                 version,
                 dry_run=dry_run,
                 namespace=namespace,
+                legacy_code_hash=legacy_code_hash,
             )
             self.topics[key] = topic
         return topic

@@ -140,6 +140,7 @@ class QueueManager:
         *,
         dry_run: bool = False,
         namespace: object | None = None,
+        legacy_code_hash: str | None = None,
     ) -> str:
         raise NotImplementedError
 
@@ -625,6 +626,7 @@ class DiffService:
                 node.node_id,
                 version,
                 namespace=namespace,
+                legacy_code_hash=node.code_hash,
             )
         except Exception:
             queue_create_error_total.inc()
@@ -1141,6 +1143,7 @@ class KafkaQueueManager(QueueManager):
         *,
         dry_run: bool = False,
         namespace: object | None = None,
+        legacy_code_hash: str | None = None,
     ) -> str:
         existing = self.admin.client.list_topics().keys()
         # Choose TopicConfig by topic type per spec. Default to 'indicator'.
@@ -1162,6 +1165,7 @@ class KafkaQueueManager(QueueManager):
             dry_run=dry_run,
             existing=existing,
             namespace=namespace,
+            legacy_code_hash=legacy_code_hash,
         )
         self.admin.create_topic_if_needed(topic, applied_cfg or self.config)
         return topic
