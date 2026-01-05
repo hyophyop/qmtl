@@ -213,7 +213,7 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
                     node_type=node.node_type,
                     code_hash=node.code_hash,
                     schema_hash=node.schema_hash,
-                    schema_id=node.schema_id,
+                    schema_compat_id=node.schema_compat_id,
                     interval=node.interval or 0,
                     period=node.period or 0,
                     tags=list(node.tags),

@@ -32,7 +32,7 @@ class NodeInfo:
     node_type: str
     code_hash: str
     schema_hash: str
-    schema_id: str
+    schema_compat_id: str
     interval: int | None
     period: int | None
     tags: list[str]

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, MutableMapping, TYPE_CHECKING, Mapping
 import logging
 import math
@@ -135,7 +135,7 @@ class QueueManager:
         self,
         asset: str,
         node_type: str,
-        code_hash: str,
+        node_id: str,
         version: str,
         *,
         dry_run: bool = False,
@@ -387,7 +387,7 @@ class DiffService:
     # Step 1 ---------------------------------------------------------------
     def _pre_scan(
         self, dag_json: str
-    ) -> tuple[List[NodeInfo], str, ComputeContext, str | None, float | None]:
+    ) -> tuple[List[NodeInfo], str, ComputeContext, str | None, float | None, bool]:
         """Parse DAG JSON and return nodes, version, compute context, namespace."""
         data = _json_loads(dag_json)
 
@@ -396,15 +396,20 @@ class DiffService:
         meta = meta_obj if isinstance(meta_obj, dict) else {}
         context = self._extract_compute_context(data)
         namespace = self._resolve_namespace(meta, context)
-        filtered_nodes, sentinel_version, sentinel_weight = (
+        filtered_nodes, sentinel_version, sentinel_weight, sentinel_requested = (
             self._separate_sentinel_nodes(raw_nodes)
         )
         node_map = {n["node_id"]: n for n in filtered_nodes if "node_id" in n}
+        for node in node_map.values():
+            if not node.get("schema_compat_id"):
+                legacy_schema_id = node.get("schema_id")
+                if legacy_schema_id:
+                    node["schema_compat_id"] = legacy_schema_id
         ordered_ids = self._topologically_order_nodes(node_map)
         nodes = self._build_node_infos(ordered_ids, node_map, context)
         version = self._resolve_version_label(data, meta, sentinel_version)
         sentinel_weight = self._resolve_sentinel_weight(meta, sentinel_weight)
-        return nodes, version, context, namespace, sentinel_weight
+        return nodes, version, context, namespace, sentinel_weight, sentinel_requested
 
     def _resolve_namespace(
         self, meta: Mapping[str, Any], context: ComputeContext
@@ -425,20 +430,22 @@ class DiffService:
 
     def _separate_sentinel_nodes(
         self, raw_nodes: Iterable[dict]
-    ) -> tuple[list[dict], str | None, float | None]:
+    ) -> tuple[list[dict], str | None, float | None, bool]:
         sentinel_version: str | None = None
         sentinel_weight: float | None = None
         filtered: list[dict] = []
+        sentinel_requested = False
         for entry in raw_nodes:
             if not isinstance(entry, dict):
                 continue
             if str(entry.get("node_type", "")) != "VersionSentinel":
                 filtered.append(entry)
                 continue
+            sentinel_requested = True
             sentinel_version = sentinel_version or self._extract_sentinel_version(entry)
             if sentinel_weight is None:
                 sentinel_weight = self._extract_sentinel_weight(entry)
-        return filtered, sentinel_version, sentinel_weight
+        return filtered, sentinel_version, sentinel_weight, sentinel_requested
 
     @staticmethod
     def _extract_sentinel_version(entry: Mapping[str, Any]) -> str | None:
@@ -487,7 +494,7 @@ class DiffService:
                 node_type=node_map[node_id].get("node_type", ""),
                 code_hash=node_map[node_id]["code_hash"],
                 schema_hash=node_map[node_id]["schema_hash"],
-                schema_id=node_map[node_id].get("schema_id", ""),
+                schema_compat_id=node_map[node_id].get("schema_compat_id", ""),
                 interval=node_map[node_id].get("interval"),
                 period=node_map[node_id].get("period"),
                 tags=list(node_map[node_id].get("tags", [])),
@@ -615,7 +622,7 @@ class DiffService:
             return self.queue_manager.upsert(
                 self._asset_from_tags(node.tags),
                 node.node_type,
-                node.code_hash,
+                node.node_id,
                 version,
                 namespace=namespace,
             )
@@ -778,7 +785,7 @@ class DiffService:
                 node_type=n.node_type,
                 code_hash=n.code_hash,
                 schema_hash=n.schema_hash,
-                schema_id=n.schema_id,
+                schema_compat_id=n.schema_compat_id,
                 interval=n.interval,
                 period=n.period,
                 tags=list(n.tags),
@@ -843,9 +850,14 @@ class DiffService:
         return await asyncio.to_thread(self.diff, request)
 
     def _prepare_diff(self, request: DiffRequest) -> _DiffPlan:
-        nodes, version, inferred_context, namespace, sentinel_weight = self._pre_scan(
-            request.dag_json
-        )
+        (
+            nodes,
+            version,
+            inferred_context,
+            namespace,
+            sentinel_weight,
+            sentinel_requested,
+        ) = self._pre_scan(request.dag_json)
         merged_context = self._merge_context(inferred_context, request)
         existing = self._db_fetch([n.node_id for n in nodes])
         queue_map, new_nodes, buffering = self._hash_compare(
@@ -857,17 +869,20 @@ class DiffService:
         )
         instructions = self._buffer_instructions(buffering)
         sentinel_id = self._build_sentinel_id(request.strategy_id)
-        self._insert_sentinel(sentinel_id, new_nodes, version)
-        if not new_nodes:
-            sentinel_gap_count.inc()
-            sentinel_gap_count._val = sentinel_gap_count._value.get()  # type: ignore[attr-defined]
+        should_insert_sentinel = sentinel_requested and not merged_context.safe_mode
+        if should_insert_sentinel:
+            self._insert_sentinel(sentinel_id, new_nodes, version)
+            if not new_nodes:
+                sentinel_gap_count.inc()
+                sentinel_gap_count._val = sentinel_gap_count._value.get()  # type: ignore[attr-defined]
         crc32 = crc32_of_list(n.node_id for n in nodes)
-        self._record_sentinel_weight(
-            sentinel_id,
-            version,
-            sentinel_weight,
-            world_id=merged_context.world_id or None,
-        )
+        if should_insert_sentinel:
+            self._record_sentinel_weight(
+                sentinel_id,
+                version,
+                sentinel_weight,
+                world_id=merged_context.world_id or None,
+            )
         return _DiffPlan(
             queue_map=queue_map,
             sentinel_id=sentinel_id,
@@ -880,18 +895,18 @@ class DiffService:
     def _merge_context(
         self, inferred_context: ComputeContext, request: DiffRequest
     ) -> ComputeContext:
-        return replace(
-            inferred_context,
-            world_id=stringify(request.world_id) or inferred_context.world_id,
+        merged = inferred_context.with_overrides(
             execution_domain=normalize_execution_domain(
                 request.execution_domain or inferred_context.execution_domain
             ),
             as_of=stringify(request.as_of) or inferred_context.as_of,
             partition=stringify(request.partition) or inferred_context.partition,
-            dataset_fingerprint=
-            stringify(request.dataset_fingerprint)
-            or inferred_context.dataset_fingerprint,
+            dataset_fingerprint=(
+                stringify(request.dataset_fingerprint)
+                or inferred_context.dataset_fingerprint
+            ),
         )
+        return merged.with_world(stringify(request.world_id) or merged.world_id)
 
     @staticmethod
     def _build_sentinel_id(strategy_id: str) -> str:
@@ -935,7 +950,8 @@ class Neo4jNodeRepository(NodeRepository):
             "WHERE c.node_id IN $ids "
             "RETURN c.node_id AS node_id, c.node_type AS node_type, "
             "c.code_hash AS code_hash, c.schema_hash AS schema_hash, "
-            "c.schema_id AS schema_id, q.topic AS topic, "
+            "coalesce(c.schema_compat_id, c.schema_id, '') AS schema_compat_id, "
+            "q.topic AS topic, "
             "q.interval AS interval, c.period AS period, c.tags AS tags, "
             "c.compute_keys AS compute_keys"
         )
@@ -948,7 +964,7 @@ class Neo4jNodeRepository(NodeRepository):
                     node_type=r.get("node_type", ""),
                     code_hash=r.get("code_hash"),
                     schema_hash=r.get("schema_hash"),
-                    schema_id=r.get("schema_id"),
+                    schema_compat_id=r.get("schema_compat_id"),
                     interval=r.get("interval"),
                     period=r.get("period"),
                     tags=list(r.get("tags", [])),
@@ -1018,7 +1034,8 @@ class Neo4jNodeRepository(NodeRepository):
             "MATCH (c:ComputeNode)-[:EMITS]->(q:Queue {topic: $queue}) "
             "RETURN c.node_id AS node_id, c.node_type AS node_type, "
             "c.code_hash AS code_hash, c.schema_hash AS schema_hash, "
-            "c.schema_id AS schema_id, q.topic AS topic, q.interval AS interval, "
+            "coalesce(c.schema_compat_id, c.schema_id, '') AS schema_compat_id, "
+            "q.topic AS topic, q.interval AS interval, "
             "c.period AS period, c.tags AS tags, c.compute_keys AS compute_keys "
             "LIMIT 1"
         )
@@ -1032,7 +1049,7 @@ class Neo4jNodeRepository(NodeRepository):
                 node_type=record.get("node_type", ""),
                 code_hash=record.get("code_hash"),
                 schema_hash=record.get("schema_hash"),
-                schema_id=record.get("schema_id"),
+                schema_compat_id=record.get("schema_compat_id"),
                 interval=record.get("interval"),
                 period=record.get("period"),
                 tags=list(record.get("tags", [])),
@@ -1119,7 +1136,7 @@ class KafkaQueueManager(QueueManager):
         self,
         asset: str,
         node_type: str,
-        code_hash: str,
+        node_id: str,
         version: str,
         *,
         dry_run: bool = False,
@@ -1140,7 +1157,7 @@ class KafkaQueueManager(QueueManager):
         topic = topic_name(
             asset,
             node_type,
-            code_hash,
+            node_id,
             version,
             dry_run=dry_run,
             existing=existing,

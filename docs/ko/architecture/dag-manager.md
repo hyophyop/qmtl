@@ -23,7 +23,9 @@ spec_version: v1.1
 - 운영 가이드: [타이밍 컨트롤](../operations/timing_controls.md)
 
 !!! note "배포 프로필"
-    `profile: dev`에서는 Neo4j/Kafka 설정이 비어 있으면 인메모리 그래프/큐 매니저를 사용합니다. `profile: prod`에서는 `dagmanager.neo4j_dsn`과 `dagmanager.kafka_dsn`이 비어 있으면 프로세스가 기동 전에 실패합니다.
+    `profile: dev`에서는 Neo4j/Kafka 설정이 비어 있으면 인메모리 그래프/큐 매니저를 사용합니다. ControlBus 설정이 비어 있으면 큐 업데이트(ControlBus) 이벤트 발행이 비활성화됩니다.
+
+    `profile: prod`에서는 `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, `dagmanager.controlbus_dsn`/`dagmanager.controlbus_queue_topic`이 비어 있으면 프로세스가 기동 전에 실패합니다.
 
 !!! warning "인메모리 모드는 개발 전용"
     - `profile: prod`에서는 `dagmanager` 서버가 즉시 종료되며, 설정 검증(`qmtl config validate`)도 오류를 보고합니다.
@@ -55,13 +57,14 @@ spec_version: v1.1
 
 ### 0-A.1 커밋 로그 메시지 키와 파티셔닝
 
-- 파티션 키는 `partition_key(node_id, interval, bucket_ts)`에서 파생되며, Gateway가 사용하는 전체 Kafka 메시지 키는 다음과 같습니다:
+- 파티션 키는 `partition_key(node_id, interval, bucket_ts, compute_key?)`에서 파생됩니다. `compute_key`가 제공되면 결과에 `#ck=<compute_key>` 접미사가 추가되며, `interval`/`bucket_ts`가 비어 있으면 `0`으로 정규화합니다.
+- Gateway가 사용하는 전체 Kafka 메시지 키는 다음과 같습니다:
 
-  `"{partition_key(node_id, interval, bucket_ts)}:{input_window_hash}"`
+  `"{partition_key(node_id, interval, bucket_ts, compute_key?)}:{input_window_hash}"`
 
   동일 실행 키에 대해 모든 입력 윈도우를 가로지르는 로그 컴팩션을 허용하면서, 윈도우별 고유성을 유지합니다.
 
-- 컨슈머는 `(node_id, bucket_ts, input_window_hash)` 삼중 항목으로 중복을 제거해야 합니다.
+- 컨슈머는 `(node_id, bucket_ts, input_window_hash, compute_key?)` 조합으로 중복을 제거해야 합니다.
 
 
 ---
@@ -83,6 +86,19 @@ spec_version: v1.1
 (ComputeNode)-[:EMITS]->(Queue)
 (VersionSentinel)-[:HAS]->(ComputeNode)
 (Artifact)-[:USED_BY]->(ComputeNode)
+```
+
+### 1.1-A 스키마 호환 식별자 필드명
+
+- DAG Manager 내부 표준 필드명은 `schema_compat_id`입니다. Proto(`BufferInstruction`)와 Neo4j 저장 속성도 동일한 이름을 사용합니다.
+- 입력 호환을 위해 DAG JSON에는 한시적으로 `schema_id`를 레거시 별칭으로 허용하되, 값은 `schema_compat_id`로 정규화해서 처리합니다.
+- 기존 Neo4j 데이터가 `schema_id`만 가지고 있다면 아래 쿼리로 백필을 수행합니다.
+
+```cypher
+MATCH (c:ComputeNode)
+WHERE (c.schema_compat_id IS NULL OR c.schema_compat_id = '')
+  AND c.schema_id IS NOT NULL AND c.schema_id <> ''
+SET c.schema_compat_id = c.schema_id
 ```
 
 ### 1.2 인덱스 & 제약 조건
@@ -170,7 +186,7 @@ qmtl service dagmanager export-schema --uri bolt://localhost:7687 --user neo4j -
 ### 2.1 입력·출력 정의
 
 * **Input:** `DiffReq{strategy_id, dag_json, world_id?, execution_domain?, as_of?, partition?, dataset_fingerprint?}` (\~10‑500 KiB)
-* **Output:** stream `DiffChunk{queue_map[], sentinel_id, version}`
+* **Output:** stream `DiffChunk{queue_map, sentinel_id, buffer_nodes, version, crc32?}`
 
 ### 2.2 단계별 상세 로직
 
@@ -206,14 +222,19 @@ qmtl service dagmanager export-schema --uri bolt://localhost:7687 --user neo4j -
 
 | 방향  | Proto | Endpoint                      | Payload         | 응답                 | Retry/Timeout      | 목적               |
 | --- | ----- | ----------------------------- | --------------- | ------------------ | ------------------ | ---------------- |
-| G→D | gRPC  | `DiffService.DiffRequest`     | DAG             | `DiffChunk stream` | backoff 0.5→4 s ×5 | Diff & 토픽 매핑      |
-| G→D | gRPC  | `AdminService.Cleanup`        | strategy\_id    | Ack                | 1 retry            | ref‑count decref |
-| G→D | gRPC  | `AdminService.GetQueueStats`  | filter          | Stats              | 300 ms             | 모니터링             |
-| G→D | gRPC  | `HealthCheck.Ping`            | –               | Pong               | 30 s interval      | Liveness         |
-| G→D | HTTP  | `/admin/gc-trigger`           | id              | 202                | 2 retry            | Manual GC        |
-| G→D | gRPC  | `AdminService.RedoDiff`       | sentinel\_id    | DiffResult         | manual             | 재Diff·롤백         |
+| G→D | gRPC  | `DiffService.Diff`            | `DiffRequest`   | `DiffChunk stream` | backoff 0.5→4 s ×5 | Diff & 토픽 매핑      |
+| G→D | gRPC  | `DiffService.AckChunk`        | `ChunkAck`      | `ChunkAck`         | –                  | Diff 스트림 ACK     |
+| G→D | gRPC  | `AdminService.Cleanup`        | `CleanupRequest(strategy_id)` | `CleanupResponse` | 1 retry | 수동 GC 트리거(현행 구현에서 전략 ID 미사용) |
+| G→D | gRPC  | `AdminService.GetQueueStats`  | `QueueStatsRequest(filter)` | `QueueStats` | 300 ms | 모니터링 |
+| G→D | gRPC  | `TagQuery.GetQueues`          | `TagQueryRequest(tags, interval, match_mode)` | `TagQueryReply` | – | 태그 기반 큐 조회 |
+| G→D | gRPC  | `HealthCheck.Status`          | `StatusRequest` | `StatusReply`      | 30 s interval      | Liveness         |
+| G→D | HTTP  | `/status`                     | –               | 200 + health payload | 30 s interval    | 상태 점검         |
+| G→D | HTTP  | `/admin/gc-trigger`           | id              | 202 + `processed[]` | 2 retry          | Manual GC        |
+| G→D | gRPC  | `AdminService.RedoDiff`       | `sentinel_id`, `dag_json` | `DiffResult` | manual | 재Diff·롤백 |
 | D→G | CB    | `queue` topic                 | queue_update/gc | at-least-once      | –                  | 큐 이벤트         |
 |     |       |                               |                 |     |                    | 자세한 절차는 [카나리아 롤아웃 가이드](../operations/canary_rollout.md) 참조 |
+
+참고: `AdminService.Cleanup`과 `/admin/gc-trigger`는 입력 식별자를 받지만, 현재 구현은 전체 GC 배치를 실행하며 해당 ID를 사용하지 않습니다.
 
 ### 2‑B. 센티널 트래픽
 
@@ -265,15 +286,21 @@ DAG Manager는 큐 가용성 및 태그 해상도에 대한 제어‑플레인 �
   "type": "QueueUpdated",
   "tags": ["BTC", "price"],
   "interval": 60,
-  "queues": ["q1", "q2"],
-  "etag": "q:BTC.price:60:77",
+  "queues": [
+    {"queue": "q1", "global": false},
+    {"queue": "q2", "global": true}
+  ],
+  "match_mode": "any",
+  "version": 1,
+  "etag": "q:BTC.price:60:1",
+  "idempotency_key": "queue_updated:BTC.price:60:any:1",
   "ts": "2025-08-28T09:00:00Z"
 }
 ```
 
 의미론(Semantics)
-- 파티션 키: ``hash(tags, interval)``; 파티션 내부에서만 순서 보장
-- 최소 1회 전달; 컨슈머는 ``etag``로 중복 제거
+- 파티션 키: `",".join(tags)`를 Kafka key로 사용하며, 브로커 해시로 파티션이 결정됨(동일 키 범위에서만 순서 보장)
+- 최소 1회 전달; 컨슈머는 ``etag`` 또는 ``idempotency_key``로 중복 제거
 - Gateway는 구독 후 WS로 SDK에 재브로드캐스트; 분기 시 SDK TagQueryManager가 주기적 HTTP 리컨실로 복구
 
 ```mermaid
