@@ -94,10 +94,11 @@ class _MemQueue(QueueManager):
         node_id: str,
         version: str,
         *,
+        legacy_code_hash: str | None = None,
         dry_run: bool = False,
         namespace: object | None = None,
     ) -> str:
-        key = (asset, node_type, node_id, version, dry_run, namespace)
+        key = (asset, node_type, node_id, version, dry_run, namespace, legacy_code_hash)
         topic = self.topics.get(key)
         if not topic:
             topic = topic_name(
@@ -105,6 +106,7 @@ class _MemQueue(QueueManager):
                 node_type,
                 node_id,
                 version,
+                legacy_code_hash=legacy_code_hash,
                 dry_run=dry_run,
                 namespace=namespace,
             )
