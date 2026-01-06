@@ -62,9 +62,7 @@ class FakeRepo(NodeRepository):
 
 class FakeQueue(QueueManager):
     def __init__(self):
-        self.calls: list[
-            tuple[str, str, str, str, str | None, bool, str | None]
-        ] = []
+        self.calls: list[tuple[str, str, str, str, bool, str | None]] = []
 
     def upsert(
         self,
@@ -73,18 +71,16 @@ class FakeQueue(QueueManager):
         node_id,
         version,
         *,
-        legacy_code_hash=None,
         dry_run=False,
         namespace=None,
     ):
-        call = (asset, node_type, node_id, version, legacy_code_hash, dry_run, namespace)
+        call = (asset, node_type, node_id, version, dry_run, namespace)
         self.calls.append(call)
         return topic_name(
             asset,
             node_type,
             node_id,
             version,
-            legacy_code_hash=legacy_code_hash,
             dry_run=dry_run,
             namespace=namespace,
         )

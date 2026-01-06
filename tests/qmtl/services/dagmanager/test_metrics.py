@@ -46,7 +46,6 @@ class FakeQueue(QueueManager):
         node_id,
         version,
         *,
-        legacy_code_hash=None,
         dry_run=False,
         namespace=None,
     ):
@@ -55,7 +54,6 @@ class FakeQueue(QueueManager):
             node_type,
             node_id,
             version,
-            legacy_code_hash=legacy_code_hash,
             dry_run=dry_run,
             namespace=namespace,
         )
@@ -69,7 +67,6 @@ class FailingQueue(QueueManager):
         node_id,
         version,
         *,
-        legacy_code_hash=None,
         dry_run=False,
         namespace=None,
     ):
@@ -123,8 +120,7 @@ def test_metrics_exposed():
 def test_diff_duration_and_error_metrics():
     metrics.reset_metrics()
     service = DiffService(FakeRepo(), FakeQueue(), FakeStream())
-    with pytest.warns(DeprecationWarning):
-        service.diff(DiffRequest(strategy_id="s", dag_json=_make_dag()))
+    service.diff(DiffRequest(strategy_id="s", dag_json=_make_dag()))
     assert get_metric_value(metrics.diff_duration_ms_p95) > 0
 
     service_err = DiffService(FakeRepo(), FailingQueue(), FakeStream())

@@ -138,7 +138,6 @@ class QueueManager:
         node_id: str,
         version: str,
         *,
-        legacy_code_hash: str | None = None,
         dry_run: bool = False,
         namespace: object | None = None,
     ) -> str:
@@ -625,7 +624,6 @@ class DiffService:
                 node.node_type,
                 node.node_id,
                 version,
-                legacy_code_hash=node.code_hash,
                 namespace=namespace,
             )
         except Exception:
@@ -1141,7 +1139,6 @@ class KafkaQueueManager(QueueManager):
         node_id: str,
         version: str,
         *,
-        legacy_code_hash: str | None = None,
         dry_run: bool = False,
         namespace: object | None = None,
     ) -> str:
@@ -1162,7 +1159,6 @@ class KafkaQueueManager(QueueManager):
             node_type,
             node_id,
             version,
-            legacy_code_hash=legacy_code_hash,
             dry_run=dry_run,
             existing=existing,
             namespace=namespace,

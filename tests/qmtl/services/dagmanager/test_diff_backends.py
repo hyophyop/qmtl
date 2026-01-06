@@ -52,8 +52,7 @@ def test_integration_with_backends():
         meta={"compute_context": {"execution_domain": "live"}},
     )
 
-    with pytest.warns(DeprecationWarning):
-        chunk = service.diff(request)
+    chunk = service.diff(request)
 
     expected_a = topic_name("asset", "N", "A", "v1")
     expected_b = topic_name("asset", "N", "B", "v1")
@@ -65,27 +64,6 @@ def test_integration_with_backends():
     assert any("sid" in params for _, params in driver.session_obj.run_calls)
     assert admin.created and admin.created[0][0] == expected_b
     assert stream.chunks[0] == chunk
-
-
-def test_kafka_queue_manager_reuses_legacy_topic():
-    legacy_topic = "asset_Indicator_abcdef_v1"
-    indicator_config = {
-        "config": {"retention.ms": str(30 * 24 * 60 * 60 * 1000)},
-        "num_partitions": 1,
-        "replication_factor": 2,
-    }
-    admin = FakeAdmin({legacy_topic: indicator_config})
-    manager = KafkaQueueManager(KafkaAdmin(admin))
-    with pytest.warns(DeprecationWarning):
-        topic = manager.upsert(
-        "asset",
-        "Indicator",
-        "blake3:abcdef123456",
-        "v1",
-        legacy_code_hash="abcdef123456",
-    )
-    assert topic == legacy_topic
-    assert not admin.created
 
 
 def test_integration_with_memory_repo(tmp_path):
@@ -118,8 +96,7 @@ def test_integration_with_memory_repo(tmp_path):
         ]
     )
 
-    with pytest.warns(DeprecationWarning):
-        chunk = service.diff(request)
+    chunk = service.diff(request)
 
     expected_a = topic_name("asset", "N", "A", "v1")
     expected_b = topic_name("asset", "N", "B", "v1")
