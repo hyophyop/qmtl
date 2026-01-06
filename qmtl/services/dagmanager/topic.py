@@ -3,6 +3,7 @@ from __future__ import annotations
 """Utilities for Kafka topic naming and configuration."""
 
 from dataclasses import dataclass
+import warnings
 from typing import Iterable, Mapping
 
 
@@ -123,6 +124,7 @@ def topic_name(
     node_id: str,
     version: str,
     *,
+    legacy_code_hash: str | None = None,
     dry_run: bool = False,
     existing: Iterable[str] | None = None,
     namespace: object | None = None,
@@ -132,12 +134,43 @@ def topic_name(
     The name follows ``{asset}_{node_type}_{short_hash}_{version}{_sim?}`` where
     ``short_hash`` starts from the first eight characters of the NodeID digest
     and grows by two characters until the name is unique within ``existing``.
+    When ``legacy_code_hash`` is provided, the existing six-character topic is
+    returned before generating a new digest-based name.
     """
 
     digest = _node_id_digest(node_id)
     taken = set(existing or [])
     length = 8
     suffix = "_sim" if dry_run else ""
+
+    def _find_existing(base: str) -> str | None:
+        namespaced = ensure_namespace(base, namespace)
+        candidates = [namespaced]
+        if namespaced != base:
+            candidates.append(base)
+        for candidate in candidates:
+            if candidate in taken:
+                return candidate
+        return None
+
+    if legacy_code_hash:
+        warnings.warn(
+            "Passing legacy_code_hash is deprecated and will be removed in a future "
+            "release; migrate existing topics to the NodeID digest naming scheme.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        legacy_length = 6
+        while legacy_length <= len(legacy_code_hash):
+            base = f"{asset}_{node_type}_{legacy_code_hash[:legacy_length]}_{version}{suffix}"
+            match = _find_existing(base)
+            if match:
+                return match
+            legacy_length += 2
+        final_base = f"{asset}_{node_type}_{legacy_code_hash}_{version}{suffix}"
+        match = _find_existing(final_base)
+        if match:
+            return match
 
     # First try by growing the short hash up to the full digest length
     while length <= len(digest):

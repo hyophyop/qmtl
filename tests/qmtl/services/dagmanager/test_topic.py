@@ -1,3 +1,5 @@
+import pytest
+
 from qmtl.services.dagmanager.topic import topic_name, get_config, TopicConfig
 from qmtl.services.dagmanager.kafka_admin import KafkaAdmin, TopicExistsError
 
@@ -50,6 +52,35 @@ def test_topic_name_with_namespace():
         namespace={"world": "W1", "domain": "Live"},
     )
     assert name.startswith("w1.live.")
+
+
+def test_topic_name_reuses_legacy_code_hash():
+    existing = {"btc_Indicator_abcdef_v1"}
+    with pytest.warns(DeprecationWarning):
+        reused = topic_name(
+            "btc",
+            "Indicator",
+            "blake3:abcdef123456",
+            "v1",
+            legacy_code_hash="abcdef123456",
+            existing=existing,
+        )
+    assert reused == "btc_Indicator_abcdef_v1"
+
+
+def test_topic_name_reuses_legacy_namespace():
+    existing = {"w1.live.btc_Indicator_abcdef_v1"}
+    with pytest.warns(DeprecationWarning):
+        reused = topic_name(
+            "btc",
+            "Indicator",
+            "blake3:abcdef123456",
+            "v1",
+            legacy_code_hash="abcdef123456",
+            existing=existing,
+            namespace={"world": "W1", "domain": "Live"},
+        )
+    assert reused == "w1.live.btc_Indicator_abcdef_v1"
 
 def test_topic_config_values():
     config = get_config("raw")
