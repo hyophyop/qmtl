@@ -1,5 +1,7 @@
 import pytest
 
+import logging
+
 from qmtl.services.dagmanager.topic import topic_name, get_config, TopicConfig
 from qmtl.services.dagmanager.kafka_admin import KafkaAdmin, TopicExistsError
 
@@ -54,9 +56,9 @@ def test_topic_name_with_namespace():
     assert name.startswith("w1.live.")
 
 
-def test_topic_name_reuses_legacy_code_hash():
+def test_topic_name_reuses_legacy_code_hash(caplog):
     existing = {"btc_Indicator_abcdef_v1"}
-    with pytest.warns(DeprecationWarning):
+    with caplog.at_level(logging.WARNING):
         reused = topic_name(
             "btc",
             "Indicator",
@@ -66,11 +68,13 @@ def test_topic_name_reuses_legacy_code_hash():
             existing=existing,
         )
     assert reused == "btc_Indicator_abcdef_v1"
+    assert any("Passing legacy_code_hash" in record.getMessage() for record in caplog.records)
+    caplog.clear()
 
 
-def test_topic_name_reuses_legacy_namespace():
+def test_topic_name_reuses_legacy_namespace(caplog):
     existing = {"w1.live.btc_Indicator_abcdef_v1"}
-    with pytest.warns(DeprecationWarning):
+    with caplog.at_level(logging.WARNING):
         reused = topic_name(
             "btc",
             "Indicator",
@@ -81,6 +85,7 @@ def test_topic_name_reuses_legacy_namespace():
             namespace={"world": "W1", "domain": "Live"},
         )
     assert reused == "w1.live.btc_Indicator_abcdef_v1"
+    assert any("Passing legacy_code_hash" in record.getMessage() for record in caplog.records)
 
 def test_topic_config_values():
     config = get_config("raw")

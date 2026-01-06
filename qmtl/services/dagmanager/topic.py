@@ -3,11 +3,13 @@ from __future__ import annotations
 """Utilities for Kafka topic naming and configuration."""
 
 from dataclasses import dataclass
-import warnings
+import logging
 from typing import Iterable, Mapping
 
 
 _NAMESPACE_ENABLED: bool = True
+
+logger = logging.getLogger(__name__)
 
 
 def set_topic_namespace_enabled(enabled: bool) -> None:
@@ -154,10 +156,9 @@ def topic_name(
         return None
 
     if legacy_code_hash:
-        warnings.warn(
+        logger.warning(
             "Passing legacy_code_hash is deprecated and will be removed in a future "
             "release; migrate existing topics to the NodeID digest naming scheme.",
-            DeprecationWarning,
             stacklevel=2,
         )
         legacy_length = 6

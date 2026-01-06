@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from qmtl.services.dagmanager.diff_service import (
@@ -22,7 +24,7 @@ pytestmark = [
 ]
 
 
-def test_integration_with_backends():
+def test_integration_with_backends(caplog):
     records = [
         {
             "node_id": "A",
@@ -52,8 +54,10 @@ def test_integration_with_backends():
         meta={"compute_context": {"execution_domain": "live"}},
     )
 
-    with pytest.warns(DeprecationWarning):
+    with caplog.at_level(logging.WARNING):
         chunk = service.diff(request)
+    assert any("Passing legacy_code_hash" in record.getMessage() for record in caplog.records)
+    caplog.clear()
 
     expected_a = topic_name("asset", "N", "A", "v1")
     expected_b = topic_name("asset", "N", "B", "v1")
@@ -67,7 +71,7 @@ def test_integration_with_backends():
     assert stream.chunks[0] == chunk
 
 
-def test_kafka_queue_manager_reuses_legacy_topic():
+def test_kafka_queue_manager_reuses_legacy_topic(caplog):
     legacy_topic = "asset_Indicator_abcdef_v1"
     indicator_config = {
         "config": {"retention.ms": str(30 * 24 * 60 * 60 * 1000)},
@@ -76,19 +80,21 @@ def test_kafka_queue_manager_reuses_legacy_topic():
     }
     admin = FakeAdmin({legacy_topic: indicator_config})
     manager = KafkaQueueManager(KafkaAdmin(admin))
-    with pytest.warns(DeprecationWarning):
+    with caplog.at_level(logging.WARNING):
         topic = manager.upsert(
-        "asset",
-        "Indicator",
-        "blake3:abcdef123456",
-        "v1",
-        legacy_code_hash="abcdef123456",
-    )
+            "asset",
+            "Indicator",
+            "blake3:abcdef123456",
+            "v1",
+            legacy_code_hash="abcdef123456",
+        )
+    assert any("Passing legacy_code_hash" in record.getMessage() for record in caplog.records)
+    caplog.clear()
     assert topic == legacy_topic
     assert not admin.created
 
 
-def test_integration_with_memory_repo(tmp_path):
+def test_integration_with_memory_repo(tmp_path, caplog):
     path = tmp_path / "mem.gpickle"
     repo = MemoryNodeRepository(str(path))
     repo.add_node(
@@ -118,8 +124,10 @@ def test_integration_with_memory_repo(tmp_path):
         ]
     )
 
-    with pytest.warns(DeprecationWarning):
+    with caplog.at_level(logging.WARNING):
         chunk = service.diff(request)
+    assert any("Passing legacy_code_hash" in record.getMessage() for record in caplog.records)
+    caplog.clear()
 
     expected_a = topic_name("asset", "N", "A", "v1")
     expected_b = topic_name("asset", "N", "B", "v1")

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, UTC
+import logging
 
 import pytest
 
@@ -120,11 +121,13 @@ def test_metrics_exposed():
     assert "dagmanager_active_version_weight" in data
 
 
-def test_diff_duration_and_error_metrics():
+def test_diff_duration_and_error_metrics(caplog):
     metrics.reset_metrics()
     service = DiffService(FakeRepo(), FakeQueue(), FakeStream())
-    with pytest.warns(DeprecationWarning):
+    with caplog.at_level(logging.WARNING):
         service.diff(DiffRequest(strategy_id="s", dag_json=_make_dag()))
+    assert any("Passing legacy_code_hash" in record.getMessage() for record in caplog.records)
+    caplog.clear()
     assert get_metric_value(metrics.diff_duration_ms_p95) > 0
 
     service_err = DiffService(FakeRepo(), FailingQueue(), FakeStream())
