@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from qmtl.runtime.sdk.node import Node
@@ -46,6 +48,8 @@ def _trigger(strategy: DummyStrategy) -> None:
 
 @pytest.fixture
 def runner_harness():
+    old_disable = os.environ.get("QMTL_DISABLE_GATEWAY_PROBE")
+    os.environ["QMTL_DISABLE_GATEWAY_PROBE"] = "1"
     services = Runner.services()
     original_history = services.history_service
     original_plane = services.feature_plane
@@ -77,6 +81,10 @@ def runner_harness():
         services.set_trade_order_http_url(original_http_url)
         services.set_kafka_producer(original_kafka_producer)
         services.set_trade_order_kafka_topic(original_kafka_topic)
+        if old_disable is None:
+            os.environ.pop("QMTL_DISABLE_GATEWAY_PROBE", None)
+        else:
+            os.environ["QMTL_DISABLE_GATEWAY_PROBE"] = old_disable
 
 
 def test_offline_run_invokes_history_service(runner_harness):

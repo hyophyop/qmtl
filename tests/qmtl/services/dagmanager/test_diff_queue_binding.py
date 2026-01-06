@@ -55,7 +55,7 @@ def test_hash_compare_and_queue_upsert(diff_service, fake_repo, fake_queue):
 
     assert chunk.queue_map[partition_with_context("A", None, None)] == expected_a
     assert chunk.queue_map[partition_with_context("B", None, None)] == expected_b
-    assert fake_queue.calls == [("asset", "N", "B", "v1", False, None)]
+    assert fake_queue.calls == [("asset", "N", "B", "v1", "c2", False, None)]
 
 
 def test_compute_key_isolation_and_metrics(diff_service, fake_repo, fake_queue, diff_metrics):
