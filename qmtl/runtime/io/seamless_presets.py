@@ -2,6 +2,8 @@ from __future__ import annotations
 
 """Preset registrations for Seamless builder integrations."""
 
+import logging
+import os
 from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
 from qmtl.runtime.sdk.seamless import SeamlessPresetRegistry
@@ -21,6 +23,8 @@ from qmtl.runtime.io.ccxt_fetcher import (
 )
 from qmtl.runtime.io.ccxt_live_feed import CcxtProConfig, CcxtProLiveFeed
 from qmtl.runtime.sdk.artifacts import FileSystemArtifactRegistrar
+
+_logger = logging.getLogger(__name__)
 
 
 def _ensure_str(value: Any, *, field: str) -> str:
@@ -340,4 +344,169 @@ def _register_ccxt_bundle_presets() -> None:
 _register_ccxt_bundle_presets()
 
 
-__all__ = ["_register_ccxt_questdb_preset"]
+# ---------------------------------------------------------------------------
+# Nautilus Trader Integration Presets
+# ---------------------------------------------------------------------------
+
+
+class NautilusPresetUnavailableError(ImportError):
+    """Raised when nautilus.* preset is requested but nautilus_trader is not installed.
+    
+    This error follows QMTL's Default-safe principle: when the required dependency
+    is missing, the system fails fast with a clear message rather than silently
+    degrading to unexpected behavior.
+    
+    Alternative presets:
+    - Use 'ccxt.questdb.ohlcv' for CCXT-based historical data
+    - Use 'ccxt.bundle.ohlcv_live' for CCXT historical + live
+    - Use 'demo.inmemory.ohlcv' for testing without external dependencies
+    """
+    
+    def __init__(self, preset_name: str, original_error: Exception | None = None):
+        self.preset_name = preset_name
+        self.original_error = original_error
+        super().__init__(
+            f"Nautilus preset '{preset_name}' requires nautilus_trader which is not installed. "
+            f"Install with: uv pip install qmtl[nautilus]\n"
+            f"Alternative presets: 'ccxt.questdb.ohlcv', 'ccxt.bundle.ohlcv_live', 'demo.inmemory.ohlcv'"
+        )
+
+
+class NautilusCatalogNotFoundError(FileNotFoundError):
+    """Raised when the Nautilus DataCatalog path does not exist.
+    
+    This follows Default-safe principle: fails fast when catalog is missing
+    rather than returning empty data silently.
+    """
+    
+    def __init__(self, catalog_path: str):
+        self.catalog_path = catalog_path
+        super().__init__(
+            f"Nautilus DataCatalog not found at '{catalog_path}'. "
+            f"Ensure the catalog exists and contains data, or use an alternative preset."
+        )
+
+
+def _register_nautilus_presets() -> None:
+    """Register Nautilus Trader integration presets.
+    
+    Available presets:
+    - nautilus.catalog: Historical data from Nautilus DataCatalog (storage only)
+    - nautilus.full: Historical (Nautilus) + Live (CCXT Pro)
+    
+    Core Loop compliance:
+    - These presets integrate with world.data.presets[] auto-wiring
+    - Follows Default-safe principle: fails fast with clear messages
+    - Single entry point via SeamlessPresetRegistry
+    """
+    
+    def _apply_nautilus_catalog(builder, config: Mapping[str, Any]):
+        """Nautilus DataCatalog as storage source.
+        
+        Config options:
+            catalog_path: Path to Nautilus catalog (default: ~/.nautilus/catalog)
+            priority: DataSourcePriority (default: STORAGE)
+            
+        Default-safe behavior:
+            - Fails fast if nautilus_trader not installed
+            - Logs warning if catalog path doesn't exist (allows lazy initialization)
+        """
+        try:
+            from qmtl.runtime.io.nautilus_catalog_source import (
+                NautilusCatalogDataSource,
+                NAUTILUS_AVAILABLE,
+            )
+        except ImportError as e:
+            raise NautilusPresetUnavailableError("nautilus.catalog", e) from e
+        
+        if not NAUTILUS_AVAILABLE:
+            raise NautilusPresetUnavailableError("nautilus.catalog")
+        
+        try:
+            from nautilus_trader.persistence.catalog import DataCatalog
+        except ImportError as e:
+            raise NautilusPresetUnavailableError("nautilus.catalog", e) from e
+        
+        catalog_path = config.get("catalog_path", "~/.nautilus/catalog")
+        priority_raw = config.get("priority", "STORAGE")
+        if isinstance(priority_raw, str):
+            priority = DataSourcePriority[priority_raw.upper()]
+        else:
+            priority = priority_raw
+        
+        # Expand user path and check existence (warning, not error for lazy init)
+        expanded_path = os.path.expanduser(catalog_path)
+        if not os.path.exists(expanded_path):
+            _logger.warning(
+                "Nautilus catalog path '%s' does not exist yet. "
+                "DataCatalog will be initialized on first use.",
+                expanded_path,
+            )
+        
+        catalog = DataCatalog(catalog_path)
+        source = NautilusCatalogDataSource(catalog=catalog, priority=priority)
+        
+        return builder.with_storage(source)
+    
+    def _apply_nautilus_full(builder, config: Mapping[str, Any]):
+        """Nautilus DataCatalog + CCXT Pro live feed.
+        
+        Config options:
+            catalog_path: Path to Nautilus catalog (default: ~/.nautilus/catalog)
+            exchange_id: Exchange for live data (e.g., "binance") - REQUIRED
+            symbols: List of symbols (e.g., ["BTC/USDT"])
+            timeframe: Timeframe for OHLCV (default: "1m")
+            mode: "ohlcv" or "trades" (default: "ohlcv")
+            sandbox: Use sandbox mode (default: False)
+            
+        Default-safe behavior:
+            - Fails fast if nautilus_trader not installed
+            - Fails fast if exchange_id not provided (required for live feed)
+        """
+        # Apply nautilus.catalog first (inherits Default-safe checks)
+        builder = _apply_nautilus_catalog(builder, config)
+        
+        # Configure CCXT Pro live feed
+        exchange_id = config.get("exchange_id") or config.get("exchange")
+        if not exchange_id:
+            raise KeyError(
+                "nautilus.full preset requires 'exchange_id' for live data feed. "
+                "Example: exchange_id='binance'"
+            )
+        
+        symbols = _normalize_symbols(config.get("symbols"))
+        timeframe = config.get("timeframe", "1m")
+        mode = config.get("mode", "ohlcv")
+        sandbox = config.get("sandbox", False)
+        reconnect_backoff_ms = config.get("reconnect_backoff_ms")
+        dedupe_by = config.get("dedupe_by", "ts")
+        emit_building_candle = config.get("emit_building_candle", False)
+        
+        live_config = CcxtProConfig(
+            exchange_id=exchange_id,
+            symbols=symbols,
+            timeframe=timeframe if mode == "ohlcv" else None,
+            mode=mode,
+            sandbox=sandbox,
+            reconnect_backoff_ms=(
+                list(reconnect_backoff_ms) if reconnect_backoff_ms else None
+            ),
+            dedupe_by=dedupe_by,  # type: ignore[arg-type]
+            emit_building_candle=emit_building_candle,
+        )
+        live_feed = CcxtProLiveFeed(live_config)
+        
+        return builder.with_live(live_feed)
+    
+    SeamlessPresetRegistry.register("nautilus.catalog", _apply_nautilus_catalog)
+    SeamlessPresetRegistry.register("nautilus.full", _apply_nautilus_full)
+
+
+_register_nautilus_presets()
+
+
+__all__ = [
+    "_register_ccxt_questdb_preset",
+    "NautilusPresetUnavailableError",
+    "NautilusCatalogNotFoundError",
+]

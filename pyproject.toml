@@ -60,6 +60,7 @@ ray = ["ray"]
 io = ["pandas"]
 ccxt = ["ccxt"]
 questdb = ["asyncpg"]
+nautilus = ["nautilus_trader>=1.200.0"]
 
 [tool.uv]
 default-groups = ["dev"]

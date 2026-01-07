@@ -75,3 +75,56 @@ data_presets:
       options:
         bars: 180
         seed: 17
+  # Nautilus Catalog presets — historical data from DataCatalog
+  ohlcv.nautilus.crypto.1m:
+    kind: "ohlcv"
+    interval_ms: 60000
+    stabilization_bars: 2
+    sla_preset: "baseline"
+    conformance_preset: "strict-blocking"
+    provider:
+      preset: "nautilus.catalog"
+      options:
+        catalog_path: "~/.nautilus/catalog"
+        priority: "STORAGE"
+
+  ohlcv.nautilus.crypto.1h:
+    kind: "ohlcv"
+    interval_ms: 3600000
+    stabilization_bars: 1
+    sla_preset: "baseline"
+    conformance_preset: "strict-blocking"
+    provider:
+      preset: "nautilus.catalog"
+      options:
+        catalog_path: "~/.nautilus/catalog"
+        priority: "STORAGE"
+
+  # Nautilus Full preset — historical (Nautilus Catalog) + live (CCXT Pro)
+  ohlcv.nautilus.binance.1m:
+    kind: "ohlcv"
+    interval_ms: 60000
+    stabilization_bars: 2
+    sla_preset: "baseline"
+    conformance_preset: "strict-blocking"
+    provider:
+      preset: "nautilus.full"
+      options:
+        catalog_path: "~/.nautilus/catalog"
+        exchange_id: "binance"
+        timeframe: "1m"
+        mode: "ohlcv"
+
+  ohlcv.nautilus.binance.1h:
+    kind: "ohlcv"
+    interval_ms: 3600000
+    stabilization_bars: 1
+    sla_preset: "baseline"
+    conformance_preset: "strict-blocking"
+    provider:
+      preset: "nautilus.full"
+      options:
+        catalog_path: "~/.nautilus/catalog"
+        exchange_id: "binance"
+        timeframe: "1h"
+        mode: "ohlcv"
