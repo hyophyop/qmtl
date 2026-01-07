@@ -282,26 +282,35 @@ async def benchmark_conformance_rules(results: BenchmarkResults) -> None:
     """Benchmark: Conformance rule validation."""
     print("\n[6/6] Benchmarking conformance rules...")
     
-    import pandas as pd
+    tick_time = _benchmark_tick_conformance()
+    results.add("tick_conformance_time_us", tick_time)
     
-    # Generate sample tick data
+    quote_time = _benchmark_quote_conformance()
+    results.add("quote_conformance_time_us", quote_time)
+    
+    print(f"  ✓ Tick validation: {tick_time:.2f} μs")
+    print(f"  ✓ Quote validation: {quote_time:.2f} μs")
+
+
+def _benchmark_tick_conformance() -> float:
+    """Benchmark tick data validation."""
+    import pandas as pd
     tick_df = pd.DataFrame({
         'ts': list(range(1700000000, 1700001000)),
         'price': [100.0 + i * 0.01 for i in range(1000)],
         'size': [1.0 + i * 0.001 for i in range(1000)],
         'side': ['buy' if i % 2 == 0 else 'sell' for i in range(1000)],
     })
-    
-    tick_rule = TickConformanceRule()
-    
+    rule = TickConformanceRule()
     start = time.perf_counter()
-    for _ in range(100):  # Run 100 times
-        tick_rule.validate(tick_df)
-    elapsed = (time.perf_counter() - start) * 1000000 / 100  # μs per validation
-    
-    results.add("tick_conformance_time_us", elapsed)
-    
-    # Generate sample quote data
+    for _ in range(100):
+        rule.validate(tick_df)
+    return (time.perf_counter() - start) * 1000000 / 100
+
+
+def _benchmark_quote_conformance() -> float:
+    """Benchmark quote data validation."""
+    import pandas as pd
     quote_df = pd.DataFrame({
         'ts': list(range(1700000000, 1700001000)),
         'bid': [100.0 + i * 0.01 for i in range(1000)],
@@ -309,18 +318,11 @@ async def benchmark_conformance_rules(results: BenchmarkResults) -> None:
         'bid_size': [10.0 + i * 0.01 for i in range(1000)],
         'ask_size': [8.0 + i * 0.01 for i in range(1000)],
     })
-    
-    quote_rule = QuoteConformanceRule()
-    
+    rule = QuoteConformanceRule()
     start = time.perf_counter()
     for _ in range(100):
-        quote_rule.validate(quote_df)
-    elapsed = (time.perf_counter() - start) * 1000000 / 100
-    
-    results.add("quote_conformance_time_us", elapsed)
-    
-    print(f"  ✓ Tick validation: {results.results['tick_conformance_time_us']:.2f} μs")
-    print(f"  ✓ Quote validation: {results.results['quote_conformance_time_us']:.2f} μs")
+        rule.validate(quote_df)
+    return (time.perf_counter() - start) * 1000000 / 100
 
 
 async def run_benchmark(catalog_path: Path) -> BenchmarkResults:

@@ -471,7 +471,7 @@ bars = catalog.read_bars(
 
 ## 예제 코드
 
-전체 예제는 [`examples/nautilus_catalog_example.py`](../../examples/nautilus_catalog_example.py)를 참조하세요:
+전체 예제는 {{ code_link('examples/nautilus_catalog_example.py') }}를 참조하세요:
 
 ```bash
 # 예제 실행

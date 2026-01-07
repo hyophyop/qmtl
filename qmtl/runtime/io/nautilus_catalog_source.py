@@ -435,44 +435,64 @@ class NautilusCatalogDataSource:
         result = pd.DataFrame()
         
         # Convert timestamp from nanoseconds to seconds
-        # Nautilus uses 'ts_event' or 'ts_init'
+        self._normalize_timestamps(df, result, data_type)
+        
+        # Convert data_type-specific columns
+        if data_type == 'bar':
+            self._normalize_bars(df, result)
+        elif data_type == 'tick':
+            self._normalize_ticks(df, result)
+        elif data_type == 'quote':
+            self._normalize_quotes(df, result)
+        else:
+            logger.warning(
+                "nautilus.normalize.unknown_type",
+                extra={"data_type": data_type},
+            )
+        
+        return result
+
+    def _normalize_timestamps(
+        self, df: pd.DataFrame, result: pd.DataFrame, data_type: str
+    ) -> None:
+        """Convert Nautilus timestamps (ns) to QMTL timestamps (s)."""
+        import numpy as np
         if 'ts_event' in df.columns:
-            import numpy as np
             result['ts'] = (np.asarray(df['ts_event'].values) // 1_000_000_000).astype('int64')
         elif 'ts_init' in df.columns:
-            import numpy as np
             result['ts'] = (np.asarray(df['ts_init'].values) // 1_000_000_000).astype('int64')
         else:
             logger.warning(
                 "nautilus.normalize.missing_timestamp",
                 extra={"columns": list(df.columns), "data_type": data_type},
             )
-        
-        # Convert data_type-specific columns
-        if data_type == 'bar':
-            for col in ['open', 'high', 'low', 'close', 'volume']:
-                if col in df.columns:
-                    result[col] = df[col].astype('float64')
-        
-        elif data_type == 'tick':
-            if 'price' in df.columns:
-                result['price'] = df['price'].astype('float64')
-            if 'size' in df.columns:
-                result['size'] = df['size'].astype('float64')
-            if 'aggressor_side' in df.columns:
-                result['side'] = df['aggressor_side'].str.lower()
-        
-        elif data_type == 'quote':
-            if 'bid_price' in df.columns:
-                result['bid'] = df['bid_price'].astype('float64')
-            if 'ask_price' in df.columns:
-                result['ask'] = df['ask_price'].astype('float64')
-            if 'bid_size' in df.columns:
-                result['bid_size'] = df['bid_size'].astype('float64')
-            if 'ask_size' in df.columns:
-                result['ask_size'] = df['ask_size'].astype('float64')
-        
-        return result
+
+    def _normalize_bars(self, df: pd.DataFrame, result: pd.DataFrame) -> None:
+        """Normalize OHLCV bar columns."""
+        for col in ['open', 'high', 'low', 'close', 'volume']:
+            if col in df.columns:
+                result[col] = df[col].astype('float64')
+
+    def _normalize_ticks(self, df: pd.DataFrame, result: pd.DataFrame) -> None:
+        """Normalize trade tick columns."""
+        if 'price' in df.columns:
+            result['price'] = df['price'].astype('float64')
+        if 'size' in df.columns:
+            result['size'] = df['size'].astype('float64')
+        if 'aggressor_side' in df.columns:
+            result['side'] = df['aggressor_side'].str.lower()
+
+    def _normalize_quotes(self, df: pd.DataFrame, result: pd.DataFrame) -> None:
+        """Normalize quote tick columns."""
+        mappings = {
+            'bid_price': 'bid',
+            'ask_price': 'ask',
+            'bid_size': 'bid_size',
+            'ask_size': 'ask_size',
+        }
+        for src, dest in mappings.items():
+            if src in df.columns:
+                result[dest] = df[src].astype('float64')
     
     def _query_coverage(self, identifier: NautilusIdentifier) -> list[tuple[int, int]]:
         """Query coverage from Nautilus catalog metadata.

@@ -454,50 +454,57 @@ class TickConformanceRule:
         warnings: list[str] = []
         flags: dict[str, int] = {}
         
-        # Check required columns
+        # 1. Required columns
         missing = self.REQUIRED_COLUMNS - set(df.columns)
         if missing:
             warnings.append(f"Missing required columns: {sorted(missing)}")
             flags['missing_column'] = len(missing)
             return ConformanceReport(warnings=tuple(warnings), flags_counts=flags)
         
-        # Validate price > 0
-        if (df['price'] <= 0).any():
-            invalid_count = (df['price'] <= 0).sum()
-            warnings.append(f"Non-positive prices detected: {invalid_count} rows")
-            flags['invalid_price'] = int(invalid_count)
+        # 2. Price and Size validation
+        self._check_positive_values(df, warnings, flags)
+        self._check_nans(df, ['price', 'size'], warnings, flags)
         
-        # Validate size > 0
-        if (df['size'] <= 0).any():
-            invalid_count = (df['size'] <= 0).sum()
-            warnings.append(f"Non-positive sizes detected: {invalid_count} rows")
-            flags['invalid_size'] = int(invalid_count)
+        # 3. Temporal validation
+        self._check_temporal_validity(df, warnings, flags)
         
-        # Validate timestamp ordering
+        return ConformanceReport(warnings=tuple(warnings), flags_counts=flags)
+
+    def _check_positive_values(self, df: pd.DataFrame, warnings: list[str], flags: dict[str, int]) -> None:
+        """Check for non-positive prices and sizes."""
+        for col, flag_key in [('price', 'invalid_price'), ('size', 'invalid_size')]:
+            if (df[col] <= 0).any():
+                invalid_count = (df[col] <= 0).sum()
+                warnings.append(f"Non-positive {col}s detected: {invalid_count} rows")
+                flags[flag_key] = int(invalid_count)
+
+    def _check_nans(self, df: pd.DataFrame, columns: list[str], warnings: list[str], flags: dict[str, int]) -> None:
+        """Check for NaN values in specified columns."""
+        for col in columns:
+            nan_count = df[col].isna().sum()
+            if nan_count > 0:
+                warnings.append(f"NaN values in {col}: {nan_count} rows")
+                flags[f'nan_{col}'] = int(nan_count)
+
+    def _check_temporal_validity(self, df: pd.DataFrame, warnings: list[str], flags: dict[str, int]) -> None:
+        """Validate timestamp ordering, duplicates, and range."""
+        # Ordering
         if not df['ts'].is_monotonic_increasing:
             warnings.append("Timestamps not sorted")
             flags['unsorted_ts'] = 1
         
-        # Check for duplicate timestamps
+        # Duplicates
         duplicates = df['ts'].duplicated().sum()
         if duplicates > 0:
             warnings.append(f"Duplicate timestamps: {duplicates} rows")
             flags['duplicate_ts'] = int(duplicates)
         
-        # Validate timestamp range (reasonable Unix epoch range)
-        if (df['ts'] < 0).any() or (df['ts'] > 2**32 - 1).any():
-            invalid_count = ((df['ts'] < 0) | (df['ts'] > 2**32 - 1)).sum()
+        # Range (Unix epoch)
+        invalid_ts_mask = (df['ts'] < 0) | (df['ts'] > 2**32 - 1)
+        if invalid_ts_mask.any():
+            invalid_count = invalid_ts_mask.sum()
             warnings.append(f"Invalid timestamp range: {invalid_count} rows")
             flags['invalid_timestamp'] = int(invalid_count)
-        
-        # Check for NaN values
-        for col in ['price', 'size']:
-            nan_count = df[col].isna().sum()
-            if nan_count > 0:
-                warnings.append(f"NaN values in {col}: {nan_count} rows")
-                flags[f'nan_{col}'] = int(nan_count)
-        
-        return ConformanceReport(warnings=tuple(warnings), flags_counts=flags)
 
 
 class QuoteConformanceRule:
@@ -544,65 +551,68 @@ class QuoteConformanceRule:
         warnings: list[str] = []
         flags: dict[str, int] = {}
         
-        # Check required columns
+        # 1. Required columns
         missing = self.REQUIRED_COLUMNS - set(df.columns)
         if missing:
             warnings.append(f"Missing required columns: {sorted(missing)}")
             flags['missing_column'] = len(missing)
             return ConformanceReport(warnings=tuple(warnings), flags_counts=flags)
         
-        # Validate bid/ask spread (bid < ask)
+        # 2. Spread and Price/Size validation
+        self._check_quote_values(df, warnings, flags)
+        self._check_nans(df, warnings, flags)
+        
+        # 3. Temporal validation
+        self._check_temporal_validity(df, warnings, flags)
+        
+        return ConformanceReport(warnings=tuple(warnings), flags_counts=flags)
+
+    def _check_quote_values(self, df: pd.DataFrame, warnings: list[str], flags: dict[str, int]) -> None:
+        """Check for crossed quotes, non-positive values, and wide spreads."""
+        # Bid/Ask spread
         crossed = (df['bid'] >= df['ask']).sum()
         if crossed > 0:
             warnings.append(f"Crossed quotes detected (bid >= ask): {crossed} rows")
             flags['crossed_quotes'] = int(crossed)
         
-        # Validate positive prices
-        for col in ['bid', 'ask']:
-            if (df[col] <= 0).any():
-                invalid_count = (df[col] <= 0).sum()
-                warnings.append(f"Non-positive {col} prices: {invalid_count} rows")
-                flags[f'invalid_{col}'] = int(invalid_count)
-        
-        # Validate positive sizes
-        for col in ['bid_size', 'ask_size']:
-            if (df[col] <= 0).any():
-                invalid_count = (df[col] <= 0).sum()
-                warnings.append(f"Non-positive {col}: {invalid_count} rows")
-                flags[f'invalid_{col}'] = int(invalid_count)
-        
-        # Validate timestamp ordering
-        if not df['ts'].is_monotonic_increasing:
-            warnings.append("Timestamps not sorted")
-            flags['unsorted_ts'] = 1
-        
-        # Check for duplicate timestamps
-        duplicates = df['ts'].duplicated().sum()
-        if duplicates > 0:
-            warnings.append(f"Duplicate timestamps: {duplicates} rows")
-            flags['duplicate_ts'] = int(duplicates)
-        
-        # Validate timestamp range
-        if (df['ts'] < 0).any() or (df['ts'] > 2**32 - 1).any():
-            invalid_count = ((df['ts'] < 0) | (df['ts'] > 2**32 - 1)).sum()
-            warnings.append(f"Invalid timestamp range: {invalid_count} rows")
-            flags['invalid_timestamp'] = int(invalid_count)
-        
-        # Check for NaN values
+        # Positive values
         for col in ['bid', 'ask', 'bid_size', 'ask_size']:
-            nan_count = df[col].isna().sum()
-            if nan_count > 0:
-                warnings.append(f"NaN values in {col}: {nan_count} rows")
-                flags[f'nan_{col}'] = int(nan_count)
+            if (df[col] <= 0).any():
+                invalid_count = (df[col] <= 0).sum()
+                warnings.append(f"Non-positive {col} values: {invalid_count} rows")
+                flags[f'invalid_{col}'] = int(invalid_count)
         
-        # Check for unrealistic spreads (>10%)
+        # Wide spreads
         spread_pct = ((df['ask'] - df['bid']) / df['bid'] * 100)
         wide_spreads = (spread_pct > 10.0).sum()
         if wide_spreads > 0:
             warnings.append(f"Wide spreads (>10%): {wide_spreads} rows")
             flags['wide_spread'] = int(wide_spreads)
+
+    def _check_nans(self, df: pd.DataFrame, warnings: list[str], flags: dict[str, int]) -> None:
+        """Check for NaN values in all expected columns."""
+        for col in ['bid', 'ask', 'bid_size', 'ask_size']:
+            nan_count = df[col].isna().sum()
+            if nan_count > 0:
+                warnings.append(f"NaN values in {col}: {nan_count} rows")
+                flags[f'nan_{col}'] = int(nan_count)
+
+    def _check_temporal_validity(self, df: pd.DataFrame, warnings: list[str], flags: dict[str, int]) -> None:
+        """Validate timestamp ordering, duplicates, and range."""
+        if not df['ts'].is_monotonic_increasing:
+            warnings.append("Timestamps not sorted")
+            flags['unsorted_ts'] = 1
         
-        return ConformanceReport(warnings=tuple(warnings), flags_counts=flags)
+        duplicates = df['ts'].duplicated().sum()
+        if duplicates > 0:
+            warnings.append(f"Duplicate timestamps: {duplicates} rows")
+            flags['duplicate_ts'] = int(duplicates)
+        
+        invalid_ts_mask = (df['ts'] < 0) | (df['ts'] > 2**32 - 1)
+        if invalid_ts_mask.any():
+            invalid_count = invalid_ts_mask.sum()
+            warnings.append(f"Invalid timestamp range: {invalid_count} rows")
+            flags['invalid_timestamp'] = int(invalid_count)
 
 
 __all__ = [

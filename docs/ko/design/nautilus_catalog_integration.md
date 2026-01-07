@@ -614,9 +614,9 @@ class MyStrategy(Strategy):
 ### ✅ Phase 4: 문서화 및 예제 (완료)
 
 1. ✅ 사용 가이드 작성 ([docs/ko/guides/nautilus_catalog_integration.md](../guides/nautilus_catalog_integration.md))
-2. ✅ 예제 전략 ([examples/nautilus_catalog_example.py](../../examples/nautilus_catalog_example.py))
+2. ✅ 예제 전략 ({{ code_link('examples/nautilus_catalog_example.py') }})
 3. ✅ 설정 템플릿
-4. ✅ 성능 벤치마크 ([scripts/benchmark_nautilus_integration.py](../../scripts/benchmark_nautilus_integration.py))
+4. ✅ 성능 벤치마크 ({{ code_link('scripts/benchmark_nautilus_integration.py') }})
 
 ## 의존성 관리
 
@@ -1005,7 +1005,7 @@ from qmtl.runtime.io import NautilusPresetUnavailableError
 ## 참고 문서
 
 - [QMTL Seamless Data Provider](../guides/ccxt_seamless_usage.md)
-- [QMTL OHLCV Node ID](../../qmtl/runtime/sdk/ohlcv_nodeid.py)
+- [QMTL OHLCV Node ID]({{ code_url('qmtl/runtime/sdk/ohlcv_nodeid.py') }})
 - [Nautilus Trader Documentation](https://nautilustrader.io/)
 - [Nautilus DataCatalog API](https://docs.nautilustrader.io/api_reference/persistence.html)
 - [QMTL Core Loop Architecture](../architecture/architecture.md)

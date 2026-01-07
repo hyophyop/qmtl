@@ -210,54 +210,20 @@ class NautilusCoverageIndex:
         
         Expected structure:
         {catalog}/{venue}/{instrument_id}/{data_type}/*.parquet
-        
-        Examples:
-        - .../binance/BTC-USDT.BINANCE/bars/BTC-USDT.BINANCE-1-MINUTE-LAST.parquet
-        - .../binance/BTC-USDT.BINANCE/ticks/*.parquet
-        - .../binance/BTC-USDT.BINANCE/quotes/*.parquet
         """
         try:
-            parts = path.parts
-            
-            # Find catalog root index
-            catalog_idx = -1
-            for i, part in enumerate(parts):
-                if part == self.catalog_path.name:
-                    catalog_idx = i
-                    break
-            
-            if catalog_idx == -1:
+            # Find components relative to catalog root
+            components = self._get_path_components(path)
+            if not components:
                 return None
             
-            # Extract components
-            venue = parts[catalog_idx + 1] if catalog_idx + 1 < len(parts) else None
-            instrument_id = parts[catalog_idx + 2] if catalog_idx + 2 < len(parts) else None
-            data_type = parts[catalog_idx + 3] if catalog_idx + 3 < len(parts) else None
-            
-            if not all([venue, instrument_id, data_type]):
-                return None
+            venue, instrument_id, data_type = components
             
             # Normalize instrument_id (BTC-USDT.BINANCE → BTC/USDT)
             instrument = instrument_id.split('.')[0].replace('-', '/')
             
-            # Map data_type to QMTL prefix
-            if data_type == 'bars':
-                # Extract timeframe from filename
-                # BTC-USDT.BINANCE-1-MINUTE-LAST.parquet → 1m
-                filename = path.stem
-                timeframe = self._parse_timeframe(filename)
-                if not timeframe:
-                    return None
-                return f"ohlcv:{venue}:{instrument}:{timeframe}"
-            
-            elif data_type == 'ticks':
-                return f"tick:{venue}:{instrument}"
-            
-            elif data_type == 'quotes':
-                return f"quote:{venue}:{instrument}"
-            
-            else:
-                return None
+            # Map data_type to QMTL node_id
+            return self._map_to_node_id(path, venue, instrument, data_type)
         
         except Exception as exc:
             logger.debug(
@@ -265,6 +231,40 @@ class NautilusCoverageIndex:
                 extra={"path": str(path), "error": str(exc)},
             )
             return None
+
+    def _get_path_components(self, path: Path) -> tuple[str, str, str] | None:
+        """Extract (venue, instrument_id, data_type) from path."""
+        parts = path.parts
+        catalog_idx = -1
+        for i, part in enumerate(parts):
+            if part == self.catalog_path.name:
+                catalog_idx = i
+                break
+        
+        if catalog_idx == -1 or catalog_idx + 3 >= len(parts):
+            return None
+            
+        return (
+            parts[catalog_idx + 1],
+            parts[catalog_idx + 2],
+            parts[catalog_idx + 3],
+        )
+
+    def _map_to_node_id(
+        self, path: Path, venue: str, instrument: str, data_type: str
+    ) -> str | None:
+        """Map components to QMTL node_id string."""
+        if data_type == 'bars':
+            timeframe = self._parse_timeframe(path.stem)
+            return f"ohlcv:{venue}:{instrument}:{timeframe}" if timeframe else None
+        
+        if data_type == 'ticks':
+            return f"tick:{venue}:{instrument}"
+        
+        if data_type == 'quotes':
+            return f"quote:{venue}:{instrument}"
+            
+        return None
     
     def _parse_timeframe(self, filename: str) -> str | None:
         """Parse timeframe from Nautilus bar filename.
