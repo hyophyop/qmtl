@@ -1,427 +1,294 @@
-<!-- markdownlint-disable MD012 MD013 MD025 -->
+<!-- markdownlint-disable MD013 MD033 -->
 
-> ⚠️ **Warning**: This repository is currently under active development without a release plan, is not suitable for use, and its functionality has not been verified.
+> ⚠️ **Warning**: This repository is under active development. Some features
+> and APIs may change without notice.
 
-# qmtl
+# QMTL
 
-QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). Its architecture is built around three components:
+**QMTL**은 트레이딩 전략을 DAG(Directed Acyclic Graph)로 오케스트레이션하는 플랫폼입니다.
+전략 작성자는 **전략 로직에만 집중**하고, 시스템이 최적화·평가·배포를 자동으로 처리합니다.
 
-1. **Gateway** – accepts strategy submissions from SDKs and forwards DAGs to the DAG Manager for deduplication and scheduling.
-2. **WorldService** – the single source of truth for policy and activation state.
-3. **ControlBus** – an internal event bus bridged to clients through a tokenized WebSocket.
+> *"Write strategy → Submit → (System evaluates/deploys) → Observe"*
 
-SDKs submit strategies through the Gateway, but activation and queue updates along with strategy file controls are delivered from the ControlBus via `/events/subscribe` over that WebSocket. See [architecture.md](docs/en/architecture/architecture.md) for full details (Korean canonical: `docs/ko/architecture/architecture.md`).
+---
 
-Use the DAG Manager CLI to preview DAG structures:
+## 📋 Table of Contents
 
-```bash
-qmtl service dagmanager diff --file dag.json --dry-run
+- [Core Loop](#-core-loop)
+- [Architecture](#-architecture)
+- [Quickstart](#-quickstart)
+- [Project Structure](#-project-structure)
+- [Optional Modules](#-optional-modules)
+- [Development](#-development)
+- [Documentation](#-documentation)
+
+---
+
+## 🔄 Core Loop
+
+QMTL의 핵심 워크플로우는 단일 진입점 `Runner.submit(strategy, world=...)`입니다.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              CORE LOOP                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   1. AUTHOR        2. SUBMIT           3. EVALUATE        4. OBSERVE        │
+│   ───────────      ──────────          ───────────        ──────────        │
+│   Strategy DAG  →  Runner.submit()  →  WorldService   →   Results/Metrics   │
+│   (nodes, data)    (world=...)         (policy/gate)      (activation)      │
+│                                                                             │
+│   ┌─────────┐      ┌─────────┐         ┌─────────┐        ┌─────────┐       │
+│   │ SDK     │ ──→  │ Gateway │ ──→     │ WS/DM   │ ──→    │ Output  │       │
+│   │ Strategy│      │ HTTP    │         │ Policy  │        │ Metrics │       │
+│   └─────────┘      └─────────┘         └─────────┘        └─────────┘       │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Initialize a Neo4j database with the required constraints and indexes:
+### Core Loop 원칙
 
-```bash
-qmtl service dagmanager neo4j-init --uri bolt://localhost:7687 --user neo4j --password neo4j
+| 원칙 | 설명 |
+|------|------|
+| **Single Entrypoint** | 모든 제출은 `Runner.submit(..., world=...)` 하나로 통일 |
+| **WS as SSOT** | WorldService가 stage/mode 결정의 단일 진실 공급원 (backtest→paper→live) |
+| **Default-Safe** | WS 결정이 없거나 stale하면 자동으로 compute-only(backtest)로 다운그레이드 |
+| **Data On-Ramp** | World preset이 Seamless 데이터 프로바이더를 자동 연결 |
+
+### 최소 예제
+
+```python
+from qmtl.sdk import Strategy, StreamInput, Node, Runner
+
+class MyStrategy(Strategy):
+    def setup(self):
+        price = StreamInput(tags=["BTC", "price"], interval="1m", period=30)
+        
+        def compute(view):
+            df = view.as_frame(price, columns=["close"])
+            signal = (df["close"].pct_change().rolling(5).mean() > 0).astype(int)
+            return {"signal": signal}
+        
+        self.add_nodes([price, Node(input=price, compute_fn=compute, name="signal")])
+
+# Submit & let WorldService decide the execution mode
+result = Runner.submit(MyStrategy, world="my_world")
 ```
 
-Every subcommand now exposes its own help message. For example:
+---
 
-```bash
-qmtl service --help
-qmtl service gateway --help
-qmtl service dagmanager --help
-qmtl tools sdk --help
+## 🏗 Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                           QMTL SYSTEM                                    │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌─────────┐     ┌─────────────┐     ┌──────────────┐                    │
+│  │   SDK   │────▶│   Gateway   │────▶│  DAG Manager │                    │
+│  │ Runner  │     │  (HTTP API) │     │  (Graph SSOT)│                    │
+│  └─────────┘     └──────┬──────┘     └──────────────┘                    │
+│                         │                    │                           │
+│                         ▼                    ▼                           │
+│                  ┌─────────────┐     ┌──────────────┐                    │
+│                  │WorldService │     │  ControlBus  │                    │
+│                  │(Policy SSOT)│     │ (Event Bus)  │                    │
+│                  └─────────────┘     └──────────────┘                    │
+│                         │                    │                           │
+│                         ▼                    ▼                           │
+│                  ┌─────────────┐     ┌──────────────┐                    │
+│                  │Risk Signal  │     │   Workers/   │                    │
+│                  │    Hub      │     │   Runners    │                    │
+│                  └─────────────┘     └──────────────┘                    │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-Use `service` for long-running daemons (Gateway, DAG Manager), `tools` for developer utilities such as the SDK runner, and `project` for scaffolding helpers. Only the hierarchical commands are supported.
+### 주요 컴포넌트
 
-The JSON output can be rendered with tools like Graphviz for visual inspection. See [docs/reference/templates.md](docs/reference/templates.md) for diagrams of the built-in strategy templates.
+| 컴포넌트 | 역할 | 위치 |
+|----------|------|------|
+| **SDK/Runner** | 전략 작성·직렬화·제출 | `qmtl/sdk/`, `qmtl/runtime/sdk/` |
+| **Gateway** | 클라이언트 API, 프록시, 캐싱 | `qmtl/services/gateway/` |
+| **WorldService** | 정책·평가·활성화 SSOT | `qmtl/services/worldservice/` |
+| **DAG Manager** | 그래프·노드·큐 SSOT, Diff | `qmtl/services/dagmanager/` |
+| **ControlBus** | 내부 이벤트 버스 (Kafka/WS) | `qmtl/foundation/` |
+| **Risk Signal Hub** | 포트폴리오/리스크 스냅샷 | `qmtl/services/` |
+| **Seamless Provider** | 데이터 공급 자동화 (v2) | `qmtl/runtime/io/` |
 
-## Installation
+### Execution Domains
 
-Set up a fresh environment using [uv](https://github.com/astral-sh/uv) and
-install development dependencies:
+| Domain | 설명 |
+|--------|------|
+| `backtest` | 과거 데이터 리플레이, 주문 게이트 OFF |
+| `dryrun` (paper) | 실시간 데이터, 모의 주문 |
+| `live` | 실거래, 정책 게이트 통과 필수 |
+| `shadow` | 운영자 전용, 병렬 검증 |
+
+---
+
+## 🚀 Quickstart
+
+### 1. 환경 설정
 
 ```bash
+# uv 사용 (권장)
 uv venv
 uv pip install -e .[dev]
+
+# 또는 pip
+pip install -e .[dev]
 ```
 
-These commands match the steps in the SDK tutorial
-([docs/guides/sdk_tutorial.md](docs/guides/sdk_tutorial.md)).
-
-Install the `io` extra if you need additional data modules:
+### 2. 프로젝트 초기화
 
 ```bash
-uv pip install -e .[io]
+qmtl project init --path my_project --preset minimal --with-sample-data
+cd my_project
 ```
 
-## Project Initialization
-
-Create a new working directory with `qmtl project init`. The command generates a
-project scaffold containing extension packages and a sample strategy.
-Use `--strategy` to select from the built-in templates, `qmtl project
-list-presets --show-legacy-templates` to see the preset and legacy template
-options, and `--with-sample-data` to copy an example OHLCV CSV and notebook:
-
-```bash
-qmtl project init --path my_qmtl_project
-# list available presets and legacy templates
-qmtl project list-presets --show-legacy-templates
-
-# create project with the branching template
-qmtl project init --path my_qmtl_project --strategy branching
-# include sample data
-qmtl project init --path my_qmtl_project --with-sample-data
-cd my_qmtl_project
-```
-
-See [docs/reference/templates.md](docs/reference/templates.md) for a description of each template.
-
-The scaffold includes empty `generators/`, `indicators/` and
-`transforms/` packages for adding your own extensions, along with a
-preconfigured `.gitignore` to keep temporary files out of version control.
-
-Run the trade pipeline example to verify everything is set up correctly:
-
-```bash
-python -m qmtl.examples.strategy
-```
-
-See `qmtl/examples/README.md` for additional strategies that can be executed
-in the same way. A more detailed walkthrough from project creation to
-testing is available in [docs/guides/strategy_workflow.md](docs/guides/strategy_workflow.md).
-
-## Quick Start (Validate → Export → Launch)
-
-Bring services up in three steps. This mirrors the detailed guidance in
-[Config CLI](docs/operations/config-cli.md) and [Backend Quickstart](docs/operations/backend_quickstart.md).
-
-1. **Validate configuration** – catch missing sections or offline resources
-   before booting services.
-
-   ```bash
-   uv run qmtl config validate --config qmtl/examples/qmtl.yml --offline
-   ```
-
-2. **Share the YAML with services** – either keep the path handy for `--config`
-   or copy it to `qmtl.yml` in your working directory so discovery works
-   automatically.
-
-3. **Launch services** – point both Gateway and DAG Manager at the same file.
-
-   ```bash
-   qmtl service gateway --config qmtl/examples/qmtl.yml
-   qmtl service dagmanager server --config qmtl/examples/qmtl.yml
-   ```
-
-When no configuration file is discovered the services fall back to built-in
-defaults, preventing silent misconfigurations.
-
-## Trading Node Enhancements
-
-Recent releases introduce several nodes for building realistic trading pipelines:
-
-- **RiskManager** enforces position and portfolio limits. [Guide](docs/operations/risk_management.md) · [Example](qmtl/examples/strategies/risk_managed_strategy.py)
-- **TimingController** validates market sessions and execution delays. [Guide](docs/operations/timing_controls.md) · [Example](qmtl/examples/strategies/timing_control_strategy.py)
-- **Execution modeling** simulates fills and costs for backtests. [Design](docs/reference/lean_like_features.md) · [Example](qmtl/examples/strategies/execution_model_strategy.py)
-- **Order publishing** turns signals into standardized orders for external services. [Docs](docs/guides/sdk_tutorial.md) · [Example](qmtl/examples/strategy.py)
-
-## Development Workflow
-
-Here’s a short workflow summary based on the repository’s guidelines:
-
-1. **Environment Setup** – Use the `uv` tool and install dependencies in editable mode:
-
-   ```bash
-   uv pip install -e .[dev]
-   ```
-
-   This command ensures all development dependencies are available.
-
-2. **Testing** – Run the tests in parallel via `uv` before committing:
-
-   ```bash
-   uv run -m pytest -n auto
-   ```
-
-   Commit only after tests pass.
-
-3. **Design Approach** – Follow the Single Responsibility Principle (SRP) when designing modules and classes. This keeps features modular and easier to maintain.
-
-For additional rules—such as adhering to architecture documents or managing distributable wheels—refer to [AGENTS.md](AGENTS.md) in the project root for the full guidelines.
-
-## Documentation Dashboard
-
-Document progress is tracked in [`docs/dashboard.json`](docs/dashboard.json). Each entry records the document's status (`draft`, `review`, or `complete`) and the responsible owner. The file's `last_updated` and `generated` timestamps are refreshed automatically by a scheduled workflow (`.github/workflows/docs-dashboard.yml`). Run the update script manually if needed:
-
-```bash
-python scripts/update_dashboard.py
-```
-
-Open the JSON directly or import it into a spreadsheet to review documentation status.
-
-## Coding Style
-
-Use consistent naming for connection strings across the project. Prefer the `*_dsn` suffix for all connection parameters (for example `redis_dsn`, `database_dsn`, `neo4j_dsn`, `kafka_dsn`). Avoid one-letter variable names except in short loops; use descriptive names like `redis_client` or `dagmanager`.
-
-## Optional Modules
-
-Install additional functionality on demand:
-
-- [Indicators](qmtl/runtime/indicators/README.md)
-- [IO](qmtl/io) &mdash; `pip install qmtl[io]`
-- [Generators](qmtl/runtime/generators/README.md)
-- [Transforms](qmtl/runtime/transforms/README.md)
-
-## End-to-End Testing
-
-Bring up the stack with Docker Compose:
-
-```bash
-docker compose -f tests/docker-compose.e2e.yml up -d
-```
-
-Run the tests in parallel using uv:
-
-```bash
-uv run -m pytest -n auto tests/e2e
-```
-
-See [docs/operations/e2e_testing.md](docs/operations/e2e_testing.md) for the full guide. For Docker stacks and commands, see [docs/operations/docker.md](docs/operations/docker.md).
-
-## Running the Test Suite
-
-Run all unit and integration tests in parallel with:
-
-```bash
-uv run -m pytest -n auto
-```
-
-## Monitoring
-
-Load the sample alert definitions from `alert_rules.yml` into Prometheus to enable basic monitoring. Start the DAG Manager metrics server with `qmtl service dagmanager metrics` (pass `--port` to change the default 8000). For a full list of available alerts and Grafana dashboards, see [docs/operations/monitoring.md](docs/operations/monitoring.md).
-
-## Running Services
-
-Start the Gateway and DAG Manager using the combined configuration file or rely
-on the built-in defaults. The ``--config`` flag is optional; without it both
-services start in a local mode that uses SQLite and in-memory repositories. The
-sample ``qmtl.yml`` file
-demonstrates how to switch to Postgres, Neo4j and Kafka for production.
-
-```bash
-# start the gateway HTTP server with defaults
-qmtl service gateway
-
-# start the DAG Manager with defaults
-qmtl service dagmanager server
-
-# use a custom configuration file
-qmtl service gateway --config qmtl/examples/qmtl.yml
-qmtl service dagmanager server --config qmtl/examples/qmtl.yml
-
-# submit a DAG diff
-qmtl service dagmanager diff --file dag.json --target localhost:50051
-```
-
-Customize the sample YAML files in `qmtl/examples/` to match your environment.
-
-See [gateway.md](docs/en/architecture/gateway.md) and [dag-manager.md](docs/en/architecture/dag-manager.md) for more
-information on configuration and advanced usage.
-
-### WorldService
-
-WorldService owns world policies, decisions and activation state. Run it as a
-stand‑alone FastAPI app and enable the Gateway proxy when needed.
-
-1) Start WorldService (SQLite + Redis example)
-
-```bash
-cat > worldservice.yml <<'EOF'
-worldservice:
-  dsn: sqlite:///worlds.db
-  redis: redis://localhost:6379/0
-  bind:
-    host: 0.0.0.0
-    port: 8080
-  auth:
-    header: Authorization
-    tokens: []
-EOF
-uv run uvicorn qmtl.services.worldservice.api:create_app --factory --host 0.0.0.0 --port 8080
-```
-
-Run the command from the directory containing `worldservice.yml` so the server
-discovers the file automatically.
-
-2) Point Gateway at WorldService (optional proxy)
-
-- In `qmtl/examples/qmtl.yml`, set:
-  - `gateway.worldservice_url: http://localhost:8080`
-  - `gateway.enable_worldservice_proxy: true`
-
-Then run Gateway with that config:
-
-```bash
-qmtl service gateway --config qmtl/examples/qmtl.yml
-```
-
-With the proxy enabled, SDKs can fetch decisions and activation via the
-Gateway. When the proxy is disabled, SDKs operate in offline/backtest modes
-without world decisions.
-
-## SDK Tutorial
-
-For instructions on implementing strategies with the SDK, see
-[docs/guides/sdk_tutorial.md](docs/guides/sdk_tutorial.md).
-
-## Example Strategies
-
-Run the samples inside the `qmtl/examples/` directory:
+### 3. 예제 실행
 
 ```bash
 python -m qmtl.examples.general_strategy
-python -m qmtl.examples.strategies.indicators_strategy
-python -m qmtl.examples.transforms_strategy
-python -m qmtl.examples.generators_example
-python -m qmtl.examples.extensions_combined_strategy
 ```
 
-Ray is used automatically when installed. Append `--no-ray` to disable Ray-based execution:
+### 4. 서비스 실행 (선택)
 
 ```bash
-python -m qmtl.examples.general_strategy --no-ray
+# 설정 검증
+uv run qmtl config validate --config qmtl/examples/qmtl.yml --offline
+
+# Gateway 시작
+qmtl service gateway --config qmtl/examples/qmtl.yml
+
+# DAG Manager 시작
+qmtl service dagmanager server --config qmtl/examples/qmtl.yml
+
+# WorldService 시작
+uv run uvicorn qmtl.services.worldservice.api:create_app --factory --port 8080
 ```
 
-See [qmtl/examples/README.md](qmtl/examples/README.md) for additional scripts such as `tag_query_strategy.py` or `ws_metrics_example.py`.
+---
 
-## TagQuery Node Resolution
+## 📁 Project Structure
 
-`TagQueryNode` instances no longer resolve queues themselves. The
-`TagQueryManager.resolve_tags()` method retrieves queue mappings from the Gateway
-and updates all registered nodes. `Runner` creates a manager automatically and
-invokes this method in every mode, so manual calls are rarely needed.
+```
+qmtl/
+├── sdk/                    # 전략 작성 SDK (Strategy, Node 등)
+├── runtime/
+│   ├── sdk/               # Runner, submit, execution context
+│   ├── io/                # Seamless data provider v2
+│   ├── indicators/        # 기술적 지표 (EMA, RSI 등)
+│   ├── generators/        # 데이터 생성기
+│   └── transforms/        # 데이터 변환
+├── services/
+│   ├── gateway/           # HTTP API Gateway
+│   ├── worldservice/      # Policy/Activation SSOT
+│   └── dagmanager/        # Graph/Queue SSOT
+├── foundation/            # 공통 기반 (proto, controlbus 등)
+├── integrations/          # 외부 시스템 연동
+├── examples/              # 예제 전략들
+└── cli.py                 # CLI 진입점
 
-Resolved mappings are cached to `.qmtl_tagmap.json` (override with
-`QMTL_TAGQUERY_CACHE`) along with a CRC so dry-runs and backtests can
-reproduce the live mapping deterministically. `resolve_tags(offline=True)`
-hydrates nodes from this snapshot when the Gateway is unavailable.
-
-Purpose & guidance
-- The snapshot exists to make offline runs reproducible. When a snapshot is stale or its CRC no longer matches, prefer re‑resolving via Gateway when online, or fail fast/skip according to your policy when offline. `resolve_tags(offline=True)` SHOULD rely only on the snapshot and MUST NOT invent mappings.
-
-`ProcessingNode` instances accept either a single upstream `Node` or a list of nodes via the `input` parameter. Dictionary inputs are no longer supported.
-
-See [docs/reference/faq.md](docs/reference/faq.md) for common questions such as using `TagQueryNode` during backtesting.
-
-Dry‑run parity: the `POST /strategies/dry-run` endpoint mirrors the queue mapping of the real submission path and always returns a non‑empty `sentinel_id`. When the Diff path is unavailable, the server derives a deterministic fallback of the form `dryrun:<crc32>` over DAG node IDs.
-
-## Backfills
-
-[docs/operations/backfill.md](docs/operations/backfill.md) explains how to preload historical data by
-injecting `HistoryProvider` instances
-into `StreamInput` nodes. These dependencies must be provided at creation time
-and cannot be reassigned later. The same guide covers persisting data via
-`EventRecorder`.
-
-Example injection:
-
-```python
-from qmtl.runtime.sdk import (
-    StreamInput,
-    QuestDBHistoryProvider,
-    QuestDBRecorder,
-    EventRecorderService,
-)
-
-stream = StreamInput(
-    interval="60s",
-    history_provider=QuestDBHistoryProvider(
-        dsn="postgresql://user:pass@localhost:8812/qdb"
-    ),
-    event_service=EventRecorderService(
-        QuestDBRecorder(dsn="postgresql://user:pass@localhost:8812/qdb")
-    ),
-)
+docs/
+├── en/                    # English docs
+└── ko/                    # Korean docs (canonical)
 ```
 
-``QuestDBHistoryProvider`` (also exported as ``QuestDBLoader`` for backwards
-compatibility) and ``QuestDBRecorder`` will default to using
-``stream.node_id`` as the table name if ``table`` is not provided.
+---
 
-[docs/operations/backfill.md](docs/operations/backfill.md).
+## 📦 Optional Modules
 
-### QuestDBHistoryProvider with a custom fetcher
-
-`QuestDBHistoryProvider` can pull missing rows from any async source. Implement a
-`DataFetcher` and pass it to the loader:
-
-```python
-import httpx
-import pandas as pd
-from qmtl.runtime.sdk import DataFetcher, QuestDBHistoryProvider
-
-class BinanceFetcher:
-    async def fetch(self, start: int, end: int, *, node_id: str, interval: str) -> pd.DataFrame:
-        url = (
-            "https://api.binance.com/api/v3/klines"
-            f"?symbol={node_id}&interval={interval}"
-            f"&startTime={start * 1000}&endTime={end * 1000}"
-        )
-        async with httpx.AsyncClient() as client:
-            data = (await client.get(url)).json()
-        rows = [
-            {"ts": int(d[0] / 1000), "open": float(d[1]), "close": float(d[4])}
-            for d in data
-        ]
-        return pd.DataFrame(rows)
-
-fetcher = BinanceFetcher()
-loader = QuestDBHistoryProvider(
-    dsn="postgresql://user:pass@localhost:8812/qdb",
-    fetcher=fetcher,
-)
-```
-
-## PySR HOF → Runner quickstart
-
-Use the PySR adapter to propagate ``data_spec`` and ``spec_version`` all the way to
-Strategy submission:
+필요에 따라 추가 모듈을 설치할 수 있습니다:
 
 ```bash
-python scripts/pysr_hof_to_dag.py \
-  --hof outputs/run_001/hall_of_fame.csv \
-  --data-spec '{"dataset_id": "ohlcv", "snapshot_version": "2025-01-01", "interval": "1m", "period": 200}' \
-  --spec-version v1
+# IO 모듈 (추가 데이터 소스)
+uv pip install -e .[io]
+
+# 기술적 지표
+uv pip install -e .[indicators]
+
+# 데이터 생성기
+uv pip install -e .[generators]
+
+# 데이터 변환
+uv pip install -e .[transforms]
+
+# Ray 분산 실행
+uv pip install -e .[ray]
+
+# 전체 설치
+uv pip install -e .[dev,io,indicators,generators,transforms,ray]
 ```
 
-Then create Strategy classes wired to the Seamless history provider and submit them via the SDK runner:
+---
 
-```python
-from pathlib import Path
+## 🛠 Development
 
-from qmtl.integrations.sr import load_pysr_hof_as_strategies
-from qmtl.runtime.io.seamless_provider import EnhancedQuestDBProvider
-from qmtl.runtime.sdk.runner import Runner
+### 테스트
 
-provider = EnhancedQuestDBProvider(
-    dsn="postgresql://user:pass@localhost:8812/qdb",
-    table="ohlcv",
-)
+```bash
+# 전체 테스트 (병렬)
+uv run -m pytest -n auto
 
-strategies = load_pysr_hof_as_strategies(
-    history_provider=provider,
-    hof_path=Path("outputs/run_001/hall_of_fame.csv"),
-    data_spec={
-        "dataset_id": "ohlcv",
-        "snapshot_version": "2025-01-01",
-        "interval": "1m",
-        "period": 200,
-    },
-    spec_version="v1",
-)
+# E2E 테스트 (Docker 필요)
+docker compose -f tests/docker-compose.e2e.yml up -d
+uv run -m pytest tests/e2e
+```
 
-for strategy_cls in strategies:
-    Runner.submit(strategy_cls, world="demo", mode="backtest")
+### Proto 생성
+
+proto 파일 변경 시:
+
+```bash
+uv run python -m grpc_tools.protoc \
+  --proto_path=qmtl/foundation/proto \
+  --python_out=qmtl/foundation/proto \
+  --grpc_python_out=qmtl/foundation/proto \
+  qmtl/foundation/proto/dagmanager.proto
+```
+
+### CLI 도움말
+
+```bash
+qmtl --help
+qmtl service --help
+qmtl project --help
+qmtl config --help
+```
+
+---
+
+## 📚 Documentation
+
+| 문서 | 설명 |
+|------|------|
+| [Architecture](docs/en/architecture/architecture.md) | 시스템 설계 상세 |
+| [Core Loop](docs/en/architecture/core_loop_world_automation.md) | Core Loop 자동화 |
+| [SDK Tutorial](docs/en/guides/sdk_tutorial.md) | SDK 사용 가이드 |
+| [Backend Quickstart](docs/en/operations/backend_quickstart.md) | 서비스 구동 가이드 |
+| [Gateway](docs/en/architecture/gateway.md) | Gateway 명세 |
+| [WorldService](docs/en/architecture/worldservice.md) | WorldService 명세 |
+| [DAG Manager](docs/en/architecture/dag-manager.md) | DAG Manager 명세 |
+
+### i18n
+
+- **Korean (canonical)**: `docs/ko/`
+- **English**: `docs/en/`
+- MkDocs 빌드: `uv run mkdocs build`
+
+---
+
+## 📄 License
+
+See [LICENSE](LICENSE) for details.
+
+---
+
+## 🔗 Links
+
+- [AGENTS.md](AGENTS.md) — 개발 가이드라인
+- [CONTRIBUTING.md](CONTRIBUTING.md) — 기여 가이드
+- [CHANGELOG.md](CHANGELOG.md) — 변경 이력
 ```
