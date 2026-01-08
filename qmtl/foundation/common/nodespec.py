@@ -231,8 +231,16 @@ class CanonicalNodeSpec:
         self, value: Any | None, *, fallback: Any | None = None
     ) -> "CanonicalNodeSpec":
         compat = str(value or "").strip()
-        if not compat and fallback is not None:
-            compat = str(fallback or "").strip()
+        if fallback is not None:
+            legacy = str(fallback or "").strip()
+            if compat and legacy and compat != legacy:
+                raise ValueError(
+                    f"Validation error: schema_compat_id ('{compat}') and "
+                    f"schema_id ('{legacy}') must match if both are provided."
+                )
+            if not compat:
+                compat = legacy
+
         self._schema_compat_id = compat
         return self
 
