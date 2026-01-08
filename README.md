@@ -1,4 +1,8 @@
 <!-- markdownlint-disable MD012 MD013 MD025 -->
+// ...existing code...
+> ⚠️ **경고**: 이 저장소는 현재 릴리즈 계획 없이 작업 중이며 사용 불가능한 상태입니다.
+> ⚠️ **Warning**: This repository is currently under active development without a release plan, is not suitable for use, and its functionality has not been verified.
+
 
 # qmtl
 
