@@ -2,8 +2,6 @@
 
 > ⚠️ **Warning**: This repository is currently under active development without a release plan, is not suitable for use, and its functionality has not been verified.
 
-> ⚠️ **경고**: 이 저장소는 현재 릴리즈 계획 없이 작업 중이며 사용 불가능한 상태입니다.
-
 # qmtl
 
 QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). Its architecture is built around three components:
