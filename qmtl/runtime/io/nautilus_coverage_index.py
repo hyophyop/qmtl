@@ -176,19 +176,37 @@ class NautilusCoverageIndex:
     async def _process_parquet_file(self, path: Path) -> None:
         """Process a single Parquet file and extract coverage."""
         # Read Parquet metadata without loading full data
-        table = pq.read_table(path, columns=['ts_event'])
-        
-        if len(table) == 0:
+        try:
+            pf = pq.ParquetFile(path)
+        except Exception:
             return
-        
-        # Extract min/max timestamps (in nanoseconds)
-        ts_col = table['ts_event']
-        min_ts_ns = int(ts_col.min().as_py())
-        max_ts_ns = int(ts_col.max().as_py())
-        
+
+        if pf.num_row_groups == 0:
+            return
+
+        # Extract min/max timestamps (in nanoseconds) from statistics
+        min_ts_ns = None
+        max_ts_ns = None
+
+        try:
+            ts_col_idx = pf.schema.names.index('ts_event')
+        except ValueError:
+            return
+
+        for i in range(pf.num_row_groups):
+            stats = pf.metadata.row_group(i).column(ts_col_idx).statistics
+            if stats and stats.has_min_max:
+                if min_ts_ns is None or stats.min < min_ts_ns:
+                    min_ts_ns = stats.min
+                if max_ts_ns is None or stats.max > max_ts_ns:
+                    max_ts_ns = stats.max
+
+        if min_ts_ns is None or max_ts_ns is None:
+            return
+
         # Convert to seconds
-        min_ts = min_ts_ns // 1_000_000_000
-        max_ts = max_ts_ns // 1_000_000_000
+        min_ts = int(min_ts_ns) // 1_000_000_000
+        max_ts = int(max_ts_ns) // 1_000_000_000
         
         # Parse file path to get node_id
         node_id = self._parse_node_id_from_path(path)
@@ -323,16 +341,16 @@ class NautilusCoverageIndex:
         
         # Try exact match first
         if cache_key in self._index:
-            return self._merge_ranges(self._index[cache_key])
+            return self._merge_ranges(self._index[cache_key], interval)
         
         # Try without interval suffix
         if node_id in self._index:
-            return self._merge_ranges(self._index[node_id])
+            return self._merge_ranges(self._index[node_id], interval)
         
         return []
     
     def _merge_ranges(
-        self, ranges: list[tuple[int, int]]
+        self, ranges: list[tuple[int, int]], interval: int = 1
     ) -> list[tuple[int, int]]:
         """Merge overlapping or adjacent timestamp ranges."""
         if not ranges:
@@ -346,7 +364,7 @@ class NautilusCoverageIndex:
             last = merged[-1]
             
             # Check if ranges overlap or are adjacent
-            if current[0] <= last[1] + 1:
+            if current[0] <= last[1] + interval:
                 # Merge by extending the end time
                 merged[-1] = (last[0], max(last[1], current[1]))
             else:
