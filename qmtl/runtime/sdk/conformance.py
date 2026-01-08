@@ -413,4 +413,211 @@ class ConformancePipeline:
         return 1
 
 
-__all__ = ["ConformancePipeline", "ConformanceReport"]
+class TickConformanceRule:
+    """Conformance rule for trade tick data validation.
+    
+    Validates that tick data has:
+    - Required columns: ts, price, size
+    - Positive prices and sizes
+    - Sorted timestamps
+    - Valid timestamp range
+    
+    Examples
+    --------
+    >>> rule = TickConformanceRule()
+    >>> df = pd.DataFrame({
+    ...     'ts': [1700000000, 1700000001],
+    ...     'price': [100.0, 101.0],
+    ...     'size': [1.0, 2.0],
+    ... })
+    >>> report = rule.validate(df)
+    >>> len(report.warnings)
+    0
+    """
+    
+    REQUIRED_COLUMNS = frozenset({'ts', 'price', 'size'})
+    OPTIONAL_COLUMNS = frozenset({'side', 'trade_id'})
+    
+    def validate(self, df: pd.DataFrame) -> ConformanceReport:
+        """Validate tick data and return conformance report.
+        
+        Parameters
+        ----------
+        df
+            Tick data DataFrame.
+        
+        Returns
+        -------
+        ConformanceReport
+            Report with warnings and flag counts.
+        """
+        warnings: list[str] = []
+        flags: dict[str, int] = {}
+        
+        # 1. Required columns
+        missing = self.REQUIRED_COLUMNS - set(df.columns)
+        if missing:
+            warnings.append(f"Missing required columns: {sorted(missing)}")
+            flags['missing_column'] = len(missing)
+            return ConformanceReport(warnings=tuple(warnings), flags_counts=flags)
+        
+        # 2. Price and Size validation
+        self._check_positive_values(df, warnings, flags)
+        self._check_nans(df, ['price', 'size'], warnings, flags)
+        
+        # 3. Temporal validation
+        self._check_temporal_validity(df, warnings, flags)
+        
+        return ConformanceReport(warnings=tuple(warnings), flags_counts=flags)
+
+    def _check_positive_values(self, df: pd.DataFrame, warnings: list[str], flags: dict[str, int]) -> None:
+        """Check for non-positive prices and sizes."""
+        for col, flag_key in [('price', 'invalid_price'), ('size', 'invalid_size')]:
+            if (df[col] <= 0).any():
+                invalid_count = (df[col] <= 0).sum()
+                warnings.append(f"Non-positive {col}s detected: {invalid_count} rows")
+                flags[flag_key] = int(invalid_count)
+
+    def _check_nans(self, df: pd.DataFrame, columns: list[str], warnings: list[str], flags: dict[str, int]) -> None:
+        """Check for NaN values in specified columns."""
+        for col in columns:
+            nan_count = df[col].isna().sum()
+            if nan_count > 0:
+                warnings.append(f"NaN values in {col}: {nan_count} rows")
+                flags[f'nan_{col}'] = int(nan_count)
+
+    def _check_temporal_validity(self, df: pd.DataFrame, warnings: list[str], flags: dict[str, int]) -> None:
+        """Validate timestamp ordering, duplicates, and range."""
+        # Ordering
+        if not df['ts'].is_monotonic_increasing:
+            warnings.append("Timestamps not sorted")
+            flags['unsorted_ts'] = 1
+        
+        # Duplicates
+        duplicates = df['ts'].duplicated().sum()
+        if duplicates > 0:
+            warnings.append(f"Duplicate timestamps: {duplicates} rows")
+            flags['duplicate_ts'] = int(duplicates)
+        
+        # Range (Unix epoch)
+        invalid_ts_mask = (df['ts'] < 0) | (df['ts'] > 2**32 - 1)
+        if invalid_ts_mask.any():
+            invalid_count = invalid_ts_mask.sum()
+            warnings.append(f"Invalid timestamp range: {invalid_count} rows")
+            flags['invalid_timestamp'] = int(invalid_count)
+
+
+class QuoteConformanceRule:
+    """Conformance rule for quote tick data validation.
+    
+    Validates that quote data has:
+    - Required columns: ts, bid, ask, bid_size, ask_size
+    - Positive prices and sizes
+    - Bid < Ask (no crossed quotes)
+    - Sorted timestamps
+    - Valid timestamp range
+    
+    Examples
+    --------
+    >>> rule = QuoteConformanceRule()
+    >>> df = pd.DataFrame({
+    ...     'ts': [1700000000],
+    ...     'bid': [100.0],
+    ...     'ask': [100.5],
+    ...     'bid_size': [10.0],
+    ...     'ask_size': [8.0],
+    ... })
+    >>> report = rule.validate(df)
+    >>> len(report.warnings)
+    0
+    """
+    
+    REQUIRED_COLUMNS = frozenset({'ts', 'bid', 'ask', 'bid_size', 'ask_size'})
+    OPTIONAL_COLUMNS = frozenset({'quote_id', 'venue_ts'})
+    
+    def validate(self, df: pd.DataFrame) -> ConformanceReport:
+        """Validate quote data and return conformance report.
+        
+        Parameters
+        ----------
+        df
+            Quote data DataFrame.
+        
+        Returns
+        -------
+        ConformanceReport
+            Report with warnings and flag counts.
+        """
+        warnings: list[str] = []
+        flags: dict[str, int] = {}
+        
+        # 1. Required columns
+        missing = self.REQUIRED_COLUMNS - set(df.columns)
+        if missing:
+            warnings.append(f"Missing required columns: {sorted(missing)}")
+            flags['missing_column'] = len(missing)
+            return ConformanceReport(warnings=tuple(warnings), flags_counts=flags)
+        
+        # 2. Spread and Price/Size validation
+        self._check_quote_values(df, warnings, flags)
+        self._check_nans(df, warnings, flags)
+        
+        # 3. Temporal validation
+        self._check_temporal_validity(df, warnings, flags)
+        
+        return ConformanceReport(warnings=tuple(warnings), flags_counts=flags)
+
+    def _check_quote_values(self, df: pd.DataFrame, warnings: list[str], flags: dict[str, int]) -> None:
+        """Check for crossed quotes, non-positive values, and wide spreads."""
+        # Bid/Ask spread
+        crossed = (df['bid'] >= df['ask']).sum()
+        if crossed > 0:
+            warnings.append(f"Crossed quotes detected (bid >= ask): {crossed} rows")
+            flags['crossed_quotes'] = int(crossed)
+        
+        # Positive values
+        for col in ['bid', 'ask', 'bid_size', 'ask_size']:
+            if (df[col] <= 0).any():
+                invalid_count = (df[col] <= 0).sum()
+                warnings.append(f"Non-positive {col} values: {invalid_count} rows")
+                flags[f'invalid_{col}'] = int(invalid_count)
+        
+        # Wide spreads
+        spread_pct = ((df['ask'] - df['bid']) / df['bid'] * 100)
+        wide_spreads = (spread_pct > 10.0).sum()
+        if wide_spreads > 0:
+            warnings.append(f"Wide spreads (>10%): {wide_spreads} rows")
+            flags['wide_spread'] = int(wide_spreads)
+
+    def _check_nans(self, df: pd.DataFrame, warnings: list[str], flags: dict[str, int]) -> None:
+        """Check for NaN values in all expected columns."""
+        for col in ['bid', 'ask', 'bid_size', 'ask_size']:
+            nan_count = df[col].isna().sum()
+            if nan_count > 0:
+                warnings.append(f"NaN values in {col}: {nan_count} rows")
+                flags[f'nan_{col}'] = int(nan_count)
+
+    def _check_temporal_validity(self, df: pd.DataFrame, warnings: list[str], flags: dict[str, int]) -> None:
+        """Validate timestamp ordering, duplicates, and range."""
+        if not df['ts'].is_monotonic_increasing:
+            warnings.append("Timestamps not sorted")
+            flags['unsorted_ts'] = 1
+        
+        duplicates = df['ts'].duplicated().sum()
+        if duplicates > 0:
+            warnings.append(f"Duplicate timestamps: {duplicates} rows")
+            flags['duplicate_ts'] = int(duplicates)
+        
+        invalid_ts_mask = (df['ts'] < 0) | (df['ts'] > 2**32 - 1)
+        if invalid_ts_mask.any():
+            invalid_count = invalid_ts_mask.sum()
+            warnings.append(f"Invalid timestamp range: {invalid_count} rows")
+            flags['invalid_timestamp'] = int(invalid_count)
+
+
+__all__ = [
+    "ConformancePipeline",
+    "ConformanceReport",
+    "TickConformanceRule",
+    "QuoteConformanceRule",
+]

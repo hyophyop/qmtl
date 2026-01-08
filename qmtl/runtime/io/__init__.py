@@ -27,6 +27,11 @@ __all__ = [
     "CcxtProConfig",
     "ArtifactRegistrar",
     "ArtifactPublication",
+    # Nautilus Trader integration
+    "NautilusCatalogDataSource",
+    "NautilusCoverageIndex",
+    "NautilusPresetUnavailableError",
+    "NautilusCatalogNotFoundError",
 ]
 
 _ATTR_MAP = {
@@ -52,6 +57,11 @@ _ATTR_MAP = {
     "CcxtProConfig": ("qmtl.runtime.io.ccxt_live_feed", "CcxtProConfig"),
     "ArtifactRegistrar": ("qmtl.runtime.io.artifact", "ArtifactRegistrar"),
     "ArtifactPublication": ("qmtl.runtime.io.artifact", "ArtifactPublication"),
+    # Nautilus Trader integration
+    "NautilusCatalogDataSource": ("qmtl.runtime.io.nautilus_catalog_source", "NautilusCatalogDataSource"),
+    "NautilusCoverageIndex": ("qmtl.runtime.io.nautilus_coverage_index", "NautilusCoverageIndex"),
+    "NautilusPresetUnavailableError": ("qmtl.runtime.io.seamless_presets", "NautilusPresetUnavailableError"),
+    "NautilusCatalogNotFoundError": ("qmtl.runtime.io.seamless_presets", "NautilusCatalogNotFoundError"),
 }
 
 def __getattr__(name: str):

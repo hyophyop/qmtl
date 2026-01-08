@@ -221,6 +221,14 @@ world:
 |---|---|---|---|---|
 | `ohlcv.binance.spot.1m` | QuestDB `ohlcv_binance_spot_1m` + CCXT(Binance) 백필, `warmup_bars=1800` | Binance WS `kline@1m` (없으면 CCXT 폴백) | `sla_preset=baseline`, `conformance_preset=strict-blocking`, `interval_ms=60000` | 크립토 1분 모멘텀/arb |
 | `ohlcv.polygon.us_equity.1d` | QuestDB `ohlcv_us_equity_1d` + Polygon REST 백필, `warmup_bars=120` | 라이브 없음(일봉), compute-only | `sla_preset=tolerant-partial`, `conformance_preset=strict-blocking`, `interval_ms=86400000` | US 주식 EOD 팩터 |
+| `ohlcv.nautilus.crypto.1m` | Nautilus DataCatalog (Parquet) | 없음 (히스토리컬 전용) | `sla_preset=baseline`, `conformance_preset=strict-blocking`, `interval_ms=60000` | 백테스트/연구용 1분 크립토 |
+| `ohlcv.nautilus.binance.1m` | Nautilus DataCatalog (Parquet) | CCXT Pro WS (`binance`) | `sla_preset=baseline`, `conformance_preset=strict-blocking`, `interval_ms=60000` | Nautilus 히스토리컬 + CCXT 라이브 |
+| `ohlcv.nautilus.binance.1h` | Nautilus DataCatalog (Parquet) | CCXT Pro WS (`binance`) | `sla_preset=baseline`, `conformance_preset=strict-blocking`, `interval_ms=3600000` | Nautilus 히스토리컬 + CCXT 라이브 |
+
+**Nautilus 프리셋 참고사항:**
+- `nautilus.catalog`: 히스토리컬 전용. Nautilus DataCatalog에서 Parquet 파일로 저장된 데이터를 읽음
+- `nautilus.full`: 히스토리컬(Nautilus) + 라이브(CCXT Pro). 백테스트에서 라이브까지 심리스 전환 지원
+- nautilus_trader 미설치 시 `NautilusPresetUnavailableError` 발생 (대안: `ccxt.questdb.ohlcv`, `demo.inmemory.ohlcv`)
 
 - 계약 테스트 훅 (#1778/#1789)
   - `tests/e2e/core_loop/worlds/core-loop-demo.yml`에 위 스키마를 따르는 preset을 포함시켜 계약 테스트에서 Seamless 오토와이어링을 검증한다.
