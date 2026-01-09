@@ -102,6 +102,7 @@ nav:
       - Timing Controls: operations/timing_controls.md
       - Exchange Calendars: operations/exchange_calendars.md
       - DAG Snapshot: operations/dag_snapshot.md
+      - Release 0.1 Definition of Done: operations/release_0_1_definition_of_done.md
       - Release: operations/release.md
       - CI: operations/ci.md
   - Design:
@@ -218,6 +219,7 @@ plugins:
             "World Validation Governance": "World Validation 거버넌스"
             "Validation Report": "Validation Report"
             "Core Loop Automation": "Core Loop 자동화"
+            "Release 0.1 Definition of Done": "Release 0.1 완료 기준(DoD)"
             "Rebalancing Schema Coordination": "리밸런싱 스키마 조율"
             Design: 설계
             "Design Guide": "설계 문서 안내"
