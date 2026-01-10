@@ -1,5 +1,11 @@
 # tests/e2e/world_smoke/test_world_service_smoke.py
-import os, json, base64, subprocess, urllib.request
+import os
+import json
+import base64
+import subprocess
+import time
+import urllib.error
+import urllib.request
 
 import pytest
 from pathlib import Path
@@ -18,8 +24,13 @@ def _post_yaml(url: str, yml_path: Path):
     data = yml_path.read_bytes()
     req = urllib.request.Request(url.rstrip("/") + "/worlds", data=data, method="POST")
     req.add_header("Content-Type", "application/x-yaml")
-    with urllib.request.urlopen(req, timeout=5) as r:
-        assert r.status in (200, 201)
+    try:
+        with urllib.request.urlopen(req, timeout=5) as r:
+            assert r.status in (200, 201)
+    except urllib.error.HTTPError as e:
+        if e.code == 409:
+            return
+        raise
 
 
 def _decode_jwt_no_verify(token: str) -> dict:
@@ -44,6 +55,21 @@ def _gateway_subscribe(gateway_base: str, world_id: str) -> dict:
     with urllib.request.urlopen(req, timeout=5) as r:
         assert r.status == 200
         return json.loads(r.read().decode("utf-8"))
+
+
+def _wait_for_metrics_labels(metrics_url: str, label_groups: tuple[tuple[str, ...], ...], timeout: float = 10.0) -> str:
+    deadline = time.time() + timeout
+    last_body = ""
+    while time.time() < deadline:
+        try:
+            last_body = _read_metrics(metrics_url)
+        except Exception:
+            time.sleep(0.3)
+            continue
+        if all(any(label in last_body for label in group) for group in label_groups):
+            return last_body
+        time.sleep(0.3)
+    raise AssertionError(f"metrics labels not found within {timeout}s")
 
 
 # ---------- SDK 모드 ----------
@@ -78,34 +104,46 @@ def test_sdk_mode_world_isolated_artifacts(artifact_dir: Path):
 # ---------- 서비스 모드 ----------
 
 @pytest.mark.order(2)
-def test_service_mode_register_worlds(svc_env, worlds):
+def test_service_mode_register_worlds(service_worlds_registered, worlds):
     # 월드 정의를 서비스에 등록 (스펙에 맞게 조정)
-    _post_yaml(svc_env["worlds"], worlds["prod"])
-    _post_yaml(svc_env["worlds"], worlds["sandbox"])
+    _post_yaml(service_worlds_registered["worlds"], worlds["prod"])
+    _post_yaml(service_worlds_registered["worlds"], worlds["sandbox"])
 
 
 @pytest.mark.order(3)
-def test_service_mode_gateway_event_tokens(svc_env):
+def test_service_mode_gateway_event_tokens(service_worlds_registered):
     # 각 월드에 대해 Gateway /events/subscribe 토큰 획득 및 클레임 확인
     for wid in ("prod-us-equity", "sandbox-crypto"):
-        try:
-            sub = _gateway_subscribe(svc_env["gateway"], wid)
-        except Exception:
-            pytest.skip("gateway /events/subscribe not reachable")
+        last_err = None
+        for _ in range(5):
+            try:
+                sub = _gateway_subscribe(service_worlds_registered["gateway"], wid)
+                break
+            except Exception as e:
+                last_err = e
+                time.sleep(0.5)
+        else:
+            pytest.skip(f"gateway /events/subscribe not reachable: {last_err}")
         assert "token" in sub and sub["token"], "missing token"
         claims = _decode_jwt_no_verify(sub["token"])
         assert claims.get("world_id") == wid
 
 
 @pytest.mark.order(4)
-def test_service_mode_metrics_have_world_labels(svc_env):
-    metrics_url = svc_env.get("metrics")
+def test_service_mode_metrics_have_world_labels(service_worlds_registered):
+    metrics_url = service_worlds_registered.get("metrics")
     if not metrics_url:
         pytest.skip("QMTL_METRICS_URL not set")
     try:
-        body = _read_metrics(metrics_url)
-    except Exception:
-        pytest.skip("metrics endpoint not reachable")
+        body = _wait_for_metrics_labels(
+            metrics_url,
+            (
+                ('world_id="prod-us-equity"', 'world="prod-us-equity"'),
+                ('world_id="sandbox-crypto"', 'world="sandbox-crypto"'),
+            ),
+        )
+    except urllib.error.URLError as exc:
+        pytest.skip(f"metrics endpoint not reachable: {exc}")
     # 최소한 world 라벨이 두 개 다수 관찰되는지 확인(패턴은 환경에 맞게 구체화)
     assert 'world_id="prod-us-equity"' in body or 'world="prod-us-equity"' in body
     assert 'world_id="sandbox-crypto"' in body or 'world="sandbox-crypto"' in body

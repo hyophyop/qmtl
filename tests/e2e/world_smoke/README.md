@@ -45,6 +45,11 @@ cd tests/e2e/world_smoke/scripts
 # SDK 모드 (기본)
 pytest -q tests/e2e/world_smoke/test_world_service_smoke.py
 
+# 서비스 모드 (in-process 스택, 권장)
+USE_INPROC_WS_STACK=1 \
+WS_MODE=service \
+uv run -m pytest -q tests/e2e/world_smoke -q
+
 # 서비스 모드
 WS_MODE=service \
 WORLDS_BASE_URL=http://localhost:8080 \
