@@ -93,30 +93,52 @@ def _stream_inputs(strategy):
     return [n for n in getattr(strategy, "nodes", []) if isinstance(n, StreamInput)]
 
 
-def test_submit_default_safe_downgrades_when_missing_as_of(core_loop_world_id: str, monkeypatch: pytest.MonkeyPatch):
-    # Ensure deterministic env for the CLI run
+def _assert_ws_payload(payload: dict, *, world_id: str) -> dict:
+    assert payload.get("world") == world_id
+    assert "ws" in payload
+    ws = payload["ws"]
+    assert isinstance(ws, dict)
+    return ws
+
+
+def _assert_ws_core_fields(payload: dict, ws: dict, *, world_id: str) -> None:
+    assert ws.get("world") == world_id
+    assert ws.get("status") == payload.get("status")
+    assert ws.get("downgrade_reason") == payload.get("downgrade_reason")
+    assert ws.get("safe_mode") == payload.get("safe_mode")
+
+
+def _assert_ws_envelope_keys(payload: dict, ws: dict) -> None:
+    assert "precheck" in payload  # even if null, the field should exist
+    assert "decision" in payload
+    assert "activation" in payload
+    assert "decision" in ws
+    assert "activation" in ws
+
+
+def test_submit_json_populates_decision_activation(
+    core_loop_stack: CoreLoopStackHandle,
+    core_loop_world_id: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
     monkeypatch.setenv("QMTL_DEFAULT_WORLD", core_loop_world_id)
-    result = _submit(
+    payload, result = _submit_json(
         "core_loop_demo_strategy:CoreLoopDemoStrategy",
         world=core_loop_world_id,
     )
 
-    # When running without as_of/dataset in backtest, CLI prints a safe mode warning
-    assert "Safe mode: execution was downgraded" in result["stderr"]
+    decision = payload.get("decision")
+    activation = payload.get("activation")
+    assert isinstance(decision, dict), f"payload={payload}"
+    assert isinstance(activation, dict), f"payload={payload}"
+    assert decision.get("world_id") in _world_id_candidates(core_loop_world_id)
+    assert activation.get("world_id") in _world_id_candidates(core_loop_world_id)
     assert result["code"] in (0, 1)
 
-
-def test_submit_reports_downgrade_reason(core_loop_world_id: str, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("QMTL_DEFAULT_WORLD", core_loop_world_id)
-    result = _submit(
-        "core_loop_demo_strategy:CoreLoopDemoStrategy",
-        world=core_loop_world_id,
-    )
-
-    # SubmitResult repr should include downgrade flags for contract visibility
-    stdout = result["stdout"]
-    assert "downgraded" in stdout
-    assert "downgrade_reason" in stdout or "missing_as_of" in stdout
+    if core_loop_stack.mode == "inproc":
+        assert payload.get("downgraded") is False
+        assert payload.get("safe_mode") is False
+        assert "Safe mode: execution was downgraded" not in result["stderr"]
 
 
 def test_submit_json_includes_ws_envelope(core_loop_world_id: str, monkeypatch: pytest.MonkeyPatch):
@@ -127,17 +149,9 @@ def test_submit_json_includes_ws_envelope(core_loop_world_id: str, monkeypatch: 
     )
 
     # Contract: JSON output keeps WS envelope separate and mirrors downgrade flags.
-    assert payload.get("world") == core_loop_world_id
-    assert "ws" in payload and isinstance(payload["ws"], dict)
-    ws = payload["ws"]
-
-    assert ws.get("world") == core_loop_world_id
-    assert ws.get("status") == payload.get("status")
-    assert ws.get("downgrade_reason") == payload.get("downgrade_reason")
-    assert ws.get("safe_mode") == payload.get("safe_mode")
-    assert "precheck" in payload  # even if null, the field should exist
-    assert "decision" in payload and "activation" in payload
-    assert "decision" in ws and "activation" in ws
+    ws = _assert_ws_payload(payload, world_id=core_loop_world_id)
+    _assert_ws_core_fields(payload, ws, world_id=core_loop_world_id)
+    _assert_ws_envelope_keys(payload, ws)
     assert result["code"] in (0, 1)
 
 

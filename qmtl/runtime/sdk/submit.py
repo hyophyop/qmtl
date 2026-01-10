@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from .strategy import Strategy
     from .gateway_client import GatewayClient
     from .services import RunnerServices
+    from qmtl.foundation.common.compute_key import ComputeContext
 
 from .services import get_global_services
 from .world_data import (
@@ -484,6 +485,210 @@ def _run_coroutine_blocking(coro: Coroutine[object, object, SubmitResult]) -> Su
     return value
 
 
+def _attach_context_flags(
+    result: SubmitResult,
+    *,
+    compute_context: "ComputeContext",
+    context_override: dict[str, Any] | None,
+) -> SubmitResult:
+    downgraded = getattr(compute_context, "downgraded", False)
+    reason = getattr(compute_context, "downgrade_reason", None)
+    safe_mode = getattr(compute_context, "safe_mode", False)
+    if context_override is not None:
+        downgraded = context_override.get("downgraded", downgraded)
+        reason = context_override.get("downgrade_reason", reason)
+        safe_mode = context_override.get("safe_mode", safe_mode)
+    result.downgraded = bool(downgraded)
+    result.downgrade_reason = getattr(reason, "value", reason)
+    result.safe_mode = bool(safe_mode)
+    return result
+
+
+async def _finalize_submit_result(
+    result: SubmitResult,
+    *,
+    compute_context: "ComputeContext",
+    context_override: dict[str, Any] | None,
+    gateway_available: bool,
+    gateway_url: str | None,
+    world_id: str,
+    services: "RunnerServices",
+) -> SubmitResult:
+    finalized = _attach_context_flags(
+        result,
+        compute_context=compute_context,
+        context_override=context_override,
+    )
+    allocation_result = await _allocation_snapshot_for_submit(
+        gateway_available=gateway_available,
+        gateway_url=gateway_url,
+        world_id=world_id,
+        services=services,
+    )
+    finalized = _apply_allocation_result(finalized, allocation_result)
+    return await _maybe_attach_ws_envelopes(
+        finalized,
+        gateway_url=gateway_url,
+        world_id=world_id,
+    )
+
+
+async def _allocation_snapshot_for_submit(
+    *,
+    gateway_available: bool,
+    gateway_url: str | None,
+    world_id: str,
+    services: "RunnerServices",
+) -> AllocationSnapshotResult:
+    if not gateway_url:
+        notice = (
+            "gateway unavailable; allocation snapshot not fetched"
+            if not gateway_available
+            else "gateway url missing; allocation snapshot not fetched"
+        )
+        return AllocationSnapshotResult(snapshot=None, notice=notice)
+    try:
+        return await _fetch_allocation_snapshot_with_notice(
+            gateway_url=gateway_url,
+            world_id=world_id,
+            client=services.gateway_client,
+        )
+    except Exception:
+        logger.debug("Failed to attach allocation snapshot", exc_info=True)
+        return AllocationSnapshotResult(
+            snapshot=None,
+            notice="allocation lookup failed (gateway error)",
+        )
+
+
+def _apply_allocation_result(
+    result: SubmitResult,
+    allocation_result: AllocationSnapshotResult,
+) -> SubmitResult:
+    if allocation_result.snapshot is not None:
+        result.allocation = allocation_result.snapshot
+    if allocation_result.notice and not result.allocation_notice:
+        result.allocation_notice = allocation_result.notice
+    result.allocation_stale = bool(result.allocation_stale or allocation_result.stale)
+    return result
+
+
+async def _maybe_attach_ws_envelopes(
+    result: SubmitResult,
+    *,
+    gateway_url: str | None,
+    world_id: str,
+) -> SubmitResult:
+    if not gateway_url:
+        return result
+    decision_before = result.decision
+    activation_before = result.activation
+    try:
+        if result.decision is None:
+            result.decision = await _fetch_decision_envelope(
+                gateway_url=gateway_url,
+                world_id=world_id,
+            )
+        if result.activation is None and result.strategy_id:
+            result.activation = await _fetch_activation_envelope(
+                gateway_url=gateway_url,
+                world_id=world_id,
+                strategy_id=result.strategy_id,
+            )
+    except Exception:
+        logger.debug("Failed to fetch WS envelopes during finalize", exc_info=True)
+        _apply_decision_unavailable(result)
+        return result
+    if result.decision is None and decision_before is None and activation_before is None:
+        _apply_decision_unavailable(result)
+    return result
+
+
+def _apply_decision_unavailable(result: SubmitResult) -> None:
+    if result.downgrade_reason in (None, "missing_as_of"):
+        result.downgrade_reason = "decision_unavailable"
+    result.downgraded = True
+    result.safe_mode = True
+
+
+def _context_override_from_bootstrap(
+    bootstrap_out: "BootstrapOutcome",
+) -> dict[str, Any] | None:
+    if not bootstrap_out.context_available:
+        return None
+    return {
+        "downgraded": bootstrap_out.downgraded,
+        "downgrade_reason": bootstrap_out.downgrade_reason,
+        "safe_mode": bootstrap_out.safe_mode,
+    }
+
+
+def _apply_bootstrap_offline_flag(
+    gateway_available: bool,
+    bootstrap_out: "BootstrapOutcome",
+) -> bool:
+    if bootstrap_out.force_offline:
+        return False
+    return gateway_available
+
+
+async def _submit_with_validation_flow(
+    *,
+    strategy: "Strategy",
+    strategy_class_name: str,
+    strategy_id: str | None,
+    resolved_world: str,
+    world_notice: list[str],
+    auto_validate: bool,
+    auto_returns: bool | AutoReturnsConfig | None,
+    auto_returns_hints: list[str],
+    backtest_returns: Sequence[float] | None,
+    resolved_preset: str | None,
+    gateway_url: str,
+    gateway_available: bool,
+    services: "RunnerServices",
+) -> SubmitResult:
+    if not auto_validate:
+        return _basic_result(
+            strategy=strategy,
+            strategy_id=strategy_id,
+            resolved_world=resolved_world,
+            gateway_available=gateway_available,
+            world_notice=world_notice,
+        )
+    if not backtest_returns:
+        return _reject_due_to_no_returns(
+            strategy=strategy,
+            strategy_class_name=strategy_class_name,
+            strategy_id=strategy_id,
+            resolved_world=resolved_world,
+            world_notice=world_notice,
+            auto_returns_requested=bool(auto_returns),
+            auto_returns_hints=auto_returns_hints,
+        )
+
+    validation_result, ws_eval = await _run_validation_and_ws_eval(
+        strategy=strategy,
+        strategy_id=strategy_id or strategy_class_name,
+        resolved_world=resolved_world,
+        resolved_preset=resolved_preset,
+        backtest_returns=backtest_returns,
+        services=services,
+        gateway_url=gateway_url,
+        gateway_available=gateway_available,
+    )
+    return _build_submit_result_from_validation(
+        strategy=strategy,
+        strategy_class_name=strategy_class_name,
+        strategy_id=strategy_id,
+        resolved_world=resolved_world,
+        world_notice=world_notice,
+        validation_result=validation_result,
+        ws_eval=ws_eval,
+        gateway_available=gateway_available,
+    )
+
+
 async def submit_async(
     strategy_cls: type["Strategy"] | "Strategy",
     *,
@@ -564,45 +769,12 @@ async def submit_async(
         world_id=resolved_world,
         execution_domain=execution_domain,
     )
-    def _attach_context_flags(result: SubmitResult) -> SubmitResult:
-        result.downgraded = bool(getattr(compute_context, "downgraded", False))
-        reason = getattr(compute_context, "downgrade_reason", None)
-        result.downgrade_reason = getattr(reason, "value", reason)
-        result.safe_mode = bool(getattr(compute_context, "safe_mode", False))
-        return result
+
+    context_override: dict[str, Any] | None = None
     setattr(strategy, "compute_context", {
         "world_id": resolved_world,
         "execution_domain": execution_domain,
     })
-
-    async def _finalize_with_allocation(result: SubmitResult) -> SubmitResult:
-        finalized = _attach_context_flags(result)
-        allocation_result = AllocationSnapshotResult(snapshot=None)
-        if gateway_available or gateway_url:
-            try:
-                allocation_result = await _fetch_allocation_snapshot_with_notice(
-                    gateway_url=gateway_url,
-                    world_id=resolved_world,
-                    client=services.gateway_client,
-                )
-            except Exception:
-                logger.debug("Failed to attach allocation snapshot", exc_info=True)
-                allocation_result = AllocationSnapshotResult(
-                    snapshot=None,
-                    notice="allocation lookup failed (gateway error)",
-                )
-        else:
-            allocation_result = AllocationSnapshotResult(
-                snapshot=None,
-                notice="gateway unavailable; allocation snapshot not fetched",
-            )
-
-        if allocation_result.snapshot is not None:
-            finalized.allocation = allocation_result.snapshot
-        if allocation_result.notice and not finalized.allocation_notice:
-            finalized.allocation_notice = allocation_result.notice
-        finalized.allocation_stale = bool(finalized.allocation_stale or allocation_result.stale)
-        return finalized
 
     try:
         strategy.on_start()
@@ -637,8 +809,11 @@ async def submit_async(
             gateway_available=gateway_available,
             policy_payload=world_ctx.policy_payload,
         )
-        if bootstrap_out.force_offline:
-            gateway_available = False
+        context_override = _context_override_from_bootstrap(bootstrap_out)
+        gateway_available = _apply_bootstrap_offline_flag(
+            gateway_available,
+            bootstrap_out,
+        )
         backtest_returns, auto_returns_hints = await _warmup_and_collect_returns(
             services=services,
             strategy=strategy,
@@ -646,50 +821,29 @@ async def submit_async(
             returns=returns,
             auto_returns=auto_returns,
         )
-        if not auto_validate:
-            return await _finalize_with_allocation(
-                _basic_result(
-                    strategy=strategy,
-                    strategy_id=bootstrap_out.strategy_id,
-                    resolved_world=resolved_world,
-                    gateway_available=gateway_available,
-                    world_notice=world_ctx.world_notice,
-                )
-            )
-        if not backtest_returns:
-            return await _finalize_with_allocation(
-                _reject_due_to_no_returns(
-                    strategy=strategy,
-                    strategy_class_name=strategy_class_name,
-                    strategy_id=bootstrap_out.strategy_id,
-                    resolved_world=resolved_world,
-                    world_notice=world_ctx.world_notice,
-                    auto_returns_requested=bool(auto_returns),
-                    auto_returns_hints=auto_returns_hints,
-                )
-            )
-
-        validation_result, ws_eval = await _run_validation_and_ws_eval(
+        submit_result = await _submit_with_validation_flow(
             strategy=strategy,
-            strategy_id=bootstrap_out.strategy_id or strategy_class_name,
+            strategy_class_name=strategy_class_name,
+            strategy_id=bootstrap_out.strategy_id,
             resolved_world=resolved_world,
-            resolved_preset=world_ctx.resolved_preset,
+            world_notice=world_ctx.world_notice,
+            auto_validate=auto_validate,
+            auto_returns=auto_returns,
+            auto_returns_hints=auto_returns_hints,
             backtest_returns=backtest_returns,
-            services=services,
+            resolved_preset=world_ctx.resolved_preset,
             gateway_url=gateway_url,
             gateway_available=gateway_available,
+            services=services,
         )
-        return await _finalize_with_allocation(
-            _build_submit_result_from_validation(
-                strategy=strategy,
-                strategy_class_name=strategy_class_name,
-                strategy_id=bootstrap_out.strategy_id,
-                resolved_world=resolved_world,
-                world_notice=world_ctx.world_notice,
-                validation_result=validation_result,
-                ws_eval=ws_eval,
-                gateway_available=gateway_available,
-            )
+        return await _finalize_submit_result(
+            submit_result,
+            compute_context=compute_context,
+            context_override=context_override,
+            gateway_available=gateway_available,
+            gateway_url=gateway_url,
+            world_id=resolved_world,
+            services=services,
         )
     except Exception as e:  # pragma: no cover - safety net
         try:
@@ -699,7 +853,7 @@ async def submit_async(
 
         fallback_notice = world_ctx.world_notice if world_ctx else []
         fallback_id = _strategy_id_or_fallback(None, strategy, prefix="failed")
-        return await _finalize_with_allocation(
+        return await _finalize_submit_result(
             SubmitResult(
                 strategy_id=fallback_id,
                 status="rejected",
@@ -707,7 +861,13 @@ async def submit_async(
                 rejection_reason=str(e),
                 improvement_hints=fallback_notice + _get_improvement_hints(e),
                 strategy=strategy if "strategy" in locals() else None,
-            )
+            ),
+            compute_context=compute_context,
+            context_override=context_override,
+            gateway_available=gateway_available,
+            gateway_url=gateway_url,
+            world_id=resolved_world,
+            services=services,
         )
 
 def _strategy_from_input(strategy_cls: type["Strategy"] | "Strategy") -> tuple["Strategy", str]:
@@ -732,6 +892,10 @@ class BootstrapOutcome:
     strategy_id: str | None
     offline_mode: bool
     force_offline: bool = False
+    downgraded: bool = False
+    downgrade_reason: str | None = None
+    safe_mode: bool = False
+    context_available: bool = False
 
 
 def _strategy_needs_data_provider(strategy: "Strategy") -> bool:
@@ -1020,6 +1184,10 @@ async def _bootstrap_strategy(
         strategy_id=bootstrap_result.strategy_id,
         offline_mode=bootstrap_result.offline_mode,
         force_offline=False,
+        downgraded=bootstrap_result.downgraded,
+        downgrade_reason=bootstrap_result.downgrade_reason,
+        safe_mode=bootstrap_result.safe_mode,
+        context_available=bootstrap_result.context_available,
     )
 
 
@@ -1219,6 +1387,49 @@ def _build_submit_result_from_validation(
     )
 
 
+def _maybe_ws_rejection_with_precheck(
+    *,
+    strategy: "Strategy",
+    strategy_id: str | None,
+    resolved_world: str,
+    world_notice: list[str],
+    validation_result: Any,
+    ws_eval: WsEvalResult | None,
+    precheck: PrecheckResult | None,
+) -> SubmitResult | None:
+    rejection = _ws_rejection_result(
+        strategy=strategy,
+        strategy_id=strategy_id,
+        resolved_world=resolved_world,
+        world_notice=world_notice,
+        validation_result=validation_result,
+        ws_eval=ws_eval,
+    )
+    if rejection is None:
+        return None
+    rejection.precheck = precheck
+    return rejection
+
+
+def _resolve_ws_eval_fields(
+    validation_result: Any,
+    ws_eval: WsEvalResult | None,
+) -> tuple[float | None, int | None, float | None]:
+    if ws_eval is None:
+        return validation_result.weight, validation_result.rank, validation_result.contribution
+    return _merge_ws_eval_fields(ws_eval, None, None, None)
+
+
+def _metrics_from_validation_and_ws(
+    validation_result: Any,
+    ws_eval: WsEvalResult | None,
+) -> StrategyMetrics:
+    metrics_out = _base_metrics_from_validation(validation_result)
+    if ws_eval and ws_eval.correlation_avg is not None:
+        return _clone_metrics_with_corr(metrics_out, ws_eval.correlation_avg)
+    return metrics_out
+
+
 def _build_passed_result(
     *,
     strategy: "Strategy",
@@ -1229,26 +1440,21 @@ def _build_passed_result(
     ws_eval: WsEvalResult | None,
 ) -> SubmitResult:
     precheck = _precheck_from_validation(validation_result)
-    rejection = _ws_rejection_result(
+    rejection = _maybe_ws_rejection_with_precheck(
         strategy=strategy,
         strategy_id=strategy_id,
         resolved_world=resolved_world,
         world_notice=world_notice,
         validation_result=validation_result,
         ws_eval=ws_eval,
+        precheck=precheck,
     )
-    if rejection:
-        rejection.precheck = precheck
+    if rejection is not None:
         return rejection
 
     status = _resolved_status(validation_result, ws_eval)
-    weight = None if ws_eval else validation_result.weight
-    rank = None if ws_eval else validation_result.rank
-    contribution = None if ws_eval else validation_result.contribution
-    weight, rank, contribution = _merge_ws_eval_fields(ws_eval, weight, rank, contribution)
-    metrics_out = _base_metrics_from_validation(validation_result)
-    if ws_eval and ws_eval.correlation_avg is not None:
-        metrics_out = _clone_metrics_with_corr(metrics_out, ws_eval.correlation_avg)
+    weight, rank, contribution = _resolve_ws_eval_fields(validation_result, ws_eval)
+    metrics_out = _metrics_from_validation_and_ws(validation_result, ws_eval)
     eval_run_id, eval_run_url = _evaluation_run_fields(ws_eval)
 
     return SubmitResult(
@@ -1956,6 +2162,104 @@ class WsEvalResult:
     evaluation_run_url: str | None = None
 
 
+def _collect_metric_fields(metrics: "StrategyMetrics", keys: Sequence[str]) -> dict[str, Any]:
+    collected: dict[str, Any] = {}
+    for key in keys:
+        value = getattr(metrics, key, None)
+        if value is not None:
+            collected[key] = value
+    return collected
+
+
+def _policy_payload_for_eval(preset: str | None) -> dict[str, Any] | None:
+    if not preset:
+        return None
+    try:
+        from .presets import get_preset
+
+        preset_obj = get_preset(preset)
+        policy_dict = preset_obj.to_policy_dict()
+        return {"name": preset_obj.name, **policy_dict}
+    except Exception:
+        return None
+
+
+def _attach_ws_eval_metadata(
+    result: WsEvalResult,
+    *,
+    gateway_url: str,
+    world_id: str,
+    strategy_id: str,
+    evaluation_run_id: str | None,
+) -> WsEvalResult:
+    if result.evaluation_run_id is None:
+        result.evaluation_run_id = evaluation_run_id
+    if result.evaluation_run_url and result.evaluation_run_url.startswith("/"):
+        result.evaluation_run_url = gateway_url.rstrip("/") + result.evaluation_run_url
+    if (
+        result.evaluation_run_url is None
+        and result.evaluation_run_id
+        and gateway_url
+        and world_id
+        and strategy_id
+    ):
+        result.evaluation_run_url = _build_evaluation_run_url(
+            gateway_url, world_id, strategy_id, result.evaluation_run_id
+        )
+    return result
+
+
+def _ws_eval_from_gateway_data(
+    data: dict[str, Any],
+    *,
+    gateway_url: str,
+    world_id: str,
+    strategy_id: str,
+    evaluation_run_id: str | None,
+) -> WsEvalResult:
+    if "error" in data:
+        return _attach_ws_eval_metadata(
+            WsEvalResult(error=str(data["error"])),
+            gateway_url=gateway_url,
+            world_id=world_id,
+            strategy_id=strategy_id,
+            evaluation_run_id=evaluation_run_id,
+        )
+    return _attach_ws_eval_metadata(
+        _parse_ws_eval_response(data, strategy_id),
+        gateway_url=gateway_url,
+        world_id=world_id,
+        strategy_id=strategy_id,
+        evaluation_run_id=evaluation_run_id,
+    )
+
+
+def _build_ws_eval_payload(
+    *,
+    payload_metrics: dict[str, Any],
+    strategy_id: str,
+    returns: Sequence[float],
+    evaluation_run_id: str | None,
+    stage: str | None,
+    risk_tier: str | None,
+    policy_payload: dict[str, Any] | None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "metrics": {strategy_id: payload_metrics},
+        "series": {strategy_id: {"returns": list(returns)}},
+        "strategy_id": strategy_id,
+    }
+    if evaluation_run_id:
+        payload["run_id"] = evaluation_run_id
+    if stage:
+        payload["stage"] = stage
+    if risk_tier:
+        payload["risk_tier"] = risk_tier
+    if policy_payload:
+        payload["policy"] = policy_payload
+    return payload
+
+
 async def _evaluate_with_worldservice(
     *,
     gateway_url: str,
@@ -1972,47 +2276,28 @@ async def _evaluate_with_worldservice(
     """Ask WorldService (via Gateway) to evaluate strategy metrics."""
     from .world_validation_metrics import build_v1_evaluation_metrics
 
-    extra: dict[str, Any] = {}
-    for key in ("win_rate", "win_ratio", "profit_factor", "car_mdd", "rar_mdd", "total_return", "num_trades"):
-        value = getattr(metrics, key, None)
-        if value is not None:
-            extra[key] = value
-    risk_metrics: dict[str, Any] = {}
-    for key in ("adv_utilization_p95", "participation_rate_p95"):
-        value = getattr(metrics, key, None)
-        if value is not None:
-            risk_metrics[key] = value
-    payload_metrics: dict[str, Any] = build_v1_evaluation_metrics(
+    extra = _collect_metric_fields(
+        metrics,
+        (
+            "win_rate",
+            "win_ratio",
+            "profit_factor",
+            "car_mdd",
+            "rar_mdd",
+            "total_return",
+            "num_trades",
+        ),
+    )
+    risk_metrics = _collect_metric_fields(
+        metrics,
+        ("adv_utilization_p95", "participation_rate_p95"),
+    )
+    payload_metrics = build_v1_evaluation_metrics(
         returns,
         extra_metrics=extra or None,
         risk_metrics=risk_metrics or None,
     )
-    policy_payload: dict[str, Any] | None = None
-    if preset:
-        try:
-            from .presets import get_preset
-            preset_obj = get_preset(preset)
-            policy_dict = preset_obj.to_policy_dict()
-            policy_payload = {"name": preset_obj.name, **policy_dict}
-        except Exception:
-            policy_payload = None
-
-    def _attach_metadata(result: WsEvalResult) -> WsEvalResult:
-        if result.evaluation_run_id is None:
-            result.evaluation_run_id = evaluation_run_id
-        if result.evaluation_run_url and result.evaluation_run_url.startswith("/"):
-            result.evaluation_run_url = gateway_url.rstrip("/") + result.evaluation_run_url
-        if (
-            result.evaluation_run_url is None
-            and result.evaluation_run_id
-            and gateway_url
-            and world_id
-            and strategy_id
-        ):
-            result.evaluation_run_url = _build_evaluation_run_url(
-                gateway_url, world_id, strategy_id, result.evaluation_run_id
-            )
-        return result
+    policy_payload = _policy_payload_for_eval(preset)
 
     # Use GatewayClient if provided
     if client is not None:
@@ -2027,24 +2312,24 @@ async def _evaluate_with_worldservice(
             stage=stage,
             risk_tier=risk_tier,
         )
-        if "error" in data:
-            return _attach_metadata(WsEvalResult(error=str(data["error"])))
-        return _attach_metadata(_parse_ws_eval_response(data, strategy_id))
+        return _ws_eval_from_gateway_data(
+            data,
+            gateway_url=gateway_url,
+            world_id=world_id,
+            strategy_id=strategy_id,
+            evaluation_run_id=evaluation_run_id,
+        )
 
     # Fallback to direct httpx
-    payload: dict[str, Any] = {
-        "metrics": {strategy_id: payload_metrics},
-        "series": {strategy_id: {"returns": list(returns)}},
-        "strategy_id": strategy_id,
-    }
-    if evaluation_run_id:
-        payload["run_id"] = evaluation_run_id
-    if stage:
-        payload["stage"] = stage
-    if risk_tier:
-        payload["risk_tier"] = risk_tier
-    if policy_payload:
-        payload["policy"] = policy_payload
+    payload = _build_ws_eval_payload(
+        payload_metrics=payload_metrics,
+        strategy_id=strategy_id,
+        returns=returns,
+        evaluation_run_id=evaluation_run_id,
+        stage=stage,
+        risk_tier=risk_tier,
+        policy_payload=policy_payload,
+    )
     try:
         async with httpx.AsyncClient(timeout=5.0) as http_client:
             resp = await http_client.post(
@@ -2052,11 +2337,29 @@ async def _evaluate_with_worldservice(
                 json=payload,
             )
             if resp.status_code >= 400:
-                return _attach_metadata(WsEvalResult(error=f"WS evaluate error {resp.status_code}"))
+                return _attach_ws_eval_metadata(
+                    WsEvalResult(error=f"WS evaluate error {resp.status_code}"),
+                    gateway_url=gateway_url,
+                    world_id=world_id,
+                    strategy_id=strategy_id,
+                    evaluation_run_id=evaluation_run_id,
+                )
             data = resp.json()
-            return _attach_metadata(_parse_ws_eval_response(data, strategy_id))
+            return _attach_ws_eval_metadata(
+                _parse_ws_eval_response(data, strategy_id),
+                gateway_url=gateway_url,
+                world_id=world_id,
+                strategy_id=strategy_id,
+                evaluation_run_id=evaluation_run_id,
+            )
     except Exception as exc:  # pragma: no cover - network/JSON issues
-        return _attach_metadata(WsEvalResult(error=str(exc)))
+        return _attach_ws_eval_metadata(
+            WsEvalResult(error=str(exc)),
+            gateway_url=gateway_url,
+            world_id=world_id,
+            strategy_id=strategy_id,
+            evaluation_run_id=evaluation_run_id,
+        )
 
 
 async def _fetch_decision_envelope(
@@ -2101,6 +2404,64 @@ async def _fetch_activation_envelope(
     return None
 
 
+def _select_allocation_snapshot(
+    allocations: dict[str, Any],
+    world_id: str,
+) -> dict[str, Any] | None:
+    for candidate in _world_id_candidates(world_id):
+        candidate_snapshot = allocations.get(candidate)
+        if isinstance(candidate_snapshot, dict):
+            return candidate_snapshot
+    if len(allocations) == 1:
+        only_entry = next(iter(allocations.values()))
+        if isinstance(only_entry, dict):
+            return only_entry
+    return None
+
+
+def _parse_allocation_value(snapshot: dict[str, Any]) -> float | None:
+    alloc_value_raw = snapshot.get("allocation")
+    if alloc_value_raw is None:
+        return None
+    try:
+        return float(alloc_value_raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_stale_flag(snapshot: dict[str, Any]) -> bool | None:
+    stale_raw = snapshot.get("stale")
+    if isinstance(stale_raw, bool):
+        return stale_raw
+    if stale_raw is None:
+        return None
+    try:
+        return bool(int(stale_raw))
+    except Exception:
+        return None
+
+
+def _parse_strategy_alloc_total(snapshot: dict[str, Any]) -> dict[str, float] | None:
+    raw_strategy_alloc = snapshot.get("strategy_alloc_total")
+    if not isinstance(raw_strategy_alloc, dict):
+        return None
+    strategy_alloc_total: dict[str, float] = {}
+    for sid, ratio in raw_strategy_alloc.items():
+        try:
+            val = float(ratio)
+        except (TypeError, ValueError):
+            continue
+        if isfinite(val):
+            strategy_alloc_total[str(sid)] = val
+    return strategy_alloc_total or None
+
+
+def _optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
 def _extract_allocation_snapshot(
     payload: dict[str, Any] | None, world_id: str
 ) -> AllocationSnapshot | None:
@@ -2109,55 +2470,22 @@ def _extract_allocation_snapshot(
     allocations = payload.get("allocations")
     if not isinstance(allocations, dict):
         return None
-    snapshot: dict[str, Any] | None = None
-    for candidate in _world_id_candidates(world_id):
-        candidate_snapshot = allocations.get(candidate)
-        if isinstance(candidate_snapshot, dict):
-            snapshot = candidate_snapshot
-            break
-    if snapshot is None and len(allocations) == 1:
-        only_entry = next(iter(allocations.values()))
-        snapshot = only_entry if isinstance(only_entry, dict) else None
+    snapshot = _select_allocation_snapshot(allocations, world_id)
     if snapshot is None:
         return None
 
-    try:
-        alloc_value_raw = snapshot.get("allocation")
-        alloc_value = float(alloc_value_raw) if alloc_value_raw is not None else None
-    except (TypeError, ValueError):
-        alloc_value = None
-    stale_raw = snapshot.get("stale")
-    stale_flag = None
-    if isinstance(stale_raw, bool):
-        stale_flag = stale_raw
-    elif stale_raw is not None:
-        try:
-            stale_flag = bool(int(stale_raw))
-        except Exception:
-            stale_flag = None
-
-    strategy_alloc_total: dict[str, float] | None = None
-    raw_strategy_alloc = snapshot.get("strategy_alloc_total")
-    if isinstance(raw_strategy_alloc, dict):
-        strategy_alloc_total = {}
-        for sid, ratio in raw_strategy_alloc.items():
-            try:
-                val = float(ratio)
-            except (TypeError, ValueError):
-                continue
-            if isfinite(val):
-                strategy_alloc_total[str(sid)] = val
-        if not strategy_alloc_total:
-            strategy_alloc_total = None
+    alloc_value = _parse_allocation_value(snapshot)
+    stale_flag = _parse_stale_flag(snapshot)
+    strategy_alloc_total = _parse_strategy_alloc_total(snapshot)
 
     return AllocationSnapshot(
         world_id=str(snapshot.get("world_id") or world_id),
         allocation=alloc_value,
-        run_id=str(snapshot.get("run_id")) if snapshot.get("run_id") is not None else None,
-        etag=str(snapshot.get("etag")) if snapshot.get("etag") is not None else None,
+        run_id=_optional_str(snapshot.get("run_id")),
+        etag=_optional_str(snapshot.get("etag")),
         strategy_alloc_total=strategy_alloc_total,
-        updated_at=str(snapshot.get("updated_at")) if snapshot.get("updated_at") is not None else None,
-        ttl=str(snapshot.get("ttl")) if snapshot.get("ttl") is not None else None,
+        updated_at=_optional_str(snapshot.get("updated_at")),
+        ttl=_optional_str(snapshot.get("ttl")),
         stale=stale_flag,
     )
 
@@ -2222,37 +2550,40 @@ async def _fetch_allocation_snapshot_with_notice(
 
 def _parse_ws_eval_response(data: dict[str, Any], strategy_id: str) -> WsEvalResult:
     """Parse WorldService evaluation response into WsEvalResult."""
-    active_list = data.get("active", [])
-    weights = data.get("weights", {}) or {}
-    contributions = data.get("contributions", {}) or data.get("contribution", {}) or {}
-    ranks = data.get("ranks", {}) or {}
-    violations = data.get("violations") or data.get("threshold_violations")
-    correlation_avg = data.get("correlation_avg") or data.get("correlation")
-    evaluation_run_id = data.get("evaluation_run_id")
-    evaluation_run_url = data.get("evaluation_run_url")
-
-    is_active = strategy_id in active_list if isinstance(active_list, list) else None
-    weight = _value_from_mapping(weights, strategy_id)
-    contribution = _value_from_mapping(contributions, strategy_id)
-    rank = _value_from_mapping(ranks, strategy_id)
-    violations_list = violations if isinstance(violations, list) else None
-    corr = float(correlation_avg) if isinstance(correlation_avg, (int, float)) else None
-    eval_run_id_str = str(evaluation_run_id) if evaluation_run_id is not None else None
-    eval_run_url_str = str(evaluation_run_url) if evaluation_run_url is not None else None
-
     return WsEvalResult(
-        active=is_active,
-        weight=weight,
-        contribution=contribution,
-        rank=rank,
-        violations=violations_list,
-        correlation_avg=corr,
-        evaluation_run_id=eval_run_id_str,
-        evaluation_run_url=eval_run_url_str,
+        active=_is_active_strategy(data.get("active"), strategy_id),
+        weight=_value_from_mapping(data.get("weights", {}), strategy_id),
+        contribution=_value_from_mapping(
+            data.get("contributions", {}) or data.get("contribution", {}),
+            strategy_id,
+        ),
+        rank=_value_from_mapping(data.get("ranks", {}), strategy_id),
+        violations=_list_or_none(data.get("violations") or data.get("threshold_violations")),
+        correlation_avg=_optional_float(data.get("correlation_avg") or data.get("correlation")),
+        evaluation_run_id=_optional_str(data.get("evaluation_run_id")),
+        evaluation_run_url=_optional_str(data.get("evaluation_run_url")),
     )
 
 
 def _value_from_mapping(mapping: object, key: str) -> Any:
     if isinstance(mapping, dict):
         return mapping.get(key)
+    return None
+
+
+def _list_or_none(value: Any) -> list[dict[str, object]] | None:
+    if isinstance(value, list):
+        return value
+    return None
+
+
+def _optional_float(value: Any) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _is_active_strategy(active_list: Any, strategy_id: str) -> bool | None:
+    if isinstance(active_list, list):
+        return strategy_id in active_list
     return None

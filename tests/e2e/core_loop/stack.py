@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import socket
 import threading
@@ -15,6 +16,7 @@ import uvicorn
 import yaml
 
 from qmtl.services.gateway.api import create_app
+from qmtl.services.gateway.database import SQLiteDatabase
 from qmtl.services.gateway.ws import WebSocketHub
 from tests.e2e.world_smoke.servers.worldservice_stub import app as ws_app, reset_state as reset_ws_state
 
@@ -29,6 +31,7 @@ class CoreLoopStackHandle:
     metrics_url: str | None
     world_ids: list[str]
     close: Callable[[], None] | None = None
+    stop_worldservice: Callable[[], None] | None = None
 
 
 def _find_free_port() -> int:
@@ -90,6 +93,7 @@ class InProcessCoreLoopStack:
         self._servers: list[_Server] = []
         self._env_backup: dict[str, str | None] = {}
         self._handle: CoreLoopStackHandle | None = None
+        self._ws_server: _Server | None = None
 
     def start(self) -> CoreLoopStackHandle:
         if self._handle is not None:
@@ -102,6 +106,7 @@ class InProcessCoreLoopStack:
         ws_server = _Server(ws_app, "127.0.0.1", ws_port)
         ws_server.start()
         _wait_http(f"http://127.0.0.1:{ws_port}/health", timeout=15)
+        self._ws_server = ws_server
 
         redis_client = None
         try:
@@ -112,14 +117,16 @@ class InProcessCoreLoopStack:
             # Fall back to real Redis when fakeredis is unavailable
             redis_client = None
 
+        database = SQLiteDatabase(":memory:")
+        asyncio.run(database.connect())
+
         gw_app = create_app(
             ws_hub=WebSocketHub(),
             redis_client=redis_client,
+            database=database,
             worldservice_url=f"http://127.0.0.1:{ws_port}",
             enable_worldservice_proxy=True,
             enable_background=False,
-            database_backend="sqlite",
-            database_dsn=":memory:",
             enforce_live_guard=False,
         )
         gw_server = _Server(gw_app, "127.0.0.1", gw_port)
@@ -150,6 +157,7 @@ class InProcessCoreLoopStack:
             metrics_url=os.environ.get("QMTL_METRICS_URL"),
             world_ids=world_ids,
             close=self.stop,
+            stop_worldservice=self.stop_worldservice,
         )
         return self._handle
 
@@ -160,6 +168,8 @@ class InProcessCoreLoopStack:
                 server.stop()
             except Exception:
                 pass
+            if server is self._ws_server:
+                self._ws_server = None
 
         for key, val in self._env_backup.items():
             if val is None:
@@ -168,6 +178,19 @@ class InProcessCoreLoopStack:
                 os.environ[key] = val
 
         self._handle = None
+
+    def stop_worldservice(self) -> None:
+        if self._ws_server is None:
+            return
+        try:
+            self._ws_server.stop()
+        except Exception:
+            pass
+        try:
+            self._servers.remove(self._ws_server)
+        except ValueError:
+            pass
+        self._ws_server = None
 
     @staticmethod
     def _seed_worlds(base_url: str, worlds: Iterable[Path]) -> list[str]:
@@ -194,15 +217,30 @@ class InProcessCoreLoopStack:
         return world_ids
 
 
+def _service_env_config() -> tuple[str, str] | None:
+    gateway = os.environ.get("GATEWAY_URL")
+    worlds = os.environ.get("WORLDS_BASE_URL")
+    if os.environ.get("WS_MODE") != "service" or not gateway or not worlds:
+        return None
+    return gateway, worlds
+
+
+def _world_ids_from_env() -> list[str]:
+    env_worlds = os.environ.get("CORE_LOOP_WORLD_IDS") or os.environ.get("CORE_LOOP_WORLD_ID")
+    if not env_worlds:
+        return []
+    return [w.strip() for w in env_worlds.split(",") if w.strip()]
+
+
 def _service_stack_from_env() -> CoreLoopStackHandle | None:
     stack_mode = os.environ.get("CORE_LOOP_STACK_MODE")
     if stack_mode == "inproc":
         return None
 
-    gateway = os.environ.get("GATEWAY_URL")
-    worlds = os.environ.get("WORLDS_BASE_URL")
-    if os.environ.get("WS_MODE") != "service" or not gateway or not worlds:
+    env_config = _service_env_config()
+    if env_config is None:
         return None
+    gateway, worlds = env_config
 
     health_url = f"{gateway.rstrip('/')}/health"
     if not _probe_health(health_url):
@@ -211,17 +249,12 @@ def _service_stack_from_env() -> CoreLoopStackHandle | None:
         warnings.warn(f"gateway health check failed at {health_url}; falling back to in-process stack")
         return None
 
-    world_ids_env: list[str] = []
-    env_worlds = os.environ.get("CORE_LOOP_WORLD_IDS") or os.environ.get("CORE_LOOP_WORLD_ID")
-    if env_worlds:
-        world_ids_env = [w.strip() for w in env_worlds.split(",") if w.strip()]
-
     return CoreLoopStackHandle(
         mode="service",
         gateway_url=gateway.rstrip("/"),
         worlds_url=worlds.rstrip("/"),
         metrics_url=os.environ.get("QMTL_METRICS_URL"),
-        world_ids=world_ids_env,
+        world_ids=_world_ids_from_env(),
         close=None,
     )
 

@@ -190,7 +190,7 @@ class ComputeContextService:
             if target_domain is None
             else context.with_overrides(execution_domain=target_domain)
         )
-        reason = context.downgrade_reason or DowngradeReason.DECISION_UNAVAILABLE
+        reason = DowngradeReason.DECISION_UNAVAILABLE
         gw_metrics.worlds_compute_context_downgrade_total.labels(
             reason=getattr(reason, "value", reason)
         ).inc()
