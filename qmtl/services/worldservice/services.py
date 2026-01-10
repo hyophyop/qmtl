@@ -20,6 +20,7 @@ from qmtl.model_cards import ModelCardRegistry
 from qmtl.foundation.common.hashutils import hash_bytes
 from qmtl.foundation.common.compute_context import canonicalize_world_mode
 from qmtl.runtime.sdk.world_validation_metrics import build_v1_evaluation_metrics
+from qmtl.services.observability import add_span_attributes, build_observability_fields
 
 from .activation import ActivationEventPublisher
 from .apply_flow import ApplyCoordinator
@@ -1047,6 +1048,14 @@ class WorldService:
             if run_id and strategy_id
             else None
         )
+        fields = build_observability_fields(
+            world_id=world_id,
+            run_id=run_id or payload.run_id,
+            strategy_id=strategy_id or payload.strategy_id,
+        )
+        add_span_attributes(fields)
+        if fields:
+            logger.info("evaluation_decision_completed", extra=fields)
         return ApplyResponse(
             active=active,
             evaluation_run_id=run_id,
@@ -1076,6 +1085,13 @@ class WorldService:
         run_id = payload.run_id or self._default_campaign_run_id(payload.campaign_id)
         candidates = list(payload.candidates or [])
         urls: Dict[str, str] = {}
+        fields = build_observability_fields(
+            world_id=world_id,
+            run_id=run_id,
+        )
+        add_span_attributes(fields)
+        if fields:
+            logger.info("cohort_evaluation_decision_completed", extra=fields)
 
         try:
             for strategy_id in candidates:

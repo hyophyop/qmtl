@@ -12,6 +12,7 @@ from typing import Any, Optional, Protocol
 from pydantic import ValidationError
 from qmtl.foundation.common.tagquery import MatchMode
 
+from qmtl.services.observability import add_span_attributes, build_observability_fields
 from .ws import WebSocketHub
 from . import metrics as gw_metrics
 from .controlbus_codec import decode as decode_cb, PROTO_CONTENT_TYPE
@@ -260,6 +261,14 @@ class ControlBusConsumer:
         if not self._track_delivery(key, marker, msg.topic):
             return
 
+        fields = build_observability_fields(
+            world_id=payload.world_id,
+            run_id=payload.run_id,
+        )
+        add_span_attributes(fields)
+        if fields:
+            logger.info("rebalancing_planned_received", extra=fields)
+
         gw_metrics.record_controlbus_message(msg.topic, msg.timestamp_ms)
         gw_metrics.record_rebalance_plan(
             payload.world_id, len(payload.plan.deltas)
@@ -349,6 +358,15 @@ class ControlBusConsumer:
 
         if msg.topic == "activation":
             self._record_apply_ack_metrics(msg)
+            fields = build_observability_fields(
+                world_id=msg.data.get("world_id"),
+                run_id=msg.data.get("run_id"),
+                etag=msg.data.get("etag") or msg.etag,
+                strategy_id=msg.data.get("strategy_id"),
+            )
+            add_span_attributes(fields)
+            if fields:
+                logger.info("activation_update_received", extra=fields)
 
         ws_hub = self.ws_hub
         if ws_hub is None:
@@ -460,6 +478,14 @@ class ControlBusConsumer:
             etag=etag,
             ts=ts,
         )
+        fields = build_observability_fields(
+            world_id=world_id,
+            execution_domain=execution_domain,
+            etag=etag,
+        )
+        add_span_attributes(fields)
+        if fields:
+            logger.info("queue_update_received", extra=fields)
         await self._maybe_emit_tagquery_upsert(ws_hub, tags, interval, queues, execution_domain)
 
     async def _maybe_emit_tagquery_upsert(

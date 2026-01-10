@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+import logging
 from typing import Any, Dict, Sequence
 
 from qmtl.foundation.common.hashutils import hash_bytes
+from qmtl.services.observability import add_span_attributes, build_observability_fields
 
 from .controlbus_producer import ControlBusProducer
 from .run_state import ApplyRunState
 from .storage import Storage
 from .risk_hub import PortfolioSnapshot, RiskSignalHub
+
+logger = logging.getLogger(__name__)
 
 
 class ActivationEventPublisher:
@@ -57,6 +61,15 @@ class ActivationEventPublisher:
                 payload=event_payload,
                 version=version,
             )
+            fields = build_observability_fields(
+                world_id=world_id,
+                strategy_id=event_payload.get("strategy_id"),
+                run_id=data.get("run_id"),
+                etag=data.get("etag", str(version)),
+            )
+            add_span_attributes(fields)
+            if fields:
+                logger.info("activation_update_published", extra=fields)
         ts = str(data.get("ts") or "")
         await self._publish_snapshot(world_id, version_hint=f"{ts}-{version}" if ts else str(version))
         return data
@@ -96,6 +109,15 @@ class ActivationEventPublisher:
                 requires_ack=requires_ack,
                 sequence=sequence,
             )
+            fields = build_observability_fields(
+                world_id=world_id,
+                strategy_id=event_payload.get("strategy_id"),
+                run_id=data.get("run_id"),
+                etag=data.get("etag", str(version)),
+            )
+            add_span_attributes(fields)
+            if fields:
+                logger.info("activation_state_update_published", extra=fields)
         ts = str(data.get("ts") or "")
         await self._publish_snapshot(world_id, version_hint=f"{ts}-{version}" if ts else str(version))
         return data
