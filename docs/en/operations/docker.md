@@ -2,7 +2,7 @@
 title: "Docker & Compose"
 tags: [docker, compose]
 author: "QMTL Team"
-last_modified: 2025-09-04
+last_modified: 2026-01-10
 ---
 
 {{ nav_links() }}
@@ -10,6 +10,9 @@ last_modified: 2025-09-04
 # Docker & Compose
 
 This page explains how Docker is used in QMTL, what Compose files exist, and how to bring services up for local development and testing.
+
+For Release 0.1, Docker/Compose is the official deployment path; follow
+[Deployment Path Decision](deployment_path.md) for the standard procedure.
 
 ## Overview
 

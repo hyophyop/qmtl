@@ -2,7 +2,7 @@
 title: "Docker & Compose"
 tags: [docker, compose]
 author: "QMTL Team"
-last_modified: 2025-09-04
+last_modified: 2026-01-10
 ---
 
 {{ nav_links() }}
@@ -10,6 +10,9 @@ last_modified: 2025-09-04
 # Docker & Compose
 
 이 문서는 QMTL에서 Docker를 어떻게 사용하고, 어떤 Compose 파일이 있으며, 로컬 개발/테스트 용도로 서비스를 기동하는 방법을 설명합니다.
+
+Release 0.1의 공식 배포 경로는 Docker/Compose이며, 상세 절차는
+[배포 경로 결정](deployment_path.md)을 따릅니다.
 
 ## 개요
 

@@ -74,6 +74,7 @@ nav:
   - Operations:
       - Overview: operations/README.md
       - Backend Quickstart: operations/backend_quickstart.md
+      - Deployment Path: operations/deployment_path.md
       - Config CLI: operations/config-cli.md
       - Docker & Compose: operations/docker.md
       - Backfill: operations/backfill.md
