@@ -2,7 +2,7 @@
 title: "백엔드 퀵스타트"
 tags: [quickstart, gateway, dagmanager, worldservice]
 author: "QMTL Team"
-last_modified: 2026-01-09
+last_modified: 2026-01-10
 ---
 
 {{ nav_links() }}
@@ -16,6 +16,9 @@ last_modified: 2026-01-09
 - DAG Manager (DM) – 전역 DAG SSOT, diff, 큐 오케스트레이션
 
 추가로 [Docker & Compose](docker.md) 의 전체 스택 설명과 [E2E 테스트](e2e_testing.md) 문서를 참고하세요.
+
+Release 0.1의 공식 배포 경로는 Docker/Compose로 확정되었습니다. 자세한 결정과 절차는
+[배포 경로 결정](deployment_path.md) 문서를 확인하세요.
 
 !!! tip "배포 프로필 체크"
     `profile: dev`(기본)에서는 인프라가 비어 있어도 가벼운 폴백으로 기동합니다.

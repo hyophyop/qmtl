@@ -2,7 +2,7 @@
 title: "Backend Quickstart"
 tags: [quickstart, gateway, dagmanager, worldservice]
 author: "QMTL Team"
-last_modified: 2026-01-09
+last_modified: 2026-01-10
 ---
 
 {{ nav_links() }}
@@ -17,6 +17,9 @@ This quickstart brings up the core QMTL backend services for local development:
 
 See also: Docker usage and full stack notes in [Docker & Compose](docker.md) and
 end-to-end tests in [E2E Testing](e2e_testing.md).
+
+For Release 0.1, the official deployment path is Docker/Compose. See
+[Deployment Path Decision](deployment_path.md) for the chosen route and steps.
 
 !!! tip "Check the deployment profile"
     `profile: dev` (default) allows lightweight fallbacks when infra settings are empty.
