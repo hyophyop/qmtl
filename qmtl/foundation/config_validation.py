@@ -378,10 +378,24 @@ def validate_worldservice_config(
 ) -> Dict[str, ValidationIssue]:
     issues: Dict[str, ValidationIssue] = {}
     if server is None:
-        issues["server"] = ValidationIssue(
-            "ok", "WorldService inline server not configured"
-        )
+        if profile is DeploymentProfile.PROD:
+            issues["server"] = ValidationIssue(
+                "error",
+                "Prod profile requires worldservice.server configuration (dsn/redis/controlbus)",
+            )
+        else:
+            issues["server"] = ValidationIssue(
+                "ok", "WorldService inline server not configured"
+            )
         return issues
+
+    if not server.dsn:
+        issues["dsn"] = ValidationIssue(
+            "error",
+            "WorldService requires worldservice.server.dsn to be configured",
+        )
+    else:
+        issues["dsn"] = ValidationIssue("ok", f"WorldService DSN configured ({server.dsn})")
 
     if profile is DeploymentProfile.PROD and not server.redis:
         issues["redis"] = ValidationIssue(
@@ -425,7 +439,6 @@ def validate_worldservice_config(
                 "ControlBus disabled; no brokers/topics configured",
             )
 
-    issues["database"] = ValidationIssue("ok", "WorldService DSN provided")
     return issues
 
 

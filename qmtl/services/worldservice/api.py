@@ -18,6 +18,7 @@ from qmtl.foundation.config import (
     find_config_file,
     load_config,
 )
+from qmtl.foundation.config_validation import validate_worldservice_config
 
 from .controlbus_producer import ControlBusProducer
 from .controlbus_consumer import RiskHubControlBusConsumer
@@ -267,9 +268,28 @@ def create_app(
     if resolved_profile is None:
         resolved_profile = DeploymentProfile.DEV
 
-    store = storage or Storage()
     if storage is not None:
         _enforce_persistent_storage(storage, profile=resolved_profile)
+
+    if resolved_config is not None:
+        issues = validate_worldservice_config(resolved_config, profile=resolved_profile)
+        if storage is not None or factory is not None:
+            issues.pop("dsn", None)
+            issues.pop("redis", None)
+        if bus is not None or bus_consumer is not None:
+            issues.pop("controlbus", None)
+        fatal_hints = [
+            issue.hint for issue in issues.values() if issue.severity == "error"
+        ]
+        if fatal_hints:
+            for hint in fatal_hints:
+                logger.error(hint)
+            raise RuntimeError(
+                "WorldService configuration invalid for "
+                f"{resolved_profile.value} profile; run 'qmtl config validate'"
+            )
+
+    store = storage or Storage()
 
     if resolved_profile is DeploymentProfile.PROD and storage is None and factory is None:
         raise RuntimeError(

@@ -152,6 +152,7 @@ def test_validate_worldservice_config_enforces_redis_in_prod() -> None:
         profile=DeploymentProfile.PROD,
     )
 
+    assert issues["dsn"].severity == "ok"
     assert issues["redis"].severity == "error"
     assert issues["controlbus"].severity == "error"
 
@@ -162,8 +163,16 @@ def test_validate_worldservice_config_allows_missing_controlbus_in_dev() -> None
         profile=DeploymentProfile.DEV,
     )
 
+    assert issues["dsn"].severity == "ok"
     assert issues["controlbus"].severity == "warning"
     assert "ControlBus disabled" in issues["controlbus"].hint
+
+
+def test_validate_worldservice_config_requires_server_in_prod() -> None:
+    issues = validate_worldservice_config(None, profile=DeploymentProfile.PROD)
+
+    assert issues["server"].severity == "error"
+    assert "worldservice.server" in issues["server"].hint
 
 
 @pytest.mark.asyncio
