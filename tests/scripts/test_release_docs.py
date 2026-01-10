@@ -23,15 +23,24 @@ def test_sync_changelog(tmp_path: Path) -> None:
 def test_archive_docs(tmp_path: Path) -> None:
     docs = tmp_path / "docs"
     docs.mkdir()
-    (docs / "index.md").write_text("home")
-    (docs / "guide.md").write_text("guide")
+    ko_dir = docs / "ko"
+    en_dir = docs / "en"
+    ko_dir.mkdir()
+    en_dir.mkdir()
+    (ko_dir / "index.md").write_text("ko home")
+    (ko_dir / "guide.md").write_text("ko guide")
+    (en_dir / "index.md").write_text("en home")
+    (en_dir / "guide.md").write_text("en guide")
     (docs / "archive").mkdir()
 
     archive_docs("0.1.0", docs_dir=docs, archive_dir=docs / "archive", readme_path=docs / "archive" / "README.md")
 
     archived = docs / "archive" / "0.1.0"
-    assert (archived / "index.md").read_text() == "home"
-    assert (archived / "guide.md").read_text() == "guide"
+    assert (archived / "ko" / "index.md").read_text() == "ko home"
+    assert (archived / "ko" / "guide.md").read_text() == "ko guide"
+    assert (archived / "en" / "index.md").read_text() == "en home"
+    assert (archived / "en" / "guide.md").read_text() == "en guide"
     readme = (docs / "archive" / "README.md").read_text().splitlines()
     assert "| [v0.1.0](./0.1.0/) | supported |" in readme
-    assert list(docs.iterdir()) == [docs / "archive"]
+    assert (docs / "ko" / "index.md").read_text() == "ko home"
+    assert (docs / "en" / "index.md").read_text() == "en home"

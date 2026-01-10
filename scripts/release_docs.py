@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 from datetime import date
 from pathlib import Path
-from typing import Mapping
+from typing import Iterable, Mapping
 import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -65,23 +65,16 @@ def sync_changelog(
         changelog_doc.write_text(doc_text)
 
 
-def archive_docs(
+def _archive_sources(docs_dir: Path) -> list[Path]:
+    locales = ("ko", "en")
+    return [docs_dir / locale for locale in locales]
+
+
+def _render_archive_readme(
     version: str,
-    support: str = "supported",
-    docs_dir: Path = DOCS_DIR,
-    archive_dir: Path = ARCHIVE_DIR,
-    readme_path: Path = ARCHIVE_README,
-) -> None:
-    """Move current docs into an archive version and update README."""
-    dst = archive_dir / version
-    dst.mkdir(parents=True, exist_ok=True)
-
-    for item in docs_dir.iterdir():
-        if item.name == "archive":
-            continue
-        shutil.move(str(item), dst / item.name)
-
-    readme_path.parent.mkdir(parents=True, exist_ok=True)
+    support: str,
+    readme_path: Path,
+) -> str:
     if readme_path.exists():
         lines = readme_path.read_text().splitlines()
     else:
@@ -89,7 +82,66 @@ def archive_docs(
     entry = f"| [v{version}](./{version}/) | {support} |"
     if entry not in lines:
         lines.append(entry)
-    readme_path.write_text("\n".join(lines) + "\n")
+    return "\n".join(lines) + "\n"
+
+
+def _ensure_archive_paths_exist(paths: Iterable[Path]) -> None:
+    missing = [str(path) for path in paths if not path.exists()]
+    if missing:
+        raise FileNotFoundError("Missing docs locales: " + ", ".join(missing))
+
+
+def _transfer_path(src: Path, dst: Path, mode: str) -> None:
+    if dst.exists():
+        raise FileExistsError(f"Archive destination already exists: {dst}")
+    if mode == "copy":
+        if src.is_dir():
+            shutil.copytree(src, dst)
+        else:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+        return
+    if mode == "move":
+        shutil.move(str(src), dst)
+        return
+    raise ValueError(f"Unsupported archive mode: {mode}")
+
+
+def archive_docs(
+    version: str,
+    support: str = "supported",
+    docs_dir: Path = DOCS_DIR,
+    archive_dir: Path = ARCHIVE_DIR,
+    readme_path: Path = ARCHIVE_README,
+    *,
+    mode: str = "copy",
+    dry_run: bool = False,
+) -> None:
+    """Archive current docs into a versioned folder and update README."""
+    src_items = _archive_sources(docs_dir)
+    _ensure_archive_paths_exist(src_items)
+
+    dst_root = archive_dir / version
+    actions = []
+    for src in src_items:
+        dst = dst_root / src.name
+        actions.append((src, dst))
+
+    readme_text = _render_archive_readme(version, support, readme_path)
+
+    if dry_run:
+        print("[dry-run] archive-docs")
+        for src, dst in actions:
+            print(f"[dry-run] {mode}: {src} -> {dst}")
+        print(f"[dry-run] update README: {readme_path}")
+        return
+
+    dst_root.mkdir(parents=True, exist_ok=True)
+    for src, dst in actions:
+        _transfer_path(src, dst, mode)
+
+    readme_path.parent.mkdir(parents=True, exist_ok=True)
+    readme_path.write_text(readme_text)
 
 
 def main() -> None:
@@ -103,12 +155,23 @@ def main() -> None:
     arch = sub.add_parser("archive-docs", help="Archive current docs")
     arch.add_argument("--version", required=True, help="Version to archive")
     arch.add_argument("--status", default="supported", help="Support status")
+    arch.add_argument(
+        "--mode",
+        choices=("copy", "move"),
+        default="copy",
+        help="Archive by copying (default) or moving docs",
+    )
+    arch.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print planned archive actions without modifying files",
+    )
 
     args = parser.parse_args()
     if args.cmd == "sync-changelog":
         sync_changelog()
     elif args.cmd == "archive-docs":
-        archive_docs(args.version, args.status)
+        archive_docs(args.version, args.status, mode=args.mode, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":
