@@ -3536,6 +3536,21 @@ worldservice:
         create_app(config_path=config_path, storage=Storage())
 
 
+def test_create_app_skips_prod_validation_when_overrides_injected():
+    config = WorldServiceServerConfig(dsn="sqlite+aiosqlite:///worlds.db")
+    producer = ControlBusProducer(producer=_StubProducer(), required=False)
+
+    app = create_app(
+        config=config,
+        profile=DeploymentProfile.PROD,
+        storage=_PersistentStoreStub(),
+        bus=producer,
+    )
+
+    assert app.state.worldservice_config is config
+    assert app.state.world_service.bus is producer
+
+
 def test_create_app_requires_controlbus_in_prod_profile():
     with pytest.raises(RuntimeError, match="ControlBus"):
         create_app(profile=DeploymentProfile.PROD, storage=_PersistentStoreStub())

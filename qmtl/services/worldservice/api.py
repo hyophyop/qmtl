@@ -270,6 +270,10 @@ def create_app(
 
     if resolved_config is not None:
         issues = validate_worldservice_config(resolved_config, profile=resolved_profile)
+        if storage is not None or factory is not None:
+            issues.pop("redis", None)
+        if bus is not None or bus_consumer is not None:
+            issues.pop("controlbus", None)
         fatal_hints = [
             issue.hint for issue in issues.values() if issue.severity == "error"
         ]
