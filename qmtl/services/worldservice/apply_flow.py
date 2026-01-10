@@ -5,11 +5,13 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import logging
 from typing import Any, Dict, List, NoReturn
 
 from fastapi import HTTPException
 
 from qmtl.foundation.common.hashutils import hash_bytes
+from qmtl.services.observability import add_span_attributes, build_observability_fields
 
 from .activation import ActivationEventPublisher
 from .controlbus_producer import ControlBusProducer
@@ -20,6 +22,8 @@ from .policy import GatingPolicy
 from .run_state import ApplyRunRegistry, ApplyRunState, ApplyStage
 from .schemas import ApplyAck, ApplyRequest
 from .storage import Storage, WorldActivation
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -67,12 +71,18 @@ class ApplyCoordinator:
         plan = self._plan_for(gating)
         context = await self._build_context(world_id, payload, gating, plan)
         state = self._runs.start(world_id, payload.run_id, context.target_active)
+        fields = build_observability_fields(world_id=world_id, run_id=payload.run_id)
+        add_span_attributes(fields)
+        if fields:
+            logger.info("apply_requested", extra=fields)
         ws_metrics.record_apply_run_started(world_id, payload.run_id)
         await self._record_requested(context, state)
 
         edge_manager = EdgeOverrideManager(self.store, world_id)
         try:
             if plan.pre_disable:
+                if fields:
+                    logger.info("apply_pre_disable", extra=fields)
                 await edge_manager.apply_pre_promotion(plan.pre_disable, payload.run_id)
 
             await self._enter_freeze(context, state)
@@ -81,6 +91,8 @@ class ApplyCoordinator:
             await self._exit_freeze(context, state)
 
             if plan.post_enable:
+                if fields:
+                    logger.info("apply_post_enable", extra=fields)
                 await edge_manager.apply_post_promotion(plan.post_enable, payload.run_id)
 
             state.mark(ApplyStage.COMPLETED, completed=True)
@@ -89,6 +101,11 @@ class ApplyCoordinator:
                 context.payload.run_id,
                 ApplyStage.COMPLETED.value,
             )
+            if fields:
+                logger.info(
+                    "apply_completed",
+                    extra={**fields, "phase": ApplyStage.COMPLETED.value},
+                )
             ws_metrics.record_apply_run_completed(context.world_id, context.payload.run_id)
             return ApplyAck(
                 run_id=payload.run_id,
@@ -172,6 +189,15 @@ class ApplyCoordinator:
         self, context: ApplyContext, state: ApplyRunState
     ) -> None:
         state.mark(ApplyStage.REQUESTED, completed=False, active=context.target_active)
+        fields = build_observability_fields(
+            world_id=context.world_id,
+            run_id=context.payload.run_id,
+        )
+        if fields:
+            logger.info(
+                "apply_stage_requested",
+                extra={**fields, "phase": ApplyStage.REQUESTED.value},
+            )
         await self.store.record_apply_stage(
             context.world_id,
             context.payload.run_id,
@@ -185,6 +211,15 @@ class ApplyCoordinator:
 
     async def _enter_freeze(self, context: ApplyContext, state: ApplyRunState) -> None:
         state.mark(ApplyStage.FREEZE)
+        fields = build_observability_fields(
+            world_id=context.world_id,
+            run_id=context.payload.run_id,
+        )
+        if fields:
+            logger.info(
+                "apply_stage_freeze",
+                extra={**fields, "phase": ApplyStage.FREEZE.value},
+            )
         await self._activation.freeze_world(
             context.world_id,
             context.payload.run_id,
@@ -200,6 +235,15 @@ class ApplyCoordinator:
     async def _switch_decisions(self, context: ApplyContext, state: ApplyRunState) -> None:
         await self.store.set_decisions(context.world_id, list(context.target_active))
         state.mark(ApplyStage.SWITCH)
+        fields = build_observability_fields(
+            world_id=context.world_id,
+            run_id=context.payload.run_id,
+        )
+        if fields:
+            logger.info(
+                "apply_stage_switch",
+                extra={**fields, "phase": ApplyStage.SWITCH.value},
+            )
         await self.store.record_apply_stage(
             context.world_id,
             context.payload.run_id,
@@ -226,6 +270,15 @@ class ApplyCoordinator:
 
     async def _exit_freeze(self, context: ApplyContext, state: ApplyRunState) -> None:
         state.mark(ApplyStage.UNFREEZE)
+        fields = build_observability_fields(
+            world_id=context.world_id,
+            run_id=context.payload.run_id,
+        )
+        if fields:
+            logger.info(
+                "apply_stage_unfreeze",
+                extra={**fields, "phase": ApplyStage.UNFREEZE.value},
+            )
         await self._activation.unfreeze_world(
             context.world_id,
             context.payload.run_id,
@@ -242,6 +295,15 @@ class ApplyCoordinator:
     async def _handle_failure(
         self, context: ApplyContext, state: ApplyRunState, exc: Exception
     ) -> NoReturn:
+        fields = build_observability_fields(
+            world_id=context.world_id,
+            run_id=context.payload.run_id,
+        )
+        if fields:
+            logger.warning(
+                "apply_failed",
+                extra={**fields, "phase": state.stage.value},
+            )
         await self.store.restore_activation(context.world_id, context.snapshot_full)
         await self.store.set_decisions(context.world_id, list(context.previous_decisions))
         await self.store.record_apply_stage(

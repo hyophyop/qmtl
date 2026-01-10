@@ -83,6 +83,7 @@ nav:
       - E2E Testing: operations/e2e_testing.md
       - Neo4j Migrations: operations/neo4j_migrations.md
       - Monitoring: operations/monitoring.md
+      - Core Loop Observability: operations/observability_core_loop.md
       - World Validation Observability: operations/world_validation_observability.md
       - Independent Validation: operations/independent_validation.md
       - World Validation Governance: operations/world_validation_governance.md

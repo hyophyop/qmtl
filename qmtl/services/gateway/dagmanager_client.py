@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any, TYPE_CHECKING
 
@@ -15,6 +16,7 @@ from qmtl.services.dagmanager.topic import (
     topic_namespace_enabled,
 )
 from qmtl.services.gateway.compute_context import resolve_execution_domain
+from qmtl.services.observability import add_span_attributes, build_observability_fields
 from . import metrics as gw_metrics
 
 if TYPE_CHECKING:
@@ -22,6 +24,7 @@ if TYPE_CHECKING:
 
 dagmanager_pb2: Any = _dagmanager_pb2
 dagmanager_pb2_grpc: Any = _dagmanager_pb2_grpc
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -314,6 +317,14 @@ class DagManagerClient:
             partition=partition,
             dataset_fingerprint=dataset_fingerprint,
         )
+        fields = build_observability_fields(
+            world_id=namespace.world_id,
+            execution_domain=namespace.domain,
+            strategy_id=strategy_id,
+        )
+        add_span_attributes(fields)
+        if fields:
+            logger.info("dagmanager_diff_dispatch", extra=fields)
 
         @self._breaker
         async def _call() -> dagmanager_pb2.DiffChunk:

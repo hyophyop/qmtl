@@ -5,6 +5,7 @@ import asyncio
 import threading
 import time
 from collections import deque
+import logging
 
 import grpc
 
@@ -26,6 +27,9 @@ from .controlbus_producer import ControlBusProducer
 from .queue_updates import publish_queue_updates
 from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
 from .dagmanager_health import get_health
+from qmtl.services.observability import add_span_attributes, build_observability_fields
+
+logger = logging.getLogger(__name__)
 
 
 class _GrpcStream(StreamSender):
@@ -105,6 +109,14 @@ class DiffServiceServicer(dagmanager_pb2_grpc.DiffServiceServicer):
         request: dagmanager_pb2.DiffRequest,
         context: grpc.aio.ServicerContext,
     ) -> AsyncIterable[dagmanager_pb2.DiffChunk]:
+        fields = build_observability_fields(
+            world_id=request.world_id or None,
+            execution_domain=request.execution_domain or None,
+            strategy_id=request.strategy_id or None,
+        )
+        add_span_attributes(fields)
+        if fields:
+            logger.info("diff_request_received", extra=fields)
         sentinel_id = f"{request.strategy_id}-sentinel"
         stream = self._create_stream()
         self._streams[sentinel_id] = stream
