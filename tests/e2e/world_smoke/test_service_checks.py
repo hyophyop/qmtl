@@ -12,9 +12,7 @@ Env required (for service mode):
 
 from __future__ import annotations
 
-import base64
 import json
-import os
 import time
 import uuid
 import urllib.error
@@ -23,18 +21,6 @@ import urllib.request
 from datetime import datetime, timezone
 
 import pytest
-
-
-def _skip_if_service_disabled():
-    if os.environ.get("WS_MODE", "sdk") != "service":
-        pytest.skip("service mode disabled; set WS_MODE=service")
-
-
-def _env_or_skip(name: str) -> str:
-    val = os.environ.get(name)
-    if not val:
-        pytest.skip(f"env {name} not set (skipping service-mode check)")
-    return val
 
 
 def _http_json(url: str, *, method: str = "GET", data: dict | None = None, headers: dict | None = None, timeout: float = 5.0):
@@ -66,20 +52,9 @@ def _http_json(url: str, *, method: str = "GET", data: dict | None = None, heade
         pytest.skip(f"endpoint not reachable: {e}")
 
 
-def _decode_jwt_no_verify(token: str) -> dict:
-    parts = token.split(".")
-    if len(parts) != 3:
-        raise AssertionError("invalid JWT format")
-    payload_b64 = parts[1]
-    padding = "=" * (-len(payload_b64) % 4)
-    payload = base64.urlsafe_b64decode(payload_b64 + padding)
-    return json.loads(payload.decode())
-
-
 @pytest.mark.order(5)
-def test_service_mode_worlds_get_persisted():
-    _skip_if_service_disabled()
-    worlds_base = _env_or_skip("WORLDS_BASE_URL").rstrip("/")
+def test_service_mode_worlds_get_persisted(service_worlds_registered):
+    worlds_base = service_worlds_registered["worlds"].rstrip("/")
 
     # Probe that the world can be read back (persistence). If not present, skip.
     for wid in ("prod-us-equity", "sandbox-crypto"):
@@ -95,9 +70,8 @@ def test_service_mode_worlds_get_persisted():
 
 
 @pytest.mark.order(6)
-def test_service_mode_decide_activation_envelopes():
-    _skip_if_service_disabled()
-    gateway = _env_or_skip("GATEWAY_URL").rstrip("/")
+def test_service_mode_decide_activation_envelopes(service_worlds_registered):
+    gateway = service_worlds_registered["gateway"].rstrip("/")
 
     # Decide envelope
     try:
@@ -124,9 +98,8 @@ def test_service_mode_decide_activation_envelopes():
 
 
 @pytest.mark.order(7)
-def test_service_mode_evaluate_apply_roundtrip():
-    _skip_if_service_disabled()
-    gateway = _env_or_skip("GATEWAY_URL").rstrip("/")
+def test_service_mode_evaluate_apply_roundtrip(service_worlds_registered):
+    gateway = service_worlds_registered["gateway"].rstrip("/")
 
     # Evaluate (plan-only)
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -169,9 +142,8 @@ def test_service_mode_evaluate_apply_roundtrip():
 
 
 @pytest.mark.order(8)
-def test_service_mode_ws_handshake_initial_snapshot():
-    _skip_if_service_disabled()
-    gateway = _env_or_skip("GATEWAY_URL").rstrip("/")
+def test_service_mode_ws_handshake_initial_snapshot(service_worlds_registered):
+    gateway = service_worlds_registered["gateway"].rstrip("/")
 
     # Subscribe to get stream descriptor
     try:
@@ -222,4 +194,3 @@ def test_service_mode_ws_handshake_initial_snapshot():
             ws.close()
         except Exception:
             pass
-
