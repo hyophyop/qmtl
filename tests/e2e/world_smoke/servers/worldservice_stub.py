@@ -41,12 +41,16 @@ class WorldRecord:
 WORLDS: Dict[str, WorldRecord] = {}
 ETAG_COUNTER: Dict[str, int] = {}
 ALLOCATIONS: Dict[str, Dict[str, Any]] = {}
+EVAL_RUNS: Dict[str, Dict[str, Dict[str, Dict[str, Any]]]] = {}
+EVAL_ORDER: Dict[str, list[str]] = {}
 
 
 def reset_state() -> None:
     WORLDS.clear()
     ETAG_COUNTER.clear()
     ALLOCATIONS.clear()
+    EVAL_RUNS.clear()
+    EVAL_ORDER.clear()
 
 
 @app.get("/health")
@@ -141,8 +145,39 @@ async def allocations(world_id: str | None = None) -> dict:
 
 @app.post("/worlds/{wid}/evaluate")
 async def evaluate(wid: str, req: EvaluateRequest) -> dict:
-    # Return a trivial plan
-    return {"plan": {"activate": ["s1"], "deactivate": []}, "notes": "stub"}
+    strategy_id = _resolve_strategy_id(req)
+    if not strategy_id:
+        raise HTTPException(status_code=400, detail="strategy_id is required")
+
+    run_id = req.run_id or f"run-{int(time.time())}"
+    _record_eval_run(wid, strategy_id, run_id, req)
+
+    order = EVAL_ORDER.setdefault(wid, [])
+    if strategy_id not in order:
+        order.append(strategy_id)
+
+    weights = _weights_for_order(order)
+    ranks = {sid: idx + 1 for idx, sid in enumerate(order)}
+    contributions = {sid: round(weights.get(sid, 0.0) * 0.1, 6) for sid in order}
+
+    return {
+        "active": list(order),
+        "weights": weights,
+        "ranks": ranks,
+        "contributions": contributions,
+        "evaluation_run_id": run_id,
+        "evaluation_run_url": f"/worlds/{wid}/strategies/{strategy_id}/runs/{run_id}",
+        "plan": {"activate": [strategy_id], "deactivate": []},
+        "notes": "stub",
+    }
+
+
+@app.get("/worlds/{wid}/strategies/{strategy_id}/runs/{run_id}")
+async def get_evaluation_run(wid: str, strategy_id: str, run_id: str) -> dict:
+    run = EVAL_RUNS.get(wid, {}).get(strategy_id, {}).get(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="evaluation run not found")
+    return run
 
 
 class ApplyRequest(BaseModel):
@@ -159,6 +194,47 @@ async def apply(wid: str, req: ApplyRequest) -> dict:
 
 def main() -> None:
     uvicorn.run(app, host="0.0.0.0", port=18080)
+
+
+def _resolve_strategy_id(req: EvaluateRequest) -> str | None:
+    if req.strategy_id:
+        return str(req.strategy_id)
+    if req.metrics:
+        return str(next(iter(req.metrics.keys())))
+    if req.series:
+        return str(next(iter(req.series.keys())))
+    return None
+
+
+def _record_eval_run(wid: str, strategy_id: str, run_id: str, req: EvaluateRequest) -> None:
+    payload = {
+        "world_id": wid,
+        "strategy_id": strategy_id,
+        "run_id": run_id,
+        "summary": {"status": "completed", "recommended_stage": req.stage or "validation"},
+        "metrics": req.metrics.get(strategy_id, {}) if isinstance(req.metrics, dict) else {},
+        "validation": {},
+        "stage": req.stage,
+        "risk_tier": req.risk_tier,
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    EVAL_RUNS.setdefault(wid, {}).setdefault(strategy_id, {})[run_id] = payload
+
+
+def _weights_for_order(order: list[str]) -> dict[str, float]:
+    presets = {
+        1: [1.0],
+        2: [0.7, 0.3],
+        3: [0.6, 0.3, 0.1],
+    }
+    weights = presets.get(len(order))
+    if weights is None:
+        if not order:
+            return {}
+        share = round(1.0 / len(order), 6)
+        weights = [share] * len(order)
+    return {sid: weights[idx] for idx, sid in enumerate(order)}
 
 
 if __name__ == "__main__":
