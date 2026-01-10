@@ -142,8 +142,8 @@ def test_service_mode_metrics_have_world_labels(service_worlds_registered):
                 ('world_id="sandbox-crypto"', 'world="sandbox-crypto"'),
             ),
         )
-    except Exception:
-        pytest.skip("metrics endpoint not reachable")
+    except urllib.error.URLError as exc:
+        pytest.skip(f"metrics endpoint not reachable: {exc}")
     # 최소한 world 라벨이 두 개 다수 관찰되는지 확인(패턴은 환경에 맞게 구체화)
     assert 'world_id="prod-us-equity"' in body or 'world="prod-us-equity"' in body
     assert 'world_id="sandbox-crypto"' in body or 'world="sandbox-crypto"' in body
