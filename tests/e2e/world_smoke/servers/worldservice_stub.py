@@ -147,7 +147,11 @@ async def allocations(world_id: str | None = None) -> dict:
 async def evaluate(wid: str, req: EvaluateRequest) -> dict:
     strategy_id = _resolve_strategy_id(req)
     if not strategy_id:
-        raise HTTPException(status_code=400, detail="strategy_id is required")
+        return {
+            "ok": True,
+            "plan": {"activate": [], "deactivate": []},
+            "notes": "stub",
+        }
 
     run_id = req.run_id or f"run-{int(time.time())}"
     _record_eval_run(wid, strategy_id, run_id, req)
