@@ -76,6 +76,17 @@ This release implements the QMTL Simplification Proposal, fundamentally restruct
 
 ---
 
+## v0.1.0 — Release 0.1 (2026-01-10)
+
+### Highlights
+
+- Established the Release 0.1 core loop flow (Submit → Evaluate/Activate → Execution/Gating → Observation).
+- Shipped baseline Gateway and DAG Manager services with health/status endpoints.
+- Documented required CLI surfaces for config validation and service startup.
+- Confirmed release artifacts and documentation build requirements for 0.1.
+
+---
+
 ## v0.1.1-rc1 — Ownership + Commit Log (2025-09-03)
 
 Highlights for issue #544 acceptance:
