@@ -93,6 +93,7 @@ run_step "Check design drift (docs ↔ code)" uv run python scripts/check_design
 run_step "Lint DSN keys (canonical *_dsn)" uv run python scripts/lint_dsn_keys.py
 run_step "Check import cycles (grimp baseline)" uv run --with grimp python scripts/check_import_cycles.py --baseline scripts/import_cycles_baseline.json
 run_step "Check SDK layer guard (core -> nodes)" uv run --with grimp python scripts/check_sdk_layers.py
+run_step "Packaging smoke (wheel/sdist + CLI)" bash scripts/package_smoke.sh
 
 run_step "Preflight – import/collection" uv run -m pytest --collect-only -q
 
