@@ -59,6 +59,7 @@ uv run python scripts/lint_dsn_keys.py
 uv run --with grimp python scripts/check_import_cycles.py --baseline scripts/import_cycles_baseline.json
 uv run --with grimp python scripts/check_sdk_layers.py
 uv run python scripts/check_docs_links.py
+bash scripts/package_smoke.sh
 uv run -m pytest --collect-only -q
 PYTHONFAULTHANDLER=1 uv run --with pytest-timeout -m pytest -q --timeout=60 --timeout-method=thread --maxfail=1 -k 'not slow'
 PYTHONPATH=qmtl/proto uv run pytest -p no:unraisableexception -W error -q tests
@@ -76,8 +77,9 @@ CORE_LOOP_STACK_MODE=inproc uv run -m pytest -q tests/e2e/core_loop -q
 - `CHANGELOG.md`에 Release 0.1 변경 사항 반영
 - 문서 빌드 성공: `uv run mkdocs build --strict`
 - Python 패키지 산출물:
-  - `uv pip wheel .`로 생성한 wheel
+  - `uv pip wheel .`(또는 `uv build --wheel`)로 생성한 wheel
   - `python -m build` 또는 동등 절차로 생성한 sdist
+- 패키징 산출물 설치 스모크(최소 `qmtl --help`)를 `scripts/package_smoke.sh`로 재현 가능해야 함
 - 릴리스 문서 아카이빙 절차 확인: [릴리스 프로세스](release.md)
 
 ## 결정 근거
