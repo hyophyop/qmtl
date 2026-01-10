@@ -268,9 +268,13 @@ def create_app(
     if resolved_profile is None:
         resolved_profile = DeploymentProfile.DEV
 
+    if storage is not None:
+        _enforce_persistent_storage(storage, profile=resolved_profile)
+
     if resolved_config is not None:
         issues = validate_worldservice_config(resolved_config, profile=resolved_profile)
         if storage is not None or factory is not None:
+            issues.pop("dsn", None)
             issues.pop("redis", None)
         if bus is not None or bus_consumer is not None:
             issues.pop("controlbus", None)
@@ -286,8 +290,6 @@ def create_app(
             )
 
     store = storage or Storage()
-    if storage is not None:
-        _enforce_persistent_storage(storage, profile=resolved_profile)
 
     if resolved_profile is DeploymentProfile.PROD and storage is None and factory is None:
         raise RuntimeError(
