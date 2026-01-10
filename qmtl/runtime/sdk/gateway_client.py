@@ -307,6 +307,7 @@ class GatewayClient:
         }
         if world_id is not None:
             payload["world_id"] = world_id
+            payload["world_ids"] = [world_id]
         if context:
             payload["context"] = context
         return payload
@@ -361,6 +362,14 @@ class GatewayClient:
 
         status = result.status_code or 0
         if status != 202:
+            payload = self._strategy_payload_dict(result.payload)
+            if status == 409:
+                strategy_id = self._extract_duplicate_strategy_id(payload)
+                if strategy_id is not None:
+                    return {
+                        "error": self._status_error_message(status),
+                        "strategy_id": strategy_id,
+                    }
             return {"error": self._status_error_message(status)}
 
         self._reset_breaker()
@@ -395,6 +404,21 @@ class GatewayClient:
         if not isinstance(payload, dict):
             return None
         return payload
+
+    def _extract_duplicate_strategy_id(
+        self, payload: dict[str, object] | None
+    ) -> str | None:
+        if not isinstance(payload, dict):
+            return None
+        detail = payload.get("detail")
+        if isinstance(detail, dict):
+            strategy_id = detail.get("strategy_id")
+            if isinstance(strategy_id, str):
+                return strategy_id
+        strategy_id = payload.get("strategy_id")
+        if isinstance(strategy_id, str):
+            return strategy_id
+        return None
 
     def _ensure_queue_map(self, payload: dict[str, object]) -> dict[str, object] | None:
         if "queue_map" in payload:

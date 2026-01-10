@@ -93,6 +93,29 @@ def _stream_inputs(strategy):
     return [n for n in getattr(strategy, "nodes", []) if isinstance(n, StreamInput)]
 
 
+def _assert_ws_payload(payload: dict, *, world_id: str) -> dict:
+    assert payload.get("world") == world_id
+    assert "ws" in payload
+    ws = payload["ws"]
+    assert isinstance(ws, dict)
+    return ws
+
+
+def _assert_ws_core_fields(payload: dict, ws: dict, *, world_id: str) -> None:
+    assert ws.get("world") == world_id
+    assert ws.get("status") == payload.get("status")
+    assert ws.get("downgrade_reason") == payload.get("downgrade_reason")
+    assert ws.get("safe_mode") == payload.get("safe_mode")
+
+
+def _assert_ws_envelope_keys(payload: dict, ws: dict) -> None:
+    assert "precheck" in payload  # even if null, the field should exist
+    assert "decision" in payload
+    assert "activation" in payload
+    assert "decision" in ws
+    assert "activation" in ws
+
+
 def test_submit_json_populates_decision_activation(
     core_loop_stack: CoreLoopStackHandle,
     core_loop_world_id: str,
@@ -126,17 +149,9 @@ def test_submit_json_includes_ws_envelope(core_loop_world_id: str, monkeypatch: 
     )
 
     # Contract: JSON output keeps WS envelope separate and mirrors downgrade flags.
-    assert payload.get("world") == core_loop_world_id
-    assert "ws" in payload and isinstance(payload["ws"], dict)
-    ws = payload["ws"]
-
-    assert ws.get("world") == core_loop_world_id
-    assert ws.get("status") == payload.get("status")
-    assert ws.get("downgrade_reason") == payload.get("downgrade_reason")
-    assert ws.get("safe_mode") == payload.get("safe_mode")
-    assert "precheck" in payload  # even if null, the field should exist
-    assert "decision" in payload and "activation" in payload
-    assert "decision" in ws and "activation" in ws
+    ws = _assert_ws_payload(payload, world_id=core_loop_world_id)
+    _assert_ws_core_fields(payload, ws, world_id=core_loop_world_id)
+    _assert_ws_envelope_keys(payload, ws)
     assert result["code"] in (0, 1)
 
 

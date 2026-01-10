@@ -245,24 +245,44 @@ class StrategyBootstrapper:
             context=dict(gateway_context) if gateway_context else None,
             world_id=world_id,
         )
+        return self._submission_from_gateway_ack(
+            ack,
+            gateway_url=gateway_url,
+            world_id=world_id,
+            trade_mode=trade_mode,
+        )
 
-        if isinstance(ack, dict):
-            if "error" in ack:
-                error_detail = str(ack.get("error") or "unknown error")
-                raise RuntimeError(
-                    "Gateway rejected strategy submission: "
-                    f"{error_detail} (world_id={world_id}, trade_mode={trade_mode}, "
-                    f"gateway_url={gateway_url})"
-                )
+    def _submission_from_gateway_ack(
+        self,
+        ack: Any,
+        *,
+        gateway_url: str,
+        world_id: str,
+        trade_mode: str,
+    ) -> GatewaySubmission:
         if isinstance(ack, StrategyAck):
-            return GatewaySubmission(
-                strategy_id=ack.strategy_id,
-                queue_map=ack.queue_map or {},
-                downgraded=bool(ack.downgraded),
-                downgrade_reason=ack.downgrade_reason,
-                safe_mode=bool(ack.safe_mode),
-                context_available=True,
-            )
+            return self._submission_from_ack_model(ack)
+        if isinstance(ack, dict):
+            duplicate = self._duplicate_submission(ack)
+            if duplicate is not None:
+                return duplicate
+            self._raise_gateway_error(ack, gateway_url, world_id, trade_mode)
+            return self._submission_from_ack_dict(ack)
+        return GatewaySubmission(strategy_id=None, queue_map={})
+
+    @staticmethod
+    def _submission_from_ack_model(ack: StrategyAck) -> GatewaySubmission:
+        return GatewaySubmission(
+            strategy_id=ack.strategy_id,
+            queue_map=ack.queue_map or {},
+            downgraded=bool(ack.downgraded),
+            downgrade_reason=ack.downgrade_reason,
+            safe_mode=bool(ack.safe_mode),
+            context_available=True,
+        )
+
+    @staticmethod
+    def _submission_from_ack_dict(ack: dict[str, Any]) -> GatewaySubmission:
         downgrade_reason = ack.get("downgrade_reason")
         if not isinstance(downgrade_reason, str):
             downgrade_reason = None
@@ -275,6 +295,38 @@ class StrategyBootstrapper:
             downgraded=bool(ack.get("downgraded", False)),
             downgrade_reason=downgrade_reason,
             safe_mode=bool(ack.get("safe_mode", False)),
+            context_available=True,
+        )
+
+    @staticmethod
+    def _raise_gateway_error(
+        ack: dict[str, Any],
+        gateway_url: str,
+        world_id: str,
+        trade_mode: str,
+    ) -> None:
+        if "error" not in ack:
+            return
+        error_detail = str(ack.get("error") or "unknown error")
+        raise RuntimeError(
+            "Gateway rejected strategy submission: "
+            f"{error_detail} (world_id={world_id}, trade_mode={trade_mode}, "
+            f"gateway_url={gateway_url})"
+        )
+
+    @staticmethod
+    def _duplicate_submission(ack: dict[str, Any]) -> GatewaySubmission | None:
+        if ack.get("error") != "duplicate strategy":
+            return None
+        strategy_id = ack.get("strategy_id")
+        if not isinstance(strategy_id, str) or not strategy_id:
+            return None
+        return GatewaySubmission(
+            strategy_id=strategy_id,
+            queue_map={},
+            downgraded=False,
+            downgrade_reason=None,
+            safe_mode=False,
             context_available=True,
         )
 

@@ -105,15 +105,16 @@ async def decide(wid: str) -> Response:
 
 
 @app.get("/worlds/{wid}/activation")
-async def activation(wid: str) -> Response:
+async def activation(wid: str, strategy_id: str | None = None, side: str = "long") -> Response:
     # Toggle an ETag per call sequence
     cnt = ETAG_COUNTER.get(wid, 0) + 1
     ETAG_COUNTER[wid] = cnt
     etag = f"act:{wid}:{cnt//2}"
+    strategy_id_value = strategy_id or "s-demo"
     body = {
         "world_id": wid,
-        "strategy_id": "s-demo",
-        "side": "long",
+        "strategy_id": strategy_id_value,
+        "side": side,
         "active": True,
         "weight": 1.0,
         "etag": etag,
