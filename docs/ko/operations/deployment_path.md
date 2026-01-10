@@ -82,10 +82,10 @@ docker compose down
 curl http://localhost:8000/status
 ```
 
-2) 기본 submit (샘플 전략)
+2) 기본 submit (샘플 전략, QuestDB 미사용)
 
 ```bash
-python -m qmtl.examples.general_strategy \
+python -m qmtl.examples.indicators_strategy \
   --gateway-url http://localhost:8000 \
   --world-id demo
 ```

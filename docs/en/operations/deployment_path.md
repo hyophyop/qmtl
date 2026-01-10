@@ -82,10 +82,10 @@ This procedure verifies “health + basic submit” in the smallest loop.
 curl http://localhost:8000/status
 ```
 
-2) Basic submit (sample strategy)
+2) Basic submit (sample strategy, no QuestDB dependency)
 
 ```bash
-python -m qmtl.examples.general_strategy \
+python -m qmtl.examples.indicators_strategy \
   --gateway-url http://localhost:8000 \
   --world-id demo
 ```
