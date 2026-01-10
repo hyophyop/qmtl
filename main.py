@@ -34,13 +34,17 @@ def define_env(env):
         if not url:
             return None
         url = url.strip()
+        if url.startswith((".", "/", "file:")):
+            return None
         # git@github.com:owner/repo.git → https://github.com/owner/repo
         m = re.match(r"git@([^:]+):(.+?)\.git$", url)
         if m:
             return f"https://{m.group(1)}/{m.group(2)}"
         # https://github.com/owner/repo.git → https://github.com/owner/repo
-        if url.endswith('.git'):
+        if url.endswith(".git"):
             return url[:-4]
+        if "://" not in url:
+            return None
         return url
 
     def _git_origin_https() -> str | None:
