@@ -29,6 +29,7 @@ class CoreLoopStackHandle:
     metrics_url: str | None
     world_ids: list[str]
     close: Callable[[], None] | None = None
+    stop_worldservice: Callable[[], None] | None = None
 
 
 def _find_free_port() -> int:
@@ -90,6 +91,7 @@ class InProcessCoreLoopStack:
         self._servers: list[_Server] = []
         self._env_backup: dict[str, str | None] = {}
         self._handle: CoreLoopStackHandle | None = None
+        self._ws_server: _Server | None = None
 
     def start(self) -> CoreLoopStackHandle:
         if self._handle is not None:
@@ -102,6 +104,7 @@ class InProcessCoreLoopStack:
         ws_server = _Server(ws_app, "127.0.0.1", ws_port)
         ws_server.start()
         _wait_http(f"http://127.0.0.1:{ws_port}/health", timeout=15)
+        self._ws_server = ws_server
 
         redis_client = None
         try:
@@ -150,6 +153,7 @@ class InProcessCoreLoopStack:
             metrics_url=os.environ.get("QMTL_METRICS_URL"),
             world_ids=world_ids,
             close=self.stop,
+            stop_worldservice=self.stop_worldservice,
         )
         return self._handle
 
@@ -160,6 +164,8 @@ class InProcessCoreLoopStack:
                 server.stop()
             except Exception:
                 pass
+            if server is self._ws_server:
+                self._ws_server = None
 
         for key, val in self._env_backup.items():
             if val is None:
@@ -168,6 +174,19 @@ class InProcessCoreLoopStack:
                 os.environ[key] = val
 
         self._handle = None
+
+    def stop_worldservice(self) -> None:
+        if self._ws_server is None:
+            return
+        try:
+            self._ws_server.stop()
+        except Exception:
+            pass
+        try:
+            self._servers.remove(self._ws_server)
+        except ValueError:
+            pass
+        self._ws_server = None
 
     @staticmethod
     def _seed_worlds(base_url: str, worlds: Iterable[Path]) -> list[str]:

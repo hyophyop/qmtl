@@ -564,11 +564,20 @@ async def submit_async(
         world_id=resolved_world,
         execution_domain=execution_domain,
     )
+
+    context_override: dict[str, Any] | None = None
+
     def _attach_context_flags(result: SubmitResult) -> SubmitResult:
-        result.downgraded = bool(getattr(compute_context, "downgraded", False))
+        downgraded = getattr(compute_context, "downgraded", False)
         reason = getattr(compute_context, "downgrade_reason", None)
+        safe_mode = getattr(compute_context, "safe_mode", False)
+        if context_override is not None:
+            downgraded = context_override.get("downgraded", downgraded)
+            reason = context_override.get("downgrade_reason", reason)
+            safe_mode = context_override.get("safe_mode", safe_mode)
+        result.downgraded = bool(downgraded)
         result.downgrade_reason = getattr(reason, "value", reason)
-        result.safe_mode = bool(getattr(compute_context, "safe_mode", False))
+        result.safe_mode = bool(safe_mode)
         return result
     setattr(strategy, "compute_context", {
         "world_id": resolved_world,
@@ -637,6 +646,12 @@ async def submit_async(
             gateway_available=gateway_available,
             policy_payload=world_ctx.policy_payload,
         )
+        if bootstrap_out.context_available:
+            context_override = {
+                "downgraded": bootstrap_out.downgraded,
+                "downgrade_reason": bootstrap_out.downgrade_reason,
+                "safe_mode": bootstrap_out.safe_mode,
+            }
         if bootstrap_out.force_offline:
             gateway_available = False
         backtest_returns, auto_returns_hints = await _warmup_and_collect_returns(
@@ -732,6 +747,10 @@ class BootstrapOutcome:
     strategy_id: str | None
     offline_mode: bool
     force_offline: bool = False
+    downgraded: bool = False
+    downgrade_reason: str | None = None
+    safe_mode: bool = False
+    context_available: bool = False
 
 
 def _strategy_needs_data_provider(strategy: "Strategy") -> bool:
@@ -1020,6 +1039,10 @@ async def _bootstrap_strategy(
         strategy_id=bootstrap_result.strategy_id,
         offline_mode=bootstrap_result.offline_mode,
         force_offline=False,
+        downgraded=bootstrap_result.downgraded,
+        downgrade_reason=bootstrap_result.downgrade_reason,
+        safe_mode=bootstrap_result.safe_mode,
+        context_available=bootstrap_result.context_available,
     )
 
 

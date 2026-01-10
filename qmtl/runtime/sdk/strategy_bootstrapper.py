@@ -19,6 +19,16 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class GatewaySubmission:
+    strategy_id: str | None
+    queue_map: dict[str, Any]
+    downgraded: bool = False
+    downgrade_reason: str | None = None
+    safe_mode: bool = False
+    context_available: bool = False
+
+
+@dataclass
 class BootstrapResult:
     manager: Any
     offline_mode: bool
@@ -27,6 +37,10 @@ class BootstrapResult:
     tag_service: TagManagerService
     dag_meta: dict | None
     strategy_id: str | None
+    downgraded: bool = False
+    downgrade_reason: str | None = None
+    safe_mode: bool = False
+    context_available: bool = False
 
 
 class StrategyBootstrapper:
@@ -76,7 +90,7 @@ class StrategyBootstrapper:
         )
         meta_for_gateway = meta_payload if meta_payload is not None else meta
 
-        strategy_id, queue_map = await self._maybe_submit_strategy(
+        submission = await self._maybe_submit_strategy(
             gateway_url=gateway_url,
             skip_gateway_submission=skip_gateway_submission,
             dag=dag,
@@ -87,12 +101,12 @@ class StrategyBootstrapper:
         )
 
         manager = self._init_tag_manager(
-            tag_service, strategy, world_id=world_id, strategy_id=strategy_id
+            tag_service, strategy, world_id=world_id, strategy_id=submission.strategy_id
         )
         self._propagate_strategy_attrs(
-            strategy, strategy_id=strategy_id, gateway_url=gateway_url
+            strategy, strategy_id=submission.strategy_id, gateway_url=gateway_url
         )
-        tag_service.apply_queue_map(strategy, queue_map or {})
+        tag_service.apply_queue_map(strategy, submission.queue_map or {})
 
         offline_mode = self._compute_offline_mode(
             offline=offline, kafka_available=kafka_available, gateway_url=gateway_url
@@ -108,7 +122,11 @@ class StrategyBootstrapper:
                 dataset_fingerprint=dataset_fingerprint,
                 tag_service=tag_service,
                 dag_meta=dag_meta,
-                strategy_id=strategy_id,
+                strategy_id=submission.strategy_id,
+                downgraded=submission.downgraded,
+                downgrade_reason=submission.downgrade_reason,
+                safe_mode=submission.safe_mode,
+                context_available=submission.context_available,
             )
 
         await manager.resolve_tags(offline=offline_mode)
@@ -128,7 +146,11 @@ class StrategyBootstrapper:
             dataset_fingerprint=dataset_fingerprint,
             tag_service=tag_service,
             dag_meta=dag_meta,
-            strategy_id=strategy_id,
+            strategy_id=submission.strategy_id,
+            downgraded=submission.downgraded,
+            downgrade_reason=submission.downgrade_reason,
+            safe_mode=submission.safe_mode,
+            context_available=submission.context_available,
         )
 
     def _apply_context(
@@ -211,10 +233,10 @@ class StrategyBootstrapper:
         gateway_context: Mapping[str, str] | None,
         world_id: str,
         trade_mode: str,
-    ) -> tuple[str | None, dict[str, Any] | Any]:
+    ) -> GatewaySubmission:
 
         if not gateway_url or skip_gateway_submission:
-            return None, {}
+            return GatewaySubmission(strategy_id=None, queue_map={})
 
         ack = await self._gateway_client.post_strategy(
             gateway_url=gateway_url,
@@ -224,9 +246,6 @@ class StrategyBootstrapper:
             world_id=world_id,
         )
 
-        strategy_id: str | None = None
-        queue_map: dict[str, Any] = {}
-
         if isinstance(ack, dict):
             if "error" in ack:
                 error_detail = str(ack.get("error") or "unknown error")
@@ -235,16 +254,29 @@ class StrategyBootstrapper:
                     f"{error_detail} (world_id={world_id}, trade_mode={trade_mode}, "
                     f"gateway_url={gateway_url})"
                 )
-            strategy_val = ack.get("strategy_id")
-            if isinstance(strategy_val, str):
-                strategy_id = strategy_val
-            queue_map_val = ack.get("queue_map", ack)
-            if isinstance(queue_map_val, dict):
-                queue_map = queue_map_val
-        elif isinstance(ack, StrategyAck):
-            strategy_id = ack.strategy_id
-            queue_map = ack.queue_map
-        return strategy_id, queue_map
+        if isinstance(ack, StrategyAck):
+            return GatewaySubmission(
+                strategy_id=ack.strategy_id,
+                queue_map=ack.queue_map or {},
+                downgraded=bool(ack.downgraded),
+                downgrade_reason=ack.downgrade_reason,
+                safe_mode=bool(ack.safe_mode),
+                context_available=True,
+            )
+        downgrade_reason = ack.get("downgrade_reason")
+        if not isinstance(downgrade_reason, str):
+            downgrade_reason = None
+        strategy_id = ack.get("strategy_id")
+        queue_map_val = ack.get("queue_map", ack)
+        queue_map = queue_map_val if isinstance(queue_map_val, dict) else {}
+        return GatewaySubmission(
+            strategy_id=strategy_id if isinstance(strategy_id, str) else None,
+            queue_map=queue_map,
+            downgraded=bool(ack.get("downgraded", False)),
+            downgrade_reason=downgrade_reason,
+            safe_mode=bool(ack.get("safe_mode", False)),
+            context_available=True,
+        )
 
     def _init_tag_manager(
         self,
@@ -306,6 +338,10 @@ class StrategyBootstrapper:
         tag_service: TagManagerService,
         dag_meta: Any,
         strategy_id: str | None,
+        downgraded: bool = False,
+        downgrade_reason: str | None = None,
+        safe_mode: bool = False,
+        context_available: bool = False,
     ) -> BootstrapResult:
         dag_meta_dict = dag_meta if isinstance(dag_meta, dict) else None
         return BootstrapResult(
@@ -316,6 +352,10 @@ class StrategyBootstrapper:
             tag_service=tag_service,
             dag_meta=dag_meta_dict,
             strategy_id=strategy_id,
+            downgraded=downgraded,
+            downgrade_reason=downgrade_reason,
+            safe_mode=safe_mode,
+            context_available=context_available,
         )
 
     def _apply_dataset_fingerprint(
