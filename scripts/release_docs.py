@@ -6,39 +6,63 @@ from __future__ import annotations
 import argparse
 from datetime import date
 from pathlib import Path
+from typing import Mapping
 import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS_DIR = ROOT / "docs"
 CHANGELOG_ROOT = ROOT / "CHANGELOG.md"
-CHANGELOG_DOC = DOCS_DIR / "reference" / "CHANGELOG.md"
+CHANGELOG_DOCS = {
+    "en": DOCS_DIR / "en" / "reference" / "CHANGELOG.md",
+    "ko": DOCS_DIR / "ko" / "reference" / "CHANGELOG.md",
+}
 ARCHIVE_DIR = DOCS_DIR / "archive"
 ARCHIVE_README = ARCHIVE_DIR / "README.md"
 
-FRONT_MATTER = """---
-title: \"Changelog\"
+FRONT_MATTER_BY_LOCALE = {
+    "en": """---
+title: "Changelog"
 tags: []
-author: \"QMTL Team\"
+author: "QMTL Team"
 last_modified: {today}
 ---
 
 <!-- Generated from ../CHANGELOG.md; do not edit manually -->
 
 {{ nav_links() }}
-"""
+""",
+    "ko": """---
+title: "변경 이력"
+tags: []
+author: "QMTL Team"
+last_modified: {today}
+---
+
+<!-- Generated from ../CHANGELOG.md; do not edit manually -->
+
+{{ nav_links() }}
+""",
+}
 
 NAV_FOOTER = "\n{{ nav_links() }}\n"
 
 
 def sync_changelog(
     changelog_root: Path = CHANGELOG_ROOT,
-    changelog_doc: Path = CHANGELOG_DOC,
+    changelog_docs: Mapping[str, Path] | Path = CHANGELOG_DOCS,
 ) -> None:
     """Copy root changelog into docs with front matter."""
     text = changelog_root.read_text()
     today = date.today().isoformat()
-    doc_text = FRONT_MATTER.format(today=today) + "\n" + text + NAV_FOOTER
-    changelog_doc.write_text(doc_text)
+    if isinstance(changelog_docs, Path):
+        front_matter = FRONT_MATTER_BY_LOCALE["en"].format(today=today)
+        doc_text = front_matter + "\n" + text + NAV_FOOTER
+        changelog_docs.write_text(doc_text)
+        return
+    for locale, changelog_doc in changelog_docs.items():
+        front_matter = FRONT_MATTER_BY_LOCALE[locale].format(today=today)
+        doc_text = front_matter + "\n" + text + NAV_FOOTER
+        changelog_doc.write_text(doc_text)
 
 
 def archive_docs(
@@ -72,7 +96,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("sync-changelog", help="Update docs/reference/CHANGELOG.md")
+    sub.add_parser(
+        "sync-changelog",
+        help="Update docs/{ko,en}/reference/CHANGELOG.md",
+    )
     arch = sub.add_parser("archive-docs", help="Archive current docs")
     arch.add_argument("--version", required=True, help="Version to archive")
     arch.add_argument("--status", default="supported", help="Support status")
