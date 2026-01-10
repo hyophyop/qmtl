@@ -204,6 +204,10 @@ class ComputeContextService:
     def _unique_worlds(self, payload: "StrategySubmit") -> List[str]:
         wid_list = getattr(payload, "world_ids", None) or []
         candidates = [str(item) for item in wid_list if item is not None]
+        legacy_world_id = getattr(payload, "world_id", None)
+        if not candidates and legacy_world_id:
+            self._record_deprecated_world_id(str(legacy_world_id))
+            candidates.append(str(legacy_world_id))
         unique: list[str] = []
         seen: set[str] = set()
         for value in candidates:
@@ -223,6 +227,13 @@ class ComputeContextService:
             text = str(value).strip()
             return text or None
         return None
+
+    def _record_deprecated_world_id(self, world_id: str) -> None:
+        gw_metrics.strategy_submit_deprecated_world_id_total.inc()
+        logger.warning(
+            "gateway.strategy_submit_deprecated_world_id",
+            extra={"world_id": world_id},
+        )
 
 
 __all__ = ["ComputeContextService", "StrategyComputeContext"]

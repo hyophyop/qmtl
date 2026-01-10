@@ -15,6 +15,10 @@ except Exception:  # pragma: no cover - fallback for older environments
 class StrategySubmit(BaseModel):
     dag_json: str = Field(..., description="Base64 encoded DAG JSON")
     meta: Optional[dict] = Field(default=None)
+    world_id: Optional[str] = Field(
+        default=None,
+        description="Deprecated; use world_ids instead.",
+    )
     world_ids: Optional[list[str]] = None
     node_ids_crc32: int
 

@@ -178,6 +178,13 @@ strategy_compute_context_downgrade_total = _counter(
     ["reason"],
 )
 
+strategy_submit_deprecated_world_id_total = _counter(
+    "strategy_submit_deprecated_world_id_total",
+    "Total number of strategy submissions using deprecated world_id field",
+    test_value_attr="_val",
+    test_value_factory=lambda: 0,
+)
+
 worlds_breaker_state = _gauge(
     "worlds_breaker_state",
     "WorldService circuit breaker state (1=open, 0=closed)",

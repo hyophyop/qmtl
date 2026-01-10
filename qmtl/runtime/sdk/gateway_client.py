@@ -306,7 +306,6 @@ class GatewayClient:
             "node_ids_crc32": crc32_of_list(n["node_id"] for n in dag.get("nodes", [])),
         }
         if world_id is not None:
-            payload["world_id"] = world_id
             payload["world_ids"] = [world_id]
         if context:
             payload["context"] = context
