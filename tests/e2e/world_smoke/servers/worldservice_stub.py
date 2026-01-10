@@ -43,6 +43,12 @@ ETAG_COUNTER: Dict[str, int] = {}
 ALLOCATIONS: Dict[str, Dict[str, Any]] = {}
 
 
+def reset_state() -> None:
+    WORLDS.clear()
+    ETAG_COUNTER.clear()
+    ALLOCATIONS.clear()
+
+
 @app.get("/health")
 async def health() -> dict:
     return {"ok": True}

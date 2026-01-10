@@ -16,7 +16,7 @@ import yaml
 
 from qmtl.services.gateway.api import create_app
 from qmtl.services.gateway.ws import WebSocketHub
-from tests.e2e.world_smoke.servers.worldservice_stub import app as ws_app
+from tests.e2e.world_smoke.servers.worldservice_stub import app as ws_app, reset_state as reset_ws_state
 
 # Third-party websockets emits a deprecation warning in uvicorn; ignore so -Werror runs stay green.
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="websockets")
@@ -95,6 +95,7 @@ class InProcessCoreLoopStack:
         if self._handle is not None:
             return self._handle
 
+        reset_ws_state()
         ws_port = _find_free_port()
         gw_port = _find_free_port()
 
