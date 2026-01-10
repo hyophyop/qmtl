@@ -50,24 +50,14 @@ For general contribution and testing policies, see the repository root [AGENTS.m
 
 ## Testing
 
-- CI parity (required before opening a PR): run every check that CI executes (from
-  `.github/workflows/ci.yml` and `docs-link-check.yml`). Use the same flags/paths, adding `-n auto`
-  locally for speed only if the checks remain equivalent. Order to mirror CI:
-  - `uv run --with mypy -m mypy`
-  - `uv run mkdocs build --strict`
-  - `uv run python scripts/check_design_drift.py`
-  - `uv run python scripts/lint_dsn_keys.py`
-  - `uv run --with grimp python scripts/check_import_cycles.py --baseline scripts/import_cycles_baseline.json`
-  - `uv run --with grimp python scripts/check_sdk_layers.py`
-  - `uv run python scripts/check_docs_links.py`
-  - `uv run -m pytest --collect-only -q`
-  - `PYTHONFAULTHANDLER=1 uv run --with pytest-timeout -m pytest -q --timeout=60 --timeout-method=thread --maxfail=1 -k 'not slow'`
-  - `PYTHONPATH=qmtl/proto uv run pytest -p no:unraisableexception -W error -q tests`
-  - `USE_INPROC_WS_STACK=1 WS_MODE=service uv run -m pytest -q tests/e2e/world_smoke -q`
-- Always run tests in parallel with `pytest-xdist` for faster feedback; if not installed, add it
-  temporarily with `uv pip install pytest-xdist`. For suites with shared resources, prefer
-  `--dist loadscope` or cap workers (e.g., `-n 2`). Mark must‑be‑serial tests and run them
-  separately.
+- **PR gate (mandatory):** Do not open a PR until the full local CI gate passes (same commands and flags as CI; no “close enough” substitutions).
+  - Run: `bash scripts/run_ci_local.sh`
+  - Required outcome: exit code 0 with all steps green. If anything fails, fix locally first (or open a **draft** PR with explicit failing step + logs).
+  - CI parity rules: use Python 3.11 (CI), run with `uv`, and do not change flags (e.g., don’t add `-n auto`, don’t drop `-W error`, don’t skip preflight).
+
+- **Fast iteration (optional):** You may run narrower/parallelized commands while developing, but they do not replace the PR gate run.
+  - Example: `uv run -m pytest -n auto -q tests/unit -q` (or the specific test module you touched).
+  - If you need extra tooling (e.g., `pytest-xdist`), add it to the project’s dev dependencies (so CI and teammates match), rather than installing ad-hoc.
 
 ### Test Design Strategy
 
@@ -88,8 +78,9 @@ To prevent a single hanging test from blocking the entire suite, we run a fast
   - Rationale: `pytest-timeout` turns hangs into failures with a traceback; `faulthandler` ensures a stack dump is emitted.
 - Optional: collection sanity check to catch import‑time blocks early:
   - `uv run -m pytest --collect-only -q`
-- After preflight passes, run the full suite:
-  - `uv run -m pytest -W error -n auto`
+- After preflight passes, run the CI-equivalent suite command:
+  - `PYTHONPATH=qmtl/proto uv run pytest -p no:unraisableexception -W error -q tests`
+  - (Optional for iteration only) `PYTHONPATH=qmtl/proto uv run pytest -p no:unraisableexception -W error -n auto -q tests`
 
 Guidance for authors:
 - If a test is expected to exceed 60s, add a per‑test timeout override: `@pytest.mark.timeout(180)`.
