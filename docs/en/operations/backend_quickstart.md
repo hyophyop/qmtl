@@ -2,7 +2,7 @@
 title: "Backend Quickstart"
 tags: [quickstart, gateway, dagmanager, worldservice]
 author: "QMTL Team"
-last_modified: 2025-09-23
+last_modified: 2026-01-09
 ---
 
 {{ nav_links() }}
@@ -19,7 +19,11 @@ See also: Docker usage and full stack notes in [Docker & Compose](docker.md) and
 end-to-end tests in [E2E Testing](e2e_testing.md).
 
 !!! tip "Check the deployment profile"
-    `profile: dev` (default) allows in-memory fallbacks when Redis/Kafka/Neo4j/commit-log settings are empty. For production, set `profile: prod` and fill `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_*`, `gateway.commitlog_*`, `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, `worldservice.server.redis`, and `worldservice.server.controlbus_brokers`/`controlbus_topic` so that `qmtl config validate` and service startup succeed.
+    `profile: dev` (default) allows lightweight fallbacks when infra settings are empty.
+    - WorldService: if `worldservice.redis` is missing, it uses the in-memory activation store
+    - Gateway: if `gateway.redis_dsn` is missing, it uses in-memory Redis (commit-log/ControlBus optional)
+    - DAG Manager: if `dagmanager.neo4j_dsn`/`dagmanager.kafka_dsn` are missing, it uses in-memory repos/queues
+    For production, set `profile: prod` and fill `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_*`, `gateway.commitlog_*`, `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, `dagmanager.controlbus_*`, `worldservice.redis`, and `worldservice.controlbus_brokers`/`controlbus_topic` so that `qmtl config validate` and service startup succeed.
 
 ## Prerequisites
 
@@ -56,28 +60,25 @@ service commands auto-discover it.
 
 ## Option A — Run locally (no Docker)
 
-1) Start WorldService (SQLite + Redis example)
+1) Prepare a unified config
 
 ```bash
-cat > worldservice.yml <<'EOF'
-worldservice:
-  dsn: sqlite:///worlds.db
-  redis: redis://localhost:6379/0
-  bind:
-    host: 0.0.0.0
-    port: 8080
-  auth:
-    header: Authorization
-    tokens: []
-EOF
+cp qmtl/examples/qmtl.yml ./qmtl.yml
+```
+
+Update required values (for example `gateway.events.secret` and the WorldService Redis DSN). To use in-memory fallbacks, leave `gateway.redis_dsn`, `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, and `worldservice.redis` empty.
+
+2) Start WorldService (SQLite + Redis example)
+
+```bash
 uv run uvicorn qmtl.services.worldservice.api:create_app --factory --host 0.0.0.0 --port 8080
 ```
 
-Run the command from the same directory so `worldservice.yml` is discovered.
+Run the command from the same directory so `qmtl.yml` is discovered.
 
-2) Configure and start Gateway
+3) Configure and start Gateway
 
-- Edit `qmtl/examples/qmtl.yml`:
+- Review `qmtl.yml`:
   - `gateway.worldservice_url: http://localhost:8080`
   - `gateway.enable_worldservice_proxy: true`
   - `gateway.events.secret: <generate a 64-character hex secret>`
@@ -85,13 +86,13 @@ Run the command from the same directory so `worldservice.yml` is discovered.
 - Start Gateway with the config:
 
 ```bash
-qmtl service gateway --config qmtl/examples/qmtl.yml
+qmtl service gateway --config qmtl.yml
 ```
 
-3) Start DAG Manager (same config)
+4) Start DAG Manager (same config)
 
 ```bash
-qmtl service dagmanager server --config qmtl/examples/qmtl.yml
+qmtl service dagmanager server --config qmtl.yml
 ```
 
 Notes
@@ -117,7 +118,7 @@ Or the fuller root stack with health checks and volumes:
 
 ```bash
 docker compose up -d
-# Gateway: http://localhost:8000, DAG Manager HTTP: http://localhost:8001/health
+# Gateway: http://localhost:8000, DAG Manager HTTP: http://localhost:8001/status
 ```
 
 Stop stacks with `docker compose down` (add `-v` to remove volumes).
@@ -125,7 +126,7 @@ Stop stacks with `docker compose down` (add `-v` to remove volumes).
 ## Verify
 
 - Gateway status: `curl http://localhost:8000/status`
-- DAG Manager HTTP health (root stack): `curl http://localhost:8001/health`
+- DAG Manager HTTP health (root stack): `curl http://localhost:8001/status`
 - Neo4j init (if using Neo4j):
 
 ```bash

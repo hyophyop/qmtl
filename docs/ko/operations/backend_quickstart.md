@@ -2,7 +2,7 @@
 title: "백엔드 퀵스타트"
 tags: [quickstart, gateway, dagmanager, worldservice]
 author: "QMTL Team"
-last_modified: 2025-09-23
+last_modified: 2026-01-09
 ---
 
 {{ nav_links() }}
@@ -18,7 +18,11 @@ last_modified: 2025-09-23
 추가로 [Docker & Compose](docker.md) 의 전체 스택 설명과 [E2E 테스트](e2e_testing.md) 문서를 참고하세요.
 
 !!! tip "배포 프로필 체크"
-    `profile: dev`(기본)에서는 redis/kafka/neo4j/commit-log가 비어 있어도 인메모리 대체 구현으로 기동됩니다. 운영 배포에서는 `profile: prod`를 지정하고, `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_*`, `gateway.commitlog_*`, `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, `worldservice.server.redis`, `worldservice.server.controlbus_brokers`/`controlbus_topic`를 모두 채워야 `qmtl config validate`와 서비스 부팅이 성공합니다.
+    `profile: dev`(기본)에서는 인프라가 비어 있어도 가벼운 폴백으로 기동합니다.
+    - WorldService: `worldservice.redis` 가 없으면 인메모리 활성화 저장소 사용
+    - Gateway: `gateway.redis_dsn` 이 없으면 인메모리 Redis 사용(커밋 로그/ControlBus 미설정 가능)
+    - DAG Manager: `dagmanager.neo4j_dsn`/`dagmanager.kafka_dsn` 이 없으면 인메모리 리포지토리/큐 사용
+    운영 배포에서는 `profile: prod`를 지정하고, `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_*`, `gateway.commitlog_*`, `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, `dagmanager.controlbus_*`, `worldservice.redis`, `worldservice.controlbus_brokers`/`controlbus_topic`를 모두 채워야 `qmtl config validate`와 서비스 부팅이 성공합니다.
 
 ## 사전 준비
 
@@ -54,28 +58,25 @@ last_modified: 2025-09-23
 
 ## 옵션 A — 로컬 실행(Docker 없음)
 
-1) WorldService 시작(SQLite + Redis 예제)
+1) 통합 설정 준비
 
 ```bash
-cat > worldservice.yml <<'EOF'
-worldservice:
-  dsn: sqlite:///worlds.db
-  redis: redis://localhost:6379/0
-  bind:
-    host: 0.0.0.0
-    port: 8080
-  auth:
-    header: Authorization
-    tokens: []
-EOF
+cp qmtl/examples/qmtl.yml ./qmtl.yml
+```
+
+필요한 값(예: `gateway.events.secret`, WorldService Redis DSN)을 수정하세요. 인메모리 폴백을 쓰려면 `gateway.redis_dsn`, `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, `worldservice.redis` 값을 비워 둡니다.
+
+2) WorldService 시작(SQLite + Redis 예제)
+
+```bash
 uv run uvicorn qmtl.services.worldservice.api:create_app --factory --host 0.0.0.0 --port 8080
 ```
 
-명령을 실행하는 디렉터리에서 `worldservice.yml` 이 발견되도록 유지하세요.
+명령을 실행하는 디렉터리에서 `qmtl.yml` 이 발견되도록 유지하세요.
 
-2) Gateway 구성 및 시작
+3) Gateway 구성 및 시작
 
-- `qmtl/examples/qmtl.yml` 수정:
+- `qmtl.yml` 확인:
   - `gateway.worldservice_url: http://localhost:8080`
   - `gateway.enable_worldservice_proxy: true`
   - `gateway.events.secret: <64자 헥사 시크릿 생성>`
@@ -83,13 +84,13 @@ uv run uvicorn qmtl.services.worldservice.api:create_app --factory --host 0.0.0.
 - 구성으로 Gateway 실행:
 
 ```bash
-qmtl service gateway --config qmtl/examples/qmtl.yml
+qmtl service gateway --config qmtl.yml
 ```
 
-3) 동일한 구성으로 DAG Manager 시작
+4) 동일한 구성으로 DAG Manager 시작
 
 ```bash
-qmtl service dagmanager server --config qmtl/examples/qmtl.yml
+qmtl service dagmanager server --config qmtl.yml
 ```
 
 메모
@@ -115,7 +116,7 @@ docker compose -f tests/docker-compose.e2e.yml up --build -d
 
 ```bash
 docker compose up -d
-# Gateway: http://localhost:8000, DAG Manager HTTP: http://localhost:8001/health
+# Gateway: http://localhost:8000, DAG Manager HTTP: http://localhost:8001/status
 ```
 
 `docker compose down` (볼륨 삭제 시 `-v`) 으로 스택을 종료하세요.
@@ -123,7 +124,7 @@ docker compose up -d
 ## 검증
 
 - Gateway 상태: `curl http://localhost:8000/status`
-- DAG Manager HTTP 헬스(루트 스택): `curl http://localhost:8001/health`
+- DAG Manager HTTP 헬스(루트 스택): `curl http://localhost:8001/status`
 - Neo4j 초기화(사용 중일 때):
 
 ```bash
