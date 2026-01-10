@@ -305,6 +305,7 @@ def test_inproc_stack_sets_service_env(core_loop_stack: CoreLoopStackHandle):
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(180)
 async def test_world_data_preset_autowires_seamless_provider(core_loop_world_id: str):
     from qmtl.runtime.sdk import Runner
     from tests.e2e.core_loop.worlds.core_loop_demo_strategy import CoreLoopDemoStrategy
