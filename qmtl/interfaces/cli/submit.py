@@ -57,6 +57,28 @@ def _prepend_strategy_root(strategy_root: Path | None) -> None:
     if candidates:
         sys.path[:0] = candidates
 
+    module = sys.modules.get("strategies")
+    if module is not None and not _strategy_module_matches_root(module, strategy_root):
+        for name in list(sys.modules):
+            if name == "strategies" or name.startswith("strategies."):
+                sys.modules.pop(name, None)
+
+
+def _strategy_module_matches_root(module: object, strategy_root: Path) -> bool:
+    module_file = getattr(module, "__file__", None)
+    if module_file:
+        path = Path(module_file).resolve()
+        if path == strategy_root or strategy_root in path.parents:
+            return True
+
+    module_paths = getattr(module, "__path__", None)
+    if module_paths:
+        for entry in module_paths:
+            path = Path(entry).resolve()
+            if path == strategy_root or strategy_root in path.parents:
+                return True
+    return False
+
 
 def cmd_submit(argv: List[str]) -> int:
     """Submit a strategy for evaluation."""
