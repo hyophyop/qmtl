@@ -67,13 +67,11 @@ def test_examples_conform_to_json_schemas():
     }
     snapshot = {
         "world_id": "arch_world",
-        "strategy_id": "strat_001",
-        "as_of": 1694102402000,
-        "cash": 100000.0,
-        "positions": {
-            "BTC/USDT": {"qty": 0.01, "avg_cost": 25010.0, "mark": 24995.0}
-        },
-        "metrics": {"exposure": 0.25, "leverage": 1.1},
+        "as_of": "2025-01-01T00:00:00Z",
+        "version": "v1",
+        "weights": {"BTC/USDT": 0.6, "ETH/USDT": 0.4},
+        "provenance": {"actor": "gateway", "stage": "paper"},
+        "ttl_sec": 900,
         "debug": 1,
     }
 

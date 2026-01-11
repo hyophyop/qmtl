@@ -6,26 +6,40 @@
   "additionalProperties": true,
   "properties": {
     "world_id": { "type": "string" },
-    "strategy_id": { "type": "string" },
-    "as_of": { "type": "integer" },
-    "cash": { "type": "number" },
-    "positions": {
-      "type": "object",
-      "additionalProperties": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "qty": { "type": "number" },
-          "avg_cost": { "type": "number" },
-          "mark": { "type": "number" }
-        },
-        "required": ["qty", "avg_cost", "mark"]
-      }
-    },
-    "metrics": {
+    "as_of": { "type": "string", "format": "date-time" },
+    "version": { "type": "string" },
+    "weights": {
       "type": "object",
       "additionalProperties": { "type": "number" }
-    }
+    },
+    "covariance": {
+      "type": "object",
+      "additionalProperties": { "type": "number" }
+    },
+    "covariance_ref": { "type": "string" },
+    "realized_returns": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "number" }
+          }
+        },
+        {
+          "type": "array",
+          "items": { "type": "number" }
+        }
+      ]
+    },
+    "realized_returns_ref": { "type": "string" },
+    "stress_ref": { "type": "string" },
+    "stress": { "type": "object", "additionalProperties": true },
+    "constraints": { "type": "object", "additionalProperties": true },
+    "provenance": { "type": "object", "additionalProperties": true },
+    "hash": { "type": "string" },
+    "ttl_sec": { "type": "integer", "minimum": 1 },
+    "created_at": { "type": "string", "format": "date-time" }
   },
-  "required": ["world_id", "as_of", "cash", "positions"]
+  "required": ["world_id", "as_of", "version", "weights"]
 }

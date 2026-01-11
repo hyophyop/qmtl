@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qmtl.dev/schemas/event_risk_snapshot_updated.schema.json",
+  "title": "RiskSnapshotUpdatedEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "specversion": { "const": "1.0" },
+    "id": { "type": "string" },
+    "source": { "type": "string" },
+    "type": { "const": "risk_snapshot_updated" },
+    "time": { "type": "string", "format": "date-time" },
+    "datacontenttype": { "const": "application/json" },
+    "data": {
+      "allOf": [
+        { "$ref": "https://qmtl.dev/schemas/portfolio_snapshot.schema.json" },
+        {
+          "type": "object",
+          "properties": {
+            "event_version": { "type": "integer", "minimum": 1 },
+            "idempotency_key": { "type": "string" }
+          },
+          "required": ["event_version", "idempotency_key"]
+        }
+      ]
+    },
+    "correlation_id": { "type": "string" }
+  },
+  "required": [
+    "specversion",
+    "id",
+    "source",
+    "type",
+    "time",
+    "datacontenttype",
+    "data",
+    "correlation_id"
+  ]
+}
