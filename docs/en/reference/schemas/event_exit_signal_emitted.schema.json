@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qmtl.dev/schemas/event_exit_signal_emitted.schema.json",
+  "title": "ExitSignalEmittedEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "specversion": { "const": "1.0" },
+    "id": { "type": "string" },
+    "source": { "type": "string" },
+    "type": { "const": "exit_signal_emitted" },
+    "time": { "type": "string", "format": "date-time" },
+    "datacontenttype": { "const": "application/json" },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "world_id": { "type": "string" },
+        "as_of": { "type": "string", "format": "date-time" },
+        "snapshot_version": { "type": "string" },
+        "event_version": { "type": "integer", "minimum": 1 },
+        "idempotency_key": { "type": "string" },
+        "signals": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "strategy_id": { "type": "string" },
+              "action": { "type": "string", "enum": ["exit", "reduce", "hold"] },
+              "reduction_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+              "reason": { "type": "string" },
+              "metrics": { "type": "object", "additionalProperties": true },
+              "tags": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            },
+            "required": ["strategy_id", "action"]
+          }
+        },
+        "provenance": { "type": "object", "additionalProperties": true }
+      },
+      "required": [
+        "world_id",
+        "as_of",
+        "snapshot_version",
+        "event_version",
+        "idempotency_key",
+        "signals"
+      ]
+    },
+    "correlation_id": { "type": "string" }
+  },
+  "required": [
+    "specversion",
+    "id",
+    "source",
+    "type",
+    "time",
+    "datacontenttype",
+    "data",
+    "correlation_id"
+  ]
+}
