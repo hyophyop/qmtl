@@ -5,7 +5,7 @@ tags:
   - release
   - definition-of-done
 author: "QMTL Team"
-last_modified: 2026-01-09
+last_modified: 2026-01-11
 ---
 
 {{ nav_links() }}
@@ -81,6 +81,12 @@ CORE_LOOP_STACK_MODE=inproc uv run -m pytest -q tests/e2e/core_loop -q
   - `python -m build` 또는 동등 절차로 생성한 sdist
 - 패키징 산출물 설치 스모크(최소 `qmtl --help`)를 `scripts/package_smoke.sh`로 재현 가능해야 함
 - 릴리스 문서 아카이빙 절차 확인: [릴리스 프로세스](release.md)
+
+## 릴리스 노트 검증 증거
+
+- GitHub Release 노트에 DoD 검증 결과 링크를 남깁니다.
+  - CI run URL 또는 실행 로그/아티팩트 위치 링크
+- 릴리스 노트는 `CHANGELOG.md` 요약과 함께 위 링크를 포함해야 합니다.
 
 ## 결정 근거
 
