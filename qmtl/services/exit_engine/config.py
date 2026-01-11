@@ -3,6 +3,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+
+
+def _env_value(env: dict[str, str], key: str, default: str | None = None) -> str | None:
+    value = env.get(key)
+    if value is None or str(value).strip() == "":
+        return default
+    return value
+
+
+def _required_env(env: dict[str, str], key: str) -> str:
+    value = _env_value(env, key)
+    if not value:
+        raise ValueError(f"{key} is required")
+    return value
+
+
 def _split_csv(value: str | None) -> list[str]:
     if not value:
         return []
@@ -28,22 +44,20 @@ class ExitEngineConfig:
 
     @classmethod
     def from_env(cls, env: dict[str, str]) -> "ExitEngineConfig":
-        ws_base_url = env.get("EXIT_ENGINE_WS_BASE_URL", "").strip()
-        if not ws_base_url:
-            raise ValueError("EXIT_ENGINE_WS_BASE_URL is required")
-        controlbus_brokers = _split_csv(env.get("CONTROLBUS_BROKERS"))
-        controlbus_topic = env.get("CONTROLBUS_TOPIC") or "policy"
-        controlbus_group_id = env.get("CONTROLBUS_GROUP_ID") or "exit-engine"
-        freeze_world_ids = set(_split_csv(env.get("EXIT_ENGINE_FREEZE_WORLD_IDS")))
-        drain_world_ids = set(_split_csv(env.get("EXIT_ENGINE_DRAIN_WORLD_IDS")))
-        strategy_id = env.get("EXIT_ENGINE_STRATEGY_ID")
-        side = env.get("EXIT_ENGINE_SIDE") or "long"
-        reason = env.get("EXIT_ENGINE_REASON") or "exit_engine_rule"
-        request_timeout_sec = float(env.get("EXIT_ENGINE_TIMEOUT_SEC") or "5.0")
-        auth_header = env.get("EXIT_ENGINE_AUTH_HEADER") or "Authorization"
-        auth_token = env.get("EXIT_ENGINE_AUTH_TOKEN")
-        ttl_sec_default = int(env.get("EXIT_ENGINE_TTL_SEC_DEFAULT") or "900")
-        ttl_sec_max = int(env.get("EXIT_ENGINE_TTL_SEC_MAX") or "86400")
+        ws_base_url = _required_env(env, "EXIT_ENGINE_WS_BASE_URL").strip()
+        controlbus_brokers = _split_csv(_env_value(env, "CONTROLBUS_BROKERS"))
+        controlbus_topic = _env_value(env, "CONTROLBUS_TOPIC", "policy")
+        controlbus_group_id = _env_value(env, "CONTROLBUS_GROUP_ID", "exit-engine")
+        freeze_world_ids = set(_split_csv(_env_value(env, "EXIT_ENGINE_FREEZE_WORLD_IDS")))
+        drain_world_ids = set(_split_csv(_env_value(env, "EXIT_ENGINE_DRAIN_WORLD_IDS")))
+        strategy_id = _env_value(env, "EXIT_ENGINE_STRATEGY_ID")
+        side = _env_value(env, "EXIT_ENGINE_SIDE", "long")
+        reason = _env_value(env, "EXIT_ENGINE_REASON", "exit_engine_rule")
+        request_timeout_sec = float(_env_value(env, "EXIT_ENGINE_TIMEOUT_SEC", "5.0"))
+        auth_header = _env_value(env, "EXIT_ENGINE_AUTH_HEADER", "Authorization")
+        auth_token = _env_value(env, "EXIT_ENGINE_AUTH_TOKEN")
+        ttl_sec_default = int(_env_value(env, "EXIT_ENGINE_TTL_SEC_DEFAULT", "900"))
+        ttl_sec_max = int(_env_value(env, "EXIT_ENGINE_TTL_SEC_MAX", "86400"))
 
         return cls(
             ws_base_url=ws_base_url,
