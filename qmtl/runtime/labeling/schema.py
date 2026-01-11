@@ -53,8 +53,8 @@ class LabelEvent:
     metadata: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if self.resolved_time < self.entry_time:
-            raise ValueError("resolved_time must be >= entry_time")
+        if self.resolved_time <= self.entry_time:
+            raise ValueError("resolved_time must be > entry_time")
         if self.barrier.frozen_at and self.barrier.frozen_at != self.entry_time:
             raise ValueError("barrier.frozen_at must match entry_time when set")
         if self.horizon.frozen_at and self.horizon.frozen_at != self.entry_time:
