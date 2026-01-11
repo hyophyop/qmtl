@@ -9,6 +9,7 @@ __all__ = [
     "generators",
     "indicators",
     "io",
+    "labeling",
     "nodesets",
     "pipeline",
     "reference_models",

@@ -109,6 +109,7 @@ nav:
       - CI: operations/ci.md
   - Design:
       - Design Guide: design/README.md
+      - Labeling Contract: design/labeling_contract.md
       - QMTL UI: design/icebox/qmtl_ui.md
       - Strategy Distillation: design/icebox/strategy_distillation.md
       - World Validation Architecture: design/icebox/world_validation_architecture.md
