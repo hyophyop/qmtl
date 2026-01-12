@@ -30,33 +30,47 @@ def build_triple_barrier_label_node(
         raise ValueError("price_node and entry_node must be distinct nodes")
 
     state = TripleBarrierStateMachine(cost_model=cost_model)
-    entry_index = 0
-    price_index = 0
+    last_entry_event_id: int | None = None
+    last_entry_event_count = 0
+    last_price_event_id: int | None = None
+    last_price_event_count = 0
 
     def _compute(view: CacheView) -> list[TripleBarrierLabel] | None:
-        nonlocal entry_index, price_index
+        nonlocal last_entry_event_id
+        nonlocal last_entry_event_count
+        nonlocal last_price_event_id
+        nonlocal last_price_event_count
 
         entry_events = _latest_events(view, entry_node)
-        if entry_index < len(entry_events):
-            for _, payload in entry_events[entry_index:]:
-                entry, barrier, horizon = _coerce_entry_payload(
-                    payload,
-                    default_barrier=default_barrier,
-                    default_horizon=default_horizon,
-                )
-                state.register_entry(entry, barrier, horizon)
-            entry_index = len(entry_events)
+        new_entry_events, (entry_updated, entry_count) = _select_new_events(
+            entry_events,
+            last_entry_event_id,
+            last_entry_event_count,
+        )
+        for _, payload in new_entry_events:
+            entry, barrier, horizon = _coerce_entry_payload(
+                payload,
+                default_barrier=default_barrier,
+                default_horizon=default_horizon,
+            )
+            state.register_entry(entry, barrier, horizon)
+        last_entry_event_id = entry_updated
+        last_entry_event_count = entry_count
 
         price_events = _latest_events(view, price_node)
-        if price_index >= len(price_events):
-            return None
+        new_price_events, (price_updated, price_count) = _select_new_events(
+            price_events,
+            last_price_event_id,
+            last_price_event_count,
+        )
         labels: list[TripleBarrierLabel] = []
-        for _, payload in price_events[price_index:]:
+        for _, payload in new_price_events:
             if not _is_observation_payload(payload):
                 continue
             observation = _coerce_observation_payload(payload)
             labels.extend(state.update(observation))
-        price_index = len(price_events)
+        last_price_event_id = price_updated
+        last_price_event_count = price_count
         if not labels:
             return None
         return labels
@@ -81,6 +95,47 @@ def _latest_events(view: CacheView, node: Node) -> list[tuple[int, Any]]:
         return list(view[node][node.interval])
     except KeyError:
         return []
+
+
+def _select_new_events(
+    events: list[tuple[int, Any]],
+    last_event_id: int | None,
+    last_event_count: int,
+) -> tuple[list[tuple[int, Any]], tuple[int | None, int]]:
+    if not events:
+        return [], (last_event_id, last_event_count)
+    if last_event_id is None:
+        return events, _event_cursor(events, last_event_id, last_event_count)
+
+    new_events: list[tuple[int, Any]] = []
+    seen_last = 0
+    for event_id, payload in events:
+        if event_id < last_event_id:
+            continue
+        if event_id == last_event_id:
+            seen_last += 1
+            if seen_last <= last_event_count:
+                continue
+        new_events.append((event_id, payload))
+    return new_events, _event_cursor(events, last_event_id, last_event_count)
+
+
+def _event_cursor(
+    events: list[tuple[int, Any]],
+    last_event_id: int | None,
+    last_event_count: int,
+) -> tuple[int | None, int]:
+    if not events:
+        return last_event_id, last_event_count
+    latest_id = events[-1][0]
+    latest_count = sum(1 for event_id, _ in events if event_id == latest_id)
+    if last_event_id is None:
+        return latest_id, latest_count
+    if latest_id > last_event_id or (
+        latest_id == last_event_id and latest_count > last_event_count
+    ):
+        return latest_id, latest_count
+    return last_event_id, last_event_count
 
 
 def _coerce_entry_payload(
