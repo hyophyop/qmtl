@@ -33,7 +33,7 @@ from qmtl.runtime.labeling import BarrierSpec, HorizonSpec, LabelEvent, LabelOut
 
 - `profit_target`: PT 임계값 (없으면 None)
 - `stop_loss`: SL 임계값 (없으면 None)
-- `unit`: 값의 의미(기본 "return_multiple", 변동성 스케일 배리어는 "price" 절대가격 단위를 사용)
+- `mode`: 값의 표현 방식(`price`는 절대가격 배리어, `return`은 수익률 단위 배리어)
 - `frozen_at`: 파라미터가 고정된 시각 (entry_time과 동일해야 함)
 
 ### HorizonSpec

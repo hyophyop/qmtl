@@ -33,7 +33,7 @@ from qmtl.runtime.labeling import BarrierSpec, HorizonSpec, LabelEvent, LabelOut
 
 - `profit_target`: PT threshold (None if unused)
 - `stop_loss`: SL threshold (None if unused)
-- `unit`: value meaning (default "return_multiple"; volatility-scaled barriers use absolute "price" units)
+- `mode`: representation (`price` for absolute price barriers, `return` for return-based barriers)
 - `frozen_at`: timestamp the parameters were frozen (must match entry_time)
 
 ### HorizonSpec
