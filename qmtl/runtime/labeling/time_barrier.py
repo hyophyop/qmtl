@@ -91,7 +91,9 @@ class HalfLifeHorizonResolver:
             raise ValueError("max_events must be >= min_events")
 
     def resolve(self, context: HorizonContext) -> HorizonSpec:
-        if not context.past_values:
+        if context.past_values is None:
+            raise ValueError("past_values are required to estimate half-life")
+        if len(context.past_values) == 0:
             raise ValueError("past_values are required to estimate half-life")
         half_life = self.estimator(context.past_values)
         if half_life <= 0:
@@ -137,6 +139,8 @@ class CompositeHorizonResolver:
                 if spec.max_duration is not None or spec.max_bars is not None:
                     return _freeze_spec(spec, context.entry_time)
             return HorizonSpec(frozen_at=context.entry_time)
+        if self.mode == CompositeHorizonMode.FIRST_EXPIRY:
+            return _select_first_expiry_spec(specs, context)
         return _merge_min_specs(specs, context.entry_time)
 
 
@@ -160,6 +164,42 @@ def _merge_min_specs(specs: Iterable[HorizonSpec], entry_time: datetime) -> Hori
         max_bars=min_bars,
         frozen_at=entry_time,
     )
+
+
+def _select_first_expiry_spec(
+    specs: Iterable[HorizonSpec],
+    context: HorizonContext,
+) -> HorizonSpec:
+    earliest_spec: HorizonSpec | None = None
+    earliest_duration: timedelta | None = None
+    for spec in specs:
+        expiry = _spec_expiry_duration(spec, context.event_timedelta)
+        if expiry is None:
+            continue
+        if earliest_duration is None or expiry < earliest_duration:
+            earliest_duration = expiry
+            earliest_spec = spec
+    if earliest_spec is not None:
+        return _freeze_spec(earliest_spec, context.entry_time)
+    bars_specs = [(spec.max_bars, spec) for spec in specs if spec.max_bars is not None]
+    if bars_specs:
+        _, bar_spec = min(bars_specs, key=lambda item: item[0])
+        return _freeze_spec(bar_spec, context.entry_time)
+    return HorizonSpec(frozen_at=context.entry_time)
+
+
+def _spec_expiry_duration(
+    spec: HorizonSpec,
+    event_timedelta: timedelta | None,
+) -> timedelta | None:
+    durations: list[timedelta] = []
+    if spec.max_duration is not None:
+        durations.append(spec.max_duration)
+    if spec.max_bars is not None and event_timedelta is not None:
+        durations.append(event_timedelta * spec.max_bars)
+    if not durations:
+        return None
+    return min(durations)
 
 
 __all__ = [

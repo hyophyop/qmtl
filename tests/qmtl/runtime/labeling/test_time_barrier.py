@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import Iterator, Sequence
 
 import pytest
 
@@ -12,6 +13,24 @@ from qmtl.runtime.labeling.time_barrier import (
     HorizonContext,
     estimate_half_life,
 )
+
+
+class AmbiguousSequence(Sequence[float]):
+    def __init__(self, values: list[float]) -> None:
+        self._values = values
+
+    def __getitem__(self, index: int) -> float:
+        return self._values[index]
+
+    def __len__(self) -> int:
+        return len(self._values)
+
+    def __iter__(self) -> Iterator[float]:
+        return iter(self._values)
+
+    def __bool__(self) -> bool:  # pragma: no cover - defensive for truthiness checks
+        raise ValueError("truthiness is ambiguous")
+
 
 
 def test_estimate_half_life_from_mean_reverting_series() -> None:
@@ -70,6 +89,23 @@ def test_half_life_horizon_resolver_can_return_duration() -> None:
     assert spec.frozen_at == entry_time
 
 
+def test_half_life_horizon_accepts_sequence_with_ambiguous_truthiness() -> None:
+    entry_time = datetime(2025, 1, 1)
+    context = HorizonContext(
+        entry_time=entry_time,
+        past_values=AmbiguousSequence([1.0, 0.5, 0.25]),
+    )
+    resolver = HalfLifeHorizonResolver(
+        estimator=lambda values: 1.0,
+        min_events=2,
+    )
+
+    spec = resolver.resolve(context)
+
+    assert spec.max_bars == 2
+    assert spec.frozen_at == entry_time
+
+
 def test_composite_horizon_min_uses_smallest_limits() -> None:
     entry_time = datetime(2025, 1, 1)
     context = HorizonContext(
@@ -87,6 +123,28 @@ def test_composite_horizon_min_uses_smallest_limits() -> None:
     spec = composite.resolve(context)
 
     assert spec.max_bars == 2
+    assert spec.frozen_at == entry_time
+
+
+def test_composite_horizon_first_expiry_chooses_earliest_duration() -> None:
+    entry_time = datetime(2025, 1, 1)
+    context = HorizonContext(
+        entry_time=entry_time,
+        past_values=[1.0, 0.5, 0.25, 0.125],
+        event_timedelta=timedelta(minutes=1),
+    )
+    composite = CompositeHorizonResolver(
+        resolvers=[
+            EventCountHorizonResolver(max_events=10),
+            HalfLifeHorizonResolver(multiplier=2.0),
+        ],
+        mode=CompositeHorizonMode.FIRST_EXPIRY,
+    )
+
+    spec = composite.resolve(context)
+
+    assert spec.max_duration == timedelta(minutes=2)
+    assert spec.max_bars is None
     assert spec.frozen_at == entry_time
 
 
