@@ -206,8 +206,6 @@ class TripleBarrierStateMachine:
 
 
 def _symbols_match(entry_symbol: str | None, observation_symbol: str | None) -> bool:
-    if entry_symbol is None or observation_symbol is None:
-        return True
     return entry_symbol == observation_symbol
 
 
