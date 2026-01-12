@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from itertools import count
-from typing import Callable, Mapping
+from typing import Mapping
 
+from qmtl.runtime.labeling.costs import CostContext, CostEstimate, CostModel, NullCostModel
 from qmtl.runtime.labeling.schema import BarrierMode, BarrierSpec, HorizonSpec, LabelOutcome
 
 
@@ -85,6 +86,11 @@ class TripleBarrierLabel:
     pnl_gross: float
     pnl_net: float
     reason: str
+    outcome_gross: LabelOutcome | None = None
+    cost: float = 0.0
+    min_edge: float = 0.0
+    cost_model_id: str | None = None
+    slippage_model_id: str | None = None
     symbol: str | None = None
     metadata: Mapping[str, str] = field(default_factory=dict)
 
@@ -95,6 +101,8 @@ class TripleBarrierLabel:
             raise ValueError("barrier.frozen_at must match entry_time when set")
         if self.horizon.frozen_at and self.horizon.frozen_at != self.entry_time:
             raise ValueError("horizon.frozen_at must match entry_time when set")
+        if self.outcome_gross is None:
+            object.__setattr__(self, "outcome_gross", self.outcome)
 
 
 @dataclass
@@ -102,6 +110,7 @@ class _EntryState:
     entry: TripleBarrierEntry
     barrier: BarrierSpec
     horizon: HorizonSpec
+    cost: CostEstimate
     bars_observed: int = 0
 
 
@@ -111,10 +120,9 @@ class TripleBarrierStateMachine:
     def __init__(
         self,
         *,
-        cost_model: Callable[[TripleBarrierEntry, TripleBarrierObservation, float], float]
-        | None = None,
+        cost_model: CostModel | None = None,
     ) -> None:
-        self._cost_model = cost_model
+        self._cost_model = cost_model or NullCostModel()
         self._entries: dict[str, _EntryState] = {}
         self._resolved: set[str] = set()
         self._sequence = count(1)
@@ -133,10 +141,12 @@ class TripleBarrierStateMachine:
         if entry_id in self._entries or entry_id in self._resolved:
             raise ValueError(f"entry_id {entry_id!r} is already registered")
         normalized_entry = replace(entry, side=normalized_side, entry_id=entry_id)
+        cost = self._estimate_cost(normalized_entry)
         self._entries[entry_id] = _EntryState(
             entry=normalized_entry,
             barrier=barrier,
             horizon=horizon,
+            cost=cost,
         )
         return entry_id
 
@@ -164,23 +174,28 @@ class TripleBarrierStateMachine:
             return None
         state.bars_observed += 1
         realized_return = _signed_return(entry.entry_price, observation.price, entry.side)
-        outcome = _barrier_outcome(
+        outcome_gross = _barrier_outcome(
             barrier=state.barrier,
             side=entry.side,
             entry_price=entry.entry_price,
             observed_price=observation.price,
             realized_return=realized_return,
         )
+        total_adjustment = state.cost.total_adjustment()
+        pnl_gross = realized_return
+        pnl_net = pnl_gross - total_adjustment
+        outcome = _net_barrier_outcome(
+            barrier=state.barrier,
+            side=entry.side,
+            entry_price=entry.entry_price,
+            observed_price=observation.price,
+            net_return=pnl_net,
+            total_adjustment=total_adjustment,
+        )
         if outcome is None and _is_timeout(state, observation.observed_time):
             outcome = LabelOutcome.TIMEOUT
         if outcome is None:
             return None
-        pnl_gross = realized_return
-        pnl_net = (
-            self._cost_model(entry, observation, pnl_gross)
-            if self._cost_model is not None
-            else pnl_gross
-        )
         return TripleBarrierLabel(
             entry_id=entry.entry_id or "",
             entry_time=entry.entry_time,
@@ -189,11 +204,16 @@ class TripleBarrierStateMachine:
             resolved_price=observation.price,
             side=entry.side,
             outcome=outcome,
+            outcome_gross=outcome_gross,
             barrier=state.barrier,
             horizon=state.horizon,
             realized_return=realized_return,
             pnl_gross=pnl_gross,
             pnl_net=pnl_net,
+            cost=state.cost.total_cost,
+            min_edge=state.cost.min_edge,
+            cost_model_id=state.cost.cost_model_id,
+            slippage_model_id=state.cost.slippage_model_id,
             reason=outcome.value,
             symbol=entry.symbol,
             metadata=entry.metadata,
@@ -203,6 +223,16 @@ class TripleBarrierStateMachine:
         sequence = next(self._sequence)
         symbol = entry.symbol or "entry"
         return f"{symbol}-{entry.entry_time.isoformat()}-{sequence}"
+
+    def _estimate_cost(self, entry: TripleBarrierEntry) -> CostEstimate:
+        context = CostContext(
+            entry_time=entry.entry_time,
+            entry_price=entry.entry_price,
+            side=entry.side,
+            symbol=entry.symbol,
+            metadata=entry.metadata,
+        )
+        return self._cost_model.estimate(context)
 
 
 def _symbols_match(entry_symbol: str | None, observation_symbol: str | None) -> bool:
@@ -227,6 +257,28 @@ def _barrier_outcome(
         return _price_outcome(barrier, side, observed_price)
     if barrier.mode == BarrierMode.RETURN:
         return _return_outcome(barrier, realized_return)
+    raise ValueError("unsupported barrier mode")
+
+
+def _net_barrier_outcome(
+    *,
+    barrier: BarrierSpec,
+    side: str,
+    entry_price: float,
+    observed_price: float,
+    net_return: float,
+    total_adjustment: float,
+) -> LabelOutcome | None:
+    if barrier.mode == BarrierMode.PRICE:
+        adjusted_price = _net_adjusted_price(
+            entry_price=entry_price,
+            observed_price=observed_price,
+            side=side,
+            total_adjustment=total_adjustment,
+        )
+        return _price_outcome(barrier, side, adjusted_price)
+    if barrier.mode == BarrierMode.RETURN:
+        return _return_outcome(barrier, net_return)
     raise ValueError("unsupported barrier mode")
 
 
@@ -261,6 +313,17 @@ def _return_outcome(
     if stop_loss is not None and realized_return <= -stop_loss:
         return LabelOutcome.STOP_LOSS
     return None
+
+
+def _net_adjusted_price(
+    *,
+    entry_price: float,
+    observed_price: float,
+    side: str,
+    total_adjustment: float,
+) -> float:
+    direction = 1.0 if side == "long" else -1.0
+    return observed_price - direction * entry_price * total_adjustment
 
 
 def _is_timeout(state: _EntryState, observed_time: datetime) -> bool:
