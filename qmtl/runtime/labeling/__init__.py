@@ -2,6 +2,15 @@
 
 from qmtl.runtime.labeling.barriers import volatility_scaled_barrier_spec
 from qmtl.runtime.labeling.schema import BarrierMode, BarrierSpec, HorizonSpec, LabelEvent, LabelOutcome
+from qmtl.runtime.labeling.time_barrier import (
+    CompositeHorizonMode,
+    CompositeHorizonResolver,
+    EventCountHorizonResolver,
+    HalfLifeHorizonResolver,
+    HorizonContext,
+    HorizonResolver,
+    estimate_half_life,
+)
 
 __all__ = [
     "BarrierSpec",
@@ -10,4 +19,11 @@ __all__ = [
     "LabelEvent",
     "LabelOutcome",
     "volatility_scaled_barrier_spec",
+    "CompositeHorizonMode",
+    "CompositeHorizonResolver",
+    "EventCountHorizonResolver",
+    "HalfLifeHorizonResolver",
+    "HorizonContext",
+    "HorizonResolver",
+    "estimate_half_life",
 ]
