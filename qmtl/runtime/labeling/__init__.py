@@ -1,6 +1,7 @@
 """Labeling schema and guardrail contracts."""
 
 from qmtl.runtime.labeling.barriers import volatility_scaled_barrier_spec
+from qmtl.runtime.labeling.meta import MetaLabel, meta_label_from_outcome, meta_label_from_triple_barrier
 from qmtl.runtime.labeling.schema import BarrierMode, BarrierSpec, HorizonSpec, LabelEvent, LabelOutcome
 from qmtl.runtime.labeling.time_barrier import (
     CompositeHorizonMode,
@@ -24,6 +25,9 @@ __all__ = [
     "HorizonSpec",
     "LabelEvent",
     "LabelOutcome",
+    "MetaLabel",
+    "meta_label_from_outcome",
+    "meta_label_from_triple_barrier",
     "volatility_scaled_barrier_spec",
     "CompositeHorizonMode",
     "CompositeHorizonResolver",
