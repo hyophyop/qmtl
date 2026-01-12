@@ -21,12 +21,11 @@ from qmtl.runtime.sdk.brokerage_client import (
 )
 from qmtl.runtime.sdk.execution_modeling import ExecutionModel
 from qmtl.runtime.sdk.order_gate import Activation
-from qmtl.runtime.nodesets.base import (
-    NodeSet,
-    NodeSetBuilder,
-    NodeSetContext,
-)
+from qmtl.runtime.labeling.costs import CostModel
+from qmtl.runtime.labeling.schema import BarrierSpec, HorizonSpec
+from qmtl.runtime.nodesets.base import NodeSet, NodeSetBuilder, NodeSetContext
 from qmtl.runtime.nodesets.adapter import NodeSetAdapter, NodeSetDescriptor, PortSpec
+from qmtl.runtime.nodesets.labeling import build_triple_barrier_label_node
 from qmtl.runtime.nodesets.options import NodeSetOptions
 from qmtl.runtime.nodesets.steps import (
     StepSpec,
@@ -774,6 +773,85 @@ INTENT_FIRST_ADAPTER_SPEC = RecipeAdapterSpec(
 )
 
 
+LABELING_TRIPLE_BARRIER_DESCRIPTOR = NodeSetDescriptor(
+    name="labeling_triple_barrier",
+    inputs=(
+        PortSpec("price", True, "Price observations (observed_time, price)"),
+        PortSpec("entry_events", True, "Entry events (entry_time, entry_price, side, barrier, horizon)"),
+    ),
+    outputs=(PortSpec("labels", True, "Resolved triple-barrier labels (delayed stream)"),),
+)
+
+LABELING_TRIPLE_BARRIER_ADAPTER_PARAMETERS = (
+    AdapterParameter("barrier", annotation=BarrierSpec | Mapping[str, Any] | None, default=None, required=False),
+    AdapterParameter("horizon", annotation=HorizonSpec | Mapping[str, Any] | None, default=None, required=False),
+    AdapterParameter("cost_model", annotation=CostModel | None, default=None, required=False),
+)
+
+
+@nodeset_recipe("labeling_triple_barrier")
+def make_labeling_triple_barrier_nodeset(
+    price_node: Node,
+    entry_events_node: Node,
+    world_id: str,
+    *,
+    barrier: BarrierSpec | Mapping[str, Any] | None = None,
+    horizon: HorizonSpec | Mapping[str, Any] | None = None,
+    cost_model: CostModel | None = None,
+    descriptor: Any | None = None,
+) -> NodeSet:
+    """Compose a delayed triple-barrier labeling Node Set."""
+
+    label_node = build_triple_barrier_label_node(
+        price_node,
+        entry_events_node,
+        default_barrier=barrier,
+        default_horizon=horizon,
+        cost_model=cost_model,
+    )
+    setattr(label_node, "world_id", world_id)
+    return NodeSet(
+        _nodes=(entry_events_node, price_node, label_node),
+        name="labeling_triple_barrier",
+        modes=("simulate", "paper", "live"),
+        descriptor=descriptor or LABELING_TRIPLE_BARRIER_DESCRIPTOR,
+    )
+
+
+def _compose_labeling_triple_barrier_adapter(
+    inputs: Mapping[str, Node],
+    world_id: str,
+    *,
+    options: NodeSetOptions | None = None,
+    descriptor: Any | None = None,
+    **config: Any,
+) -> NodeSet:
+    del options
+    if "price" not in inputs:
+        raise KeyError("missing required Node Set input port: price")
+    if "entry_events" not in inputs:
+        raise KeyError("missing required Node Set input port: entry_events")
+    return make_labeling_triple_barrier_nodeset(
+        inputs["price"],
+        inputs["entry_events"],
+        world_id,
+        descriptor=descriptor,
+        **config,
+    )
+
+
+LABELING_TRIPLE_BARRIER_ADAPTER_SPEC = RecipeAdapterSpec(
+    compose=_compose_labeling_triple_barrier_adapter,
+    descriptor=LABELING_TRIPLE_BARRIER_DESCRIPTOR,
+    parameters=LABELING_TRIPLE_BARRIER_ADAPTER_PARAMETERS,
+    name="labeling_triple_barrier",
+    class_name="LabelingTripleBarrierAdapter",
+    doc="Adapter exposing 'price' and 'entry_events' input ports for triple-barrier labeling.",
+    input_port="entry_events",
+    modes=("simulate", "paper", "live"),
+)
+
+
 CCXT_SPOT_DESCRIPTOR = NodeSetDescriptor(
     name="ccxt_spot",
     inputs=(PortSpec("signal", True, "Trade signal stream"),),
@@ -946,6 +1024,9 @@ __all__ = [
     "INTENT_FIRST_ADAPTER_PARAMETERS",
     "INTENT_FIRST_ADAPTER_SPEC",
     "make_intent_first_nodeset",
+    "LABELING_TRIPLE_BARRIER_DESCRIPTOR",
+    "LABELING_TRIPLE_BARRIER_ADAPTER_SPEC",
+    "make_labeling_triple_barrier_nodeset",
     "CCXT_SPOT_DESCRIPTOR",
     "CCXT_SPOT_ADAPTER_SPEC",
     "make_ccxt_spot_nodeset",
