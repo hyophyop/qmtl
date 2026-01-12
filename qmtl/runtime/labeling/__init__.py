@@ -11,6 +11,12 @@ from qmtl.runtime.labeling.time_barrier import (
     HorizonResolver,
     estimate_half_life,
 )
+from qmtl.runtime.labeling.triple_barrier import (
+    TripleBarrierEntry,
+    TripleBarrierLabel,
+    TripleBarrierObservation,
+    TripleBarrierStateMachine,
+)
 
 __all__ = [
     "BarrierSpec",
@@ -26,4 +32,8 @@ __all__ = [
     "HorizonContext",
     "HorizonResolver",
     "estimate_half_life",
+    "TripleBarrierEntry",
+    "TripleBarrierLabel",
+    "TripleBarrierObservation",
+    "TripleBarrierStateMachine",
 ]
