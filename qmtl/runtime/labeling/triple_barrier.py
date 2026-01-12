@@ -87,6 +87,7 @@ class TripleBarrierLabel:
     pnl_net: float
     reason: str
     outcome_gross: LabelOutcome | None = None
+    net_only_stop: bool = False
     cost: float = 0.0
     min_edge: float = 0.0
     cost_model_id: str | None = None
@@ -101,8 +102,15 @@ class TripleBarrierLabel:
             raise ValueError("barrier.frozen_at must match entry_time when set")
         if self.horizon.frozen_at and self.horizon.frozen_at != self.entry_time:
             raise ValueError("horizon.frozen_at must match entry_time when set")
-        if self.outcome_gross is None:
-            object.__setattr__(self, "outcome_gross", self.outcome)
+
+
+@dataclass(frozen=True)
+class OutcomeResolution:
+    """Resolved net/gross outcomes with explicit net-only stop state."""
+
+    outcome: LabelOutcome
+    outcome_gross: LabelOutcome | None
+    net_only_stop: bool
 
 
 @dataclass
@@ -174,27 +182,20 @@ class TripleBarrierStateMachine:
             return None
         state.bars_observed += 1
         realized_return = _signed_return(entry.entry_price, observation.price, entry.side)
-        outcome_gross = _barrier_outcome(
+        total_adjustment = state.cost.total_adjustment()
+        pnl_gross = realized_return
+        pnl_net = pnl_gross - total_adjustment
+        outcome_resolution = _resolve_outcomes(
             barrier=state.barrier,
             side=entry.side,
             entry_price=entry.entry_price,
             observed_price=observation.price,
             realized_return=realized_return,
-        )
-        total_adjustment = state.cost.total_adjustment()
-        pnl_gross = realized_return
-        pnl_net = pnl_gross - total_adjustment
-        outcome = _net_barrier_outcome(
-            barrier=state.barrier,
-            side=entry.side,
-            entry_price=entry.entry_price,
-            observed_price=observation.price,
             net_return=pnl_net,
             total_adjustment=total_adjustment,
+            timeout=_is_timeout(state, observation.observed_time),
         )
-        if outcome is None and _is_timeout(state, observation.observed_time):
-            outcome = LabelOutcome.TIMEOUT
-        if outcome is None:
+        if outcome_resolution is None:
             return None
         return TripleBarrierLabel(
             entry_id=entry.entry_id or "",
@@ -203,18 +204,19 @@ class TripleBarrierStateMachine:
             entry_price=entry.entry_price,
             resolved_price=observation.price,
             side=entry.side,
-            outcome=outcome,
-            outcome_gross=outcome_gross,
+            outcome=outcome_resolution.outcome,
+            outcome_gross=outcome_resolution.outcome_gross,
             barrier=state.barrier,
             horizon=state.horizon,
             realized_return=realized_return,
             pnl_gross=pnl_gross,
             pnl_net=pnl_net,
+            net_only_stop=outcome_resolution.net_only_stop,
             cost=state.cost.total_cost,
             min_edge=state.cost.min_edge,
             cost_model_id=state.cost.cost_model_id,
             slippage_model_id=state.cost.slippage_model_id,
-            reason=outcome.value,
+            reason=outcome_resolution.outcome.value,
             symbol=entry.symbol,
             metadata=entry.metadata,
         )
@@ -282,6 +284,44 @@ def _net_barrier_outcome(
     raise ValueError("unsupported barrier mode")
 
 
+def _resolve_outcomes(
+    *,
+    barrier: BarrierSpec,
+    side: str,
+    entry_price: float,
+    observed_price: float,
+    realized_return: float,
+    net_return: float,
+    total_adjustment: float,
+    timeout: bool,
+) -> OutcomeResolution | None:
+    outcome_gross = _barrier_outcome(
+        barrier=barrier,
+        side=side,
+        entry_price=entry_price,
+        observed_price=observed_price,
+        realized_return=realized_return,
+    )
+    outcome = _net_barrier_outcome(
+        barrier=barrier,
+        side=side,
+        entry_price=entry_price,
+        observed_price=observed_price,
+        net_return=net_return,
+        total_adjustment=total_adjustment,
+    )
+    if outcome is None and timeout:
+        outcome = LabelOutcome.TIMEOUT
+    if outcome is None:
+        return None
+    net_only_stop = outcome == LabelOutcome.STOP_LOSS and outcome_gross is None
+    return OutcomeResolution(
+        outcome=outcome,
+        outcome_gross=outcome_gross,
+        net_only_stop=net_only_stop,
+    )
+
+
 def _price_outcome(
     barrier: BarrierSpec,
     side: str,
@@ -339,6 +379,7 @@ def _is_timeout(state: _EntryState, observed_time: datetime) -> bool:
 
 
 __all__ = [
+    "OutcomeResolution",
     "TripleBarrierEntry",
     "TripleBarrierLabel",
     "TripleBarrierObservation",

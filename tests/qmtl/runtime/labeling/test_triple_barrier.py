@@ -129,3 +129,35 @@ def test_triple_barrier_net_outcome_with_costs() -> None:
     assert label.outcome_gross == LabelOutcome.PROFIT_TARGET
     assert label.pnl_gross == pytest.approx(0.03)
     assert label.pnl_net == pytest.approx(0.023)
+    assert label.net_only_stop is False
+
+
+def test_triple_barrier_net_only_stop_preserves_gross_none() -> None:
+    entry_time = datetime(2025, 1, 1, 9, 30)
+    barrier = BarrierSpec(
+        profit_target=0.03,
+        stop_loss=0.02,
+        mode=BarrierMode.RETURN,
+        frozen_at=entry_time,
+    )
+    horizon = HorizonSpec(max_bars=2, frozen_at=entry_time)
+    cost_model = FixedBpsCostModel(total_cost_bps=100.0, min_edge_bps=0.0)
+    machine = TripleBarrierStateMachine(cost_model=cost_model)
+    entry = TripleBarrierEntry(
+        entry_time=entry_time,
+        entry_price=100.0,
+        side="long",
+        entry_id="entry-4",
+    )
+    machine.register_entry(entry, barrier, horizon)
+
+    net_only_stop = TripleBarrierObservation(
+        observed_time=entry_time + timedelta(minutes=1),
+        price=98.5,
+    )
+    labels = machine.update(net_only_stop)
+    assert len(labels) == 1
+    label = labels[0]
+    assert label.outcome == LabelOutcome.STOP_LOSS
+    assert label.outcome_gross is None
+    assert label.net_only_stop is True
