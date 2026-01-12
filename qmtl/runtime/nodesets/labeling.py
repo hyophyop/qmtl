@@ -79,13 +79,15 @@ def build_triple_barrier_label_node(
     if interval is None:
         raise ValueError("price_node or entry_node must define an interval")
     period = max(1, entry_node.period or 1, price_node.period or 1)
-    return Node(
+    node = Node(
         input=(entry_node, price_node),
         compute_fn=_compute,
         name=name or "triple_barrier_labeler",
         interval=interval,
         period=period,
     )
+    setattr(node, "label_output", True)
+    return node
 
 
 def _latest_events(view: CacheView, node: Node) -> list[tuple[int, Any]]:
