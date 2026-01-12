@@ -217,7 +217,43 @@ Reference material
 - Operations guides: [Risk Management](../operations/risk_management.md), [Timing Controls](../operations/timing_controls.md)
 - Specifications: [Brokerage API](../reference/api/brokerage.md), [Commit-Log Design](../reference/commit_log.md), [World/Activation API](../reference/api_world.md), [Order & Fill Event Schemas](../reference/api/order_events.md)
 
-### 1.2 Sequence: SDK/Runner <-> Gateway <-> DAG Manager <-> WorldService
+### 1.2 Label Nodes/Node Sets Are Training-Only
+
+Label nodes and labeling node sets are **training/evaluation only**. The delayed
+label stream contains future information, so it must remain isolated from any
+order/decision path to avoid leakage.
+
+- Send label streams only to offline storage, training pipelines, or evaluation
+  metrics.
+- Never connect label outputs to the order path (signal → risk/timing → execution
+  → order publish).
+- In live mode, `NodeSetOptions.label_order_guard` can warn (`warn`) or block
+  (`block`, default) if label outputs are wired into the order path.
+
+Recommended wiring example:
+
+```mermaid
+flowchart LR
+    subgraph Decision/Order Path
+        S[Signal Node]
+        R[Risk/Timing Gate]
+        O[Order Publish]
+        S --> R --> O
+    end
+
+    subgraph Labeling (offline only)
+        P[Price/Input]
+        E[Entry Events]
+        L[Label NodeSet (delayed labels)]
+        P --> L
+        E --> L
+        L --> T[Label Store / Training]
+    end
+
+    L -. do not connect to orders .-> R
+```
+
+### 1.3 Sequence: SDK/Runner <-> Gateway <-> DAG Manager <-> WorldService
 
 The sequence diagram illustrates how a strategy submission flows end-to-end:
 SDK/Runner submits the DAG, Gateway mediates DAG Manager and WorldService, and
@@ -250,7 +286,7 @@ Implementation details live in the component specifications: [Gateway](gateway.m
 examples are catalogued under [operations/](../operations/README.md) and
 [reference/](../reference/README.md).
 
-### 1.3 Execution Domains & Isolation
+### 1.4 Execution Domains & Isolation
 
 - **Domains:** `backtest | dryrun | live | shadow`. Execution domains are owned
   by WorldService. Gating and promotion follow a backend-driven two-phase
@@ -288,7 +324,7 @@ examples are catalogued under [operations/](../operations/README.md) and
 - **Promotion guard:** WVG `EdgeOverride` entries disable `backtest -> live`
   paths until a two-phase apply completes and policy explicitly re-enables them.
 
-### 1.4 Feature Artifact Plane (Dual-Plane)
+### 1.5 Feature Artifact Plane (Dual-Plane)
 
 - **Goal:** Isolate immutable feature artifacts from strategy/execution runtime
   state while enabling safe reuse across domains.
@@ -312,7 +348,7 @@ examples are catalogued under [operations/](../operations/README.md) and
   and limit `cache.feature_artifact_write_domains` to keep replay and promotion
   pipelines isolated.
 
-### 1.5 Clock & Input Guards
+### 1.6 Clock & Input Guards
 
 - Backtest/dryrun domains use `VirtualClock` with a mandatory `as_of` timestamp.
   Live runs use `WallClock`. Mixed usage must fail during build or static
@@ -323,7 +359,7 @@ examples are catalogued under [operations/](../operations/README.md) and
   make the final decision. Conflicts revert to `compute-only` (backtest, orders
   gated OFF).
 
-### 1.6 Global vs. World-Local Graphs (GSG/WVG)
+### 1.7 Global vs. World-Local Graphs (GSG/WVG)
 
 - **Global Strategy Graph (GSG):** An append-only, content-addressed DAG owned by
   DAG Manager. Identical node content MUST map to a single NodeID across the

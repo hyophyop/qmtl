@@ -1,12 +1,51 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from typing import Any, Callable, Literal, Sequence
 
 from qmtl.runtime.sdk.node import Node
 
 from .options import NodeSetOptions, PortfolioScope
 from .resources import ExecutionResources, get_execution_resources
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def _iter_label_nodes(root: Node) -> list[Node]:
+    seen: set[int] = set()
+    stack = [root]
+    labels: list[Node] = []
+    while stack:
+        node = stack.pop()
+        node_id = id(node)
+        if node_id in seen:
+            continue
+        seen.add(node_id)
+        if getattr(node, "label_output", False) or getattr(node, "label_node", False):
+            labels.append(node)
+        stack.extend(getattr(node, "inputs", []) or [])
+    return labels
+
+
+def _guard_label_outputs(signal: Node, options: NodeSetOptions) -> None:
+    if options.mode != "live":
+        return
+    guard = options.label_order_guard
+    if guard == "off":
+        return
+    labels = _iter_label_nodes(signal)
+    if not labels:
+        return
+    label_names = ", ".join(getattr(node, "name", "label") for node in labels)
+    message = (
+        "Label node output is connected to the order path in live mode. "
+        "Label nodes are training/evaluation only; detach the label stream from "
+        f"order inputs. labels=[{label_names}]"
+    )
+    if guard == "block":
+        raise ValueError(message)
+    _LOGGER.warning(message)
 
 
 @dataclass(frozen=True)
@@ -155,6 +194,7 @@ class NodeSetBuilder:
         consume ``pretrade``).
         """
         ctx = self.context(world_id=world_id, scope=scope)
+        _guard_label_outputs(signal, ctx.options)
 
         def _resolve(component, upstream, default_factory: RecipeNodeFactory) -> Node:
             # Import locally to avoid circular dependency during module load.

@@ -198,9 +198,42 @@ flowchart LR
 
 참고 문서
 - 운영 가이드: [리스크 관리](../operations/risk_management.md), [타이밍 컨트롤](../operations/timing_controls.md)
+
+### 1.2 라벨 노드/노드셋 사용 규칙 (학습·평가 전용)
+
+라벨 노드/노드셋은 **학습·평가 전용**이다. 미래 정보를 포함하는 지연 라벨 스트림은
+주문/의사결정 경로에 연결되면 누수로 이어지므로, **실거래 경로에서 분리**해야 한다.
+
+- 라벨 스트림은 오프라인 저장소·학습 파이프라인·평가지표 계산으로만 연결한다.
+- 주문 경로(시그널 → 리스크/타이밍 → 실행 → 주문 퍼블리싱)에는 **라벨 노드를 절대 연결하지 않는다**.
+- live 실행에서는 `NodeSetOptions.label_order_guard`로 라벨 출력이 주문 경로에 연결될 때
+  경고(`warn`) 또는 차단(`block`, 기본값)을 선택할 수 있다.
+
+올바른 배선 예시는 다음과 같다.
+
+```mermaid
+flowchart LR
+    subgraph Decision/Order Path
+        S[Signal Node]
+        R[Risk/Timing Gate]
+        O[Order Publish]
+        S --> R --> O
+    end
+
+    subgraph Labeling (offline only)
+        P[Price/Input]
+        E[Entry Events]
+        L[Label NodeSet (delayed labels)]
+        P --> L
+        E --> L
+        L --> T[Label Store / Training]
+    end
+
+    L -. 금지: 주문 경로 연결 .-> R
+```
 - 레퍼런스: [Brokerage API (실행/슬리피지/수수료)](../reference/api/brokerage.md), [Commit‑Log 설계](../reference/commit_log.md), [World/Activation API](../reference/api_world.md), [Order & Fill Event Schemas](../reference/api/order_events.md)
 
-### 1.2 시퀀스: SDK/Runner ↔ Gateway ↔ DAG Manager ↔ WorldService
+### 1.3 시퀀스: SDK/Runner ↔ Gateway ↔ DAG Manager ↔ WorldService
 
 SDK/Runner가 전략을 제출하고, Gateway가 DAG Manager/WorldService를 중개하며, ControlBus 이벤트를 통해 활성/큐 변경이 실시간 반영되는 전체 플로우를 도식화한다.
 
@@ -227,7 +260,7 @@ sequenceDiagram
 
 관련 구현·사양은 아래 문서를 참고한다: [Gateway 사양](gateway.md), [DAG Manager 사양](dag-manager.md), [WorldService](worldservice.md). 운영·사용 관점의 예시는 [operations/](../operations/README.md) 및 [reference/](../reference/README.md) 하위 문서에 정리되어 있다.
 
-### 1.3 Execution Domains & Isolation (new)
+### 1.4 Execution Domains & Isolation (new)
 
 - Domains: `backtest | dryrun | live | shadow`. ExecutionDomain은 WorldService가 소유·결정하는 1급 개념이며, 게이팅과 프로모션은 2‑Phase Apply(Freeze/Drain → Switch → Unfreeze)로 백엔드에서 구동한다. SDK/Runner는 도메인을 “선택”하지 않으며, 오직 월드 결정의 결과를 반영한다. 제출 메타의 `execution_domain` 값은 **힌트**일 뿐이며 Gateway가 WS 결정과 일치하도록 정규화·강등한다(특히 `live` 요청은 WS 결정 부재 시 무시되고 compute‑only로 강등됨).
 - NodeID vs ComputeKey: NodeID는 전역·월드무관 식별자다. 실행/캐시 격리를 위해 DAG Manager와 런타임은 `ComputeKey = blake3(NodeHash ⊕ world_id ⊕ execution_domain ⊕ as_of ⊕ partition)`를 사용한다. 교차 컨텍스트 캐시 적중은 정책 위반이며 SLO=0이다. SDK는 ComputeKey를 “제안”하거나 “주입”하지 않는다 — 런타임/서비스가 WS 결정과 제출 메타를 근거로 도출·검증한다.
@@ -238,7 +271,7 @@ sequenceDiagram
 - WorldNodeRef 독립성: 서로 다른 `execution_domain` 조합은 상태·큐·검증 결과를 공유할 수 없다(SHALL). 공유가 필요한 경우 Feature Artifact Plane(§1.4)처럼 불변 아티팩트만 사용한다.
 - Promotion guard: WVG의 `EdgeOverride`는 기본적으로 backtest→live 경로를 비활성화하며(SHALL), 2‑Phase Apply 완료 후 정책에 따라 명시적으로만 해제한다.
 
-### 1.4 Feature Artifact Plane (Dual-Plane)
+### 1.5 Feature Artifact Plane (Dual-Plane)
 
 - 목표: Feature Plane(불변)과 Strategy/Execution Plane(도메인 스코프)을 분리하여 안전하게 재사용하면서 격리를 유지한다.
 - Feature Artifact Key (SHALL): `(factor, interval, params, instrument, t, dataset_fingerprint)`.
@@ -251,7 +284,7 @@ sequenceDiagram
 - Dataset Fingerprint: 모든 아티팩트·스냅샷은 `dataset_fingerprint`에 고정된다. Fingerprint가 일치하지 않으면 하이드레이션/조회가 차단되어 프로모션 경로에서 데이터 혼합을 방지한다.
 - CLI/Backfill 워크플로: 로컬 백필 시 `cache.feature_artifact_dir: /mnt/artifacts`처럼 경로를 고정하고, 필요 시 `cache.feature_artifact_write_domains`로 쓰기 허용 도메인을 제한하여 리플레이와 검증 파이프라인을 분리한다.
 
-### 1.5 Clock & Input Guards
+### 1.6 Clock & Input Guards
 
 - 백테스트/드라이런은 VirtualClock을 사용하고(as_of 필수) 라이브는 WallClock을 사용한다(SHALL). 혼용 호출은 빌드/정적 검증 단계에서 실패해야 한다.
 - 모든 백테스트 입력 노드는 `as_of`(dataset commit)를 명시해야 하며(SHALL), Gateway는 누락 시 거부하거나 안전 모드로 강등한다.
