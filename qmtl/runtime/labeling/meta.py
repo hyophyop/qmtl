@@ -63,9 +63,10 @@ def meta_label_from_triple_barrier(
     entry_decision: int | None = None,
 ) -> MetaLabel:
     """Create a meta-label from a triple-barrier label and optional entry decision."""
-    resolved_side = side_signal or label.side
+    normalized_label_side = _normalize_side(label.side)
+    resolved_side = side_signal or normalized_label_side
     normalized_side = _normalize_side(resolved_side)
-    if side_signal is not None and normalized_side != label.side:
+    if side_signal is not None and normalized_side != normalized_label_side:
         raise ValueError("side_signal must match label.side")
     return meta_label_from_outcome(
         side=normalized_side,

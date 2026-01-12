@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta
 
 import pytest
@@ -76,3 +77,7 @@ def test_meta_label_from_triple_barrier_side_validation() -> None:
 
     with pytest.raises(ValueError, match="side_signal must match label.side"):
         meta_label_from_triple_barrier(label, side_signal="short")
+
+    alias_label = replace(label, side="buy")
+    meta = meta_label_from_triple_barrier(alias_label, side_signal="long")
+    assert meta.side == "long"
