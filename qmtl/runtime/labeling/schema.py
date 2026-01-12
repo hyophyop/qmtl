@@ -16,13 +16,20 @@ class LabelOutcome(str, Enum):
     TIMEOUT = "timeout"
 
 
+class BarrierMode(str, Enum):
+    """Barrier representation mode for PT/SL thresholds."""
+
+    PRICE = "price"
+    RETURN = "return"
+
+
 @dataclass(frozen=True)
 class BarrierSpec:
     """Frozen profit/stop barriers at entry time."""
 
     profit_target: float | None
     stop_loss: float | None
-    unit: str = "return_multiple"
+    mode: BarrierMode = BarrierMode.RETURN
     frozen_at: datetime | None = None
 
 
