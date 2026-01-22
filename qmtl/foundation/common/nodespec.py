@@ -60,6 +60,24 @@ def _normalize_dependencies(deps: Iterable[Any] | None) -> tuple[str, ...]:
     return tuple(sorted(normalized))
 
 
+def normalize_schema_compat_id(
+    value: Any | None, *, fallback: Any | None = None
+) -> str:
+    """Normalize schema compatibility identifiers with legacy fallback."""
+
+    compat = str(value or "").strip()
+    if fallback is not None:
+        legacy = str(fallback or "").strip()
+        if compat and legacy and compat != legacy:
+            raise ValueError(
+                f"Validation error: schema_compat_id ('{compat}') and "
+                f"schema_id ('{legacy}') must match if both are provided."
+            )
+        if not compat:
+            compat = legacy
+    return compat
+
+
 def _sorted_deps(node: Mapping[str, Any]) -> list[str]:
     deps = node.get("inputs") or node.get("dependencies") or []
     return list(_normalize_dependencies(deps))
@@ -230,18 +248,9 @@ class CanonicalNodeSpec:
     def with_schema_compat_id(
         self, value: Any | None, *, fallback: Any | None = None
     ) -> "CanonicalNodeSpec":
-        compat = str(value or "").strip()
-        if fallback is not None:
-            legacy = str(fallback or "").strip()
-            if compat and legacy and compat != legacy:
-                raise ValueError(
-                    f"Validation error: schema_compat_id ('{compat}') and "
-                    f"schema_id ('{legacy}') must match if both are provided."
-                )
-            if not compat:
-                compat = legacy
-
-        self._schema_compat_id = compat
+        self._schema_compat_id = normalize_schema_compat_id(
+            value, fallback=fallback
+        )
         return self
 
     def with_code_hash(self, value: Any | None) -> "CanonicalNodeSpec":
@@ -393,9 +402,12 @@ def serialize_nodespec(node: Mapping[str, Any] | CanonicalNodeSpec) -> bytes:
         interval = int(node.get("interval") or 0)
         period = int(node.get("period") or 0)
         deps = _sorted_deps(node)
-        schema_compat_id = str(node.get("schema_compat_id", ""))
-        if not schema_compat_id:
-            schema_compat_id = str(node.get("schema_id", ""))
+        legacy_schema_id = (
+            node.get("schema_id") if "schema_id" in node else None
+        )
+        schema_compat_id = normalize_schema_compat_id(
+            node.get("schema_compat_id"), fallback=legacy_schema_id
+        )
         code_hash = str(node.get("code_hash", ""))
         params_blob = _canonical_params_blob(node)
     payload = "|".join(
@@ -412,4 +424,8 @@ def serialize_nodespec(node: Mapping[str, Any] | CanonicalNodeSpec) -> bytes:
     return payload.encode()
 
 
-__all__ = ["serialize_nodespec", "CanonicalNodeSpec"]
+__all__ = [
+    "serialize_nodespec",
+    "CanonicalNodeSpec",
+    "normalize_schema_compat_id",
+]

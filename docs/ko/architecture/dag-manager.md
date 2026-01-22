@@ -91,7 +91,7 @@ spec_version: v1.1
 ### 1.1-A 스키마 호환 식별자 필드명
 
 - DAG Manager 내부 표준 필드명은 `schema_compat_id`입니다. Proto(`BufferInstruction`)와 Neo4j 저장 속성도 동일한 이름을 사용합니다.
-- 입력 호환을 위해 DAG JSON에는 한시적으로 `schema_id`를 레거시 별칭으로 허용하되, 값은 `schema_compat_id`로 정규화해서 처리합니다.
+- 입력 호환을 위해 DAG JSON에는 한시적으로 `schema_id`를 레거시 별칭으로 허용하되, 값은 `schema_compat_id`로 정규화해서 처리합니다. `schema_compat_id`와 `schema_id`가 동시에 존재하고 값이 다르면 정규화 단계에서 오류로 처리합니다(입력 경계에서 거부).
 - 기존 Neo4j 데이터가 `schema_id`만 가지고 있다면 아래 쿼리로 백필을 수행합니다.
 
 ```cypher

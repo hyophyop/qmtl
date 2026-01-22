@@ -20,6 +20,19 @@ def test_validate_node_identity_success() -> None:
     report.raise_for_issues()  # does not raise
 
 
+def test_validate_accepts_legacy_schema_id() -> None:
+    factory = NodeFactory()
+    node = factory.build()
+    node["schema_id"] = node["schema_compat_id"]
+    node.pop("schema_compat_id", None)
+    checksum = crc32_of_list([node["node_id"]])
+
+    report = validate_node_identity([node], checksum)
+
+    assert report.is_valid
+    report.raise_for_issues()
+
+
 def test_validate_node_identity_missing_fields() -> None:
     factory = NodeFactory()
     node = factory.build(schema_hash="")
@@ -57,6 +70,19 @@ def test_enforce_node_identity_detects_mismatched_id() -> None:
         enforce_node_identity([node], checksum)
 
     assert exc.value.code == "E_NODE_ID_MISMATCH"
+
+
+def test_enforce_node_identity_rejects_schema_conflict() -> None:
+    factory = NodeFactory()
+    node = factory.build()
+    node["schema_id"] = f"{node['schema_compat_id']}-legacy"
+
+    checksum = crc32_of_list([node["node_id"]])
+
+    with pytest.raises(NodeValidationError) as exc:
+        enforce_node_identity([node], checksum)
+
+    assert exc.value.code == "E_SCHEMA_COMPAT_MISMATCH"
 
 
 def test_tagquery_requires_interval() -> None:

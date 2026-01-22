@@ -10,7 +10,7 @@ from .circuit_breaker import AsyncCircuitBreaker
 from .four_dim_cache import FourDimCache
 from .hashutils import hash_bytes
 from .nodeid import compute_node_id
-from .nodespec import CanonicalNodeSpec
+from .nodespec import CanonicalNodeSpec, normalize_schema_compat_id
 from .compute_key import compute_compute_key
 from .compute_context import ComputeContext, DEFAULT_EXECUTION_DOMAIN, DowngradeReason
 from .rpc import RpcCommand, RpcError, RpcOutcome, RpcResponseParser, execute_rpc
@@ -19,6 +19,7 @@ from .node_validation import (
     NodeIdentityMismatch,
     NodeValidationError,
     NodeValidationReport,
+    SchemaCompatConflict,
     REQUIRED_NODE_FIELDS,
     enforce_node_identity,
     validate_node_identity,
@@ -52,6 +53,7 @@ __all__ = [
     "hash_bytes",
     "compute_node_id",
     "CanonicalNodeSpec",
+    "normalize_schema_compat_id",
     "ComputeContext",
     "DowngradeReason",
     "compute_compute_key",
@@ -60,6 +62,7 @@ __all__ = [
     "NodeIdentityMismatch",
     "NodeValidationError",
     "NodeValidationReport",
+    "SchemaCompatConflict",
     "REQUIRED_NODE_FIELDS",
     "enforce_node_identity",
     "validate_node_identity",

@@ -7,6 +7,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from .crc import crc32_of_list
 from .nodeid import compute_node_id
+from .nodespec import normalize_schema_compat_id
 from .tagquery import canonical_tag_query_params_from_node
 
 # Required node attributes that must be present for ``compute_node_id`` to be
@@ -52,6 +53,26 @@ class NodeIdentityMismatch:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class SchemaCompatConflict:
+    """Report nodes whose schema_compat_id conflicts with legacy schema_id."""
+
+    index: int
+    schema_compat_id: str
+    schema_id: str
+    node_id: str | None = None
+
+    def to_payload(self) -> dict[str, Any]:
+        payload = {
+            "index": self.index,
+            "schema_compat_id": self.schema_compat_id,
+            "schema_id": self.schema_id,
+        }
+        if self.node_id:
+            payload["node_id"] = self.node_id
+        return payload
+
+
 class NodeValidationError(Exception):
     """Exception raised when canonical node validation fails."""
 
@@ -94,6 +115,19 @@ class NodeValidationError(Exception):
             }
         )
 
+    @classmethod
+    def schema_conflict(
+        cls, conflicts: Sequence[SchemaCompatConflict]
+    ) -> "NodeValidationError":
+        return cls(
+            {
+                "code": "E_SCHEMA_COMPAT_MISMATCH",
+                "message": "schema_compat_id and schema_id must match when both are provided",
+                "schema_conflicts": [item.to_payload() for item in conflicts],
+                "hint": "Send only schema_compat_id or ensure legacy schema_id matches it.",
+            }
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class NodeValidationReport:
@@ -104,6 +138,7 @@ class NodeValidationReport:
     node_ids: tuple[str, ...]
     missing_fields: tuple[MissingNodeField, ...]
     mismatches: tuple[NodeIdentityMismatch, ...]
+    schema_conflicts: tuple[SchemaCompatConflict, ...]
 
     @property
     def checksum_valid(self) -> bool:
@@ -111,11 +146,18 @@ class NodeValidationReport:
 
     @property
     def is_valid(self) -> bool:
-        return not self.missing_fields and self.checksum_valid and not self.mismatches
+        return (
+            not self.missing_fields
+            and not self.schema_conflicts
+            and self.checksum_valid
+            and not self.mismatches
+        )
 
     def raise_for_issues(self) -> None:
         if self.missing_fields:
             raise NodeValidationError.missing_fields(self.missing_fields)
+        if self.schema_conflicts:
+            raise NodeValidationError.schema_conflict(self.schema_conflicts)
         if not self.checksum_valid:
             raise NodeValidationError.checksum_mismatch(
                 self.provided_checksum, self.computed_checksum
@@ -171,6 +213,7 @@ def validate_node_identity(
     node_ids_for_crc: list[str] = []
     missing_fields: list[MissingNodeField] = []
     mismatches: list[NodeIdentityMismatch] = []
+    schema_conflicts: list[SchemaCompatConflict] = []
 
     for index, node in enumerate(nodes):
         if not isinstance(node, Mapping):
@@ -185,7 +228,27 @@ def validate_node_identity(
 
         node_ids_for_crc.append(node_id)
 
+        legacy_schema_id = (
+            node.get("schema_id") if "schema_id" in node else None
+        )
+        try:
+            normalized_schema_compat_id = normalize_schema_compat_id(
+                node.get("schema_compat_id"), fallback=legacy_schema_id
+            )
+        except ValueError:
+            schema_conflicts.append(
+                SchemaCompatConflict(
+                    index=index,
+                    node_id=node_id,
+                    schema_compat_id=str(node.get("schema_compat_id") or ""),
+                    schema_id=str(legacy_schema_id or ""),
+                )
+            )
+            continue
+
         missing_list = [field for field in required_fields if not node.get(field)]
+        if "schema_compat_id" in missing_list and normalized_schema_compat_id:
+            missing_list.remove("schema_compat_id")
         if node_type == "TagQueryNode":
             missing_list.extend(_missing_tagquery_requirements(node))
 
@@ -209,6 +272,7 @@ def validate_node_identity(
         node_ids=tuple(node_ids_for_crc),
         missing_fields=tuple(missing_fields),
         mismatches=tuple(mismatches),
+        schema_conflicts=tuple(schema_conflicts),
     )
 
 
@@ -229,6 +293,7 @@ __all__ = [
     "NodeIdentityMismatch",
     "NodeValidationError",
     "NodeValidationReport",
+    "SchemaCompatConflict",
     "REQUIRED_NODE_FIELDS",
     "enforce_node_identity",
     "validate_node_identity",

@@ -228,6 +228,12 @@ nodeid_mismatch_total = _counter(
     ["node_type"],
 )
 
+nodeid_schema_conflict_total = _counter(
+    "nodeid_schema_conflict_total",
+    "Total DAG submissions with conflicting schema_compat_id and schema_id values",
+    ["node_type"],
+)
+
 tagquery_nodeid_mismatch_total = _counter(
     "tagquery_nodeid_mismatch_total",
     "Total TagQuery nodes rejected due to node_id mismatch",
@@ -587,6 +593,10 @@ def record_node_identity_report(report: NodeValidationReport, nodes: Seq[Mapping
         nodeid_mismatch_total.labels(node_type=node_type).inc()
         if node_type == "TagQueryNode":
             tagquery_nodeid_mismatch_total.inc()
+
+    for conflict in report.schema_conflicts:
+        node_type = _node_type_for_index(nodes, conflict.index)
+        nodeid_schema_conflict_total.labels(node_type=node_type).inc()
 
 
 def record_controlbus_message(topic: str, timestamp_ms: float | None) -> None:
