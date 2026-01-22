@@ -86,7 +86,7 @@ Additional references
 ### 1.1-A Schema compatibility identifier field
 
 - The canonical field name inside DAG Manager is `schema_compat_id`. The proto (`BufferInstruction`) and Neo4j properties use the same name.
-- For input compatibility, DAG JSON temporarily accepts legacy `schema_id`, but it is normalized to `schema_compat_id` during processing.
+- For input compatibility, DAG JSON temporarily accepts legacy `schema_id`, but it is normalized to `schema_compat_id` during processing. If both `schema_compat_id` and `schema_id` are present and differ, normalization fails at the input boundary.
 - If existing Neo4j data only has `schema_id`, backfill it with the query below.
 
 ```cypher

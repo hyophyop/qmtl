@@ -49,7 +49,11 @@ from .topic import (
     build_namespace,
     ensure_namespace,
 )
-from qmtl.foundation.common import AsyncCircuitBreaker, crc32_of_list
+from qmtl.foundation.common import (
+    AsyncCircuitBreaker,
+    crc32_of_list,
+    normalize_schema_compat_id,
+)
 from qmtl.foundation.common.compute_context import ComputeContext, coerce_compute_context
 from qmtl.foundation.common.metrics_factory import increment_mapping_store
 from qmtl.foundation.common.metrics_shared import observe_cross_context_cache_hit
@@ -402,10 +406,18 @@ class DiffService:
         )
         node_map = {n["node_id"]: n for n in filtered_nodes if "node_id" in n}
         for node in node_map.values():
-            if not node.get("schema_compat_id"):
-                legacy_schema_id = node.get("schema_id")
-                if legacy_schema_id:
-                    node["schema_compat_id"] = legacy_schema_id
+            legacy_schema_id = (
+                node.get("schema_id") if "schema_id" in node else None
+            )
+            try:
+                normalized_schema_compat_id = normalize_schema_compat_id(
+                    node.get("schema_compat_id"), fallback=legacy_schema_id
+                )
+            except ValueError as exc:
+                node_id = node.get("node_id", "<unknown>")
+                raise ValueError(f"{exc} (node_id={node_id})") from exc
+            if normalized_schema_compat_id:
+                node["schema_compat_id"] = normalized_schema_compat_id
         ordered_ids = self._topologically_order_nodes(node_map)
         nodes = self._build_node_infos(ordered_ids, node_map, context)
         version = self._resolve_version_label(data, meta, sentinel_version)

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import copy
 
+import pytest
+
 from qmtl.foundation.common import CanonicalNodeSpec, compute_node_id
 from qmtl.foundation.common.nodespec import serialize_nodespec
 
@@ -85,6 +87,22 @@ def test_compute_node_id_accepts_builder() -> None:
     spec = CanonicalNodeSpec.from_payload(payload)
 
     assert compute_node_id(spec) == compute_node_id(payload)
+
+
+def test_serialize_nodespec_rejects_conflicting_schema_ids() -> None:
+    payload = {
+        "node_type": "LegacyNode",
+        "interval": 0,
+        "period": 0,
+        "config": {"beta": 2},
+        "inputs": [],
+        "schema_compat_id": "compat",
+        "schema_id": "legacy",
+        "code_hash": "code",
+    }
+
+    with pytest.raises(ValueError, match="must match if both are provided"):
+        serialize_nodespec(payload)
 
 
 def test_compute_node_id_ignores_nondeterministic_params() -> None:

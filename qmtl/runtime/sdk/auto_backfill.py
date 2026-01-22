@@ -400,16 +400,16 @@ class LiveReplayBackfillStrategy(AutoBackfillStrategy):
     def _default_normalizer(events: Iterable[ReplayEvent]) -> pd.DataFrame:
         records = []
         for ts, payload in events:
-            record = {"ts": int(ts)}
+            record: dict[str, Any] = {"ts": int(ts)}
             if isinstance(payload, pd.Series):
-                record.update(payload.to_dict())
+                record.update({str(key): value for key, value in payload.to_dict().items()})
             elif isinstance(payload, pd.DataFrame):
                 # Flatten DataFrame by taking first row per event
                 if not payload.empty:
                     first = payload.iloc[0].to_dict()
-                    record.update(first)
+                    record.update({str(key): value for key, value in first.items()})
             elif isinstance(payload, dict):
-                record.update(payload)
+                record.update({str(key): value for key, value in payload.items()})
             else:
                 record["value"] = payload
             records.append(record)

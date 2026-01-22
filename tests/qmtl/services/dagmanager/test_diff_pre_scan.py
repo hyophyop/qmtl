@@ -41,6 +41,40 @@ def test_pre_scan_and_db_fetch(diff_service, fake_repo, make_request):
     assert fake_repo.fetched[0] == ["A", "B"]
 
 
+def test_pre_scan_accepts_legacy_schema_id(diff_service, fake_repo, make_request):
+    request = make_request(
+        nodes=[
+            dag_node(
+                "A",
+                code_hash="c1",
+                schema_hash="s1",
+                schema_id="schema-major",
+            )
+        ]
+    )
+
+    diff_service.diff(request)
+
+    assert fake_repo.fetched[0] == ["A"]
+
+
+def test_pre_scan_rejects_conflicting_schema_ids(diff_service, make_request):
+    request = make_request(
+        nodes=[
+            dag_node(
+                "A",
+                code_hash="c1",
+                schema_hash="s1",
+                schema_compat_id="schema-major",
+                schema_id="schema-legacy",
+            )
+        ]
+    )
+
+    with pytest.raises(ValueError, match="must match if both are provided"):
+        diff_service.diff(request)
+
+
 def test_pre_scan_uses_custom_json_loader(monkeypatch, diff_service):
     calls: list[str] = []
 

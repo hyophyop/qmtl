@@ -252,7 +252,7 @@ The architecture document (§3) defines the deterministic NodeID used across Gat
 Clarifications
 - NodeID MUST NOT include `world_id`. World isolation is enforced at the WVG layer and via world-scoped queue namespaces (e.g., `topic_prefix`), not in the global ID.
 - TagQueryNode canonicalization: do not include the dynamically resolved upstream queue set in `dependencies`. Instead, capture the query spec in `params_canon` (normalized `query_tags` sorted, `match_mode`, and `interval`). Runtime queue discovery and growth are delivered via ControlBus → SDK TagQueryManager; NodeID remains stable across discoveries.
-- Gateway는 `node_type`, `code_hash`, `config_hash`, `schema_hash`, `schema_compat_id`가 빠진 제출을 `E_NODE_ID_FIELDS`로 거부하며, 제공된 `node_id`가 정규 `compute_node_id()` 출력과 다를 경우 `E_NODE_ID_MISMATCH`를 반환합니다. `node_ids_crc32`(CRC32) 불일치의 경우 `E_CHECKSUM_MISMATCH`를 반환합니다. 세 오류 모두 SDK 클라이언트가 BLAKE3 계약에 따라 DAG를 재생성할 수 있도록 실행 가능한 힌트를 포함합니다.
+- Gateway는 `node_type`, `code_hash`, `config_hash`, `schema_hash`, `schema_compat_id`가 빠진 제출을 `E_NODE_ID_FIELDS`로 거부하며, 제공된 `node_id`가 정규 `compute_node_id()` 출력과 다를 경우 `E_NODE_ID_MISMATCH`를 반환합니다. `node_ids_crc32`(CRC32) 불일치의 경우 `E_CHECKSUM_MISMATCH`를 반환합니다. 또한 `schema_compat_id`와 레거시 `schema_id`가 동시에 존재하고 값이 다르면 `E_SCHEMA_COMPAT_MISMATCH`로 거부합니다. 모든 오류에는 SDK 클라이언트가 BLAKE3 계약에 따라 DAG를 재생성할 수 있도록 실행 가능한 힌트를 포함합니다.
 
 인제스트 직후, Gateway는 전략 코드 변경 없이 롤백과 카나리아 트래픽 제어를 조율할 수 있도록 DAG에 `VersionSentinel` 노드를 삽입합니다. 이 동작은 기본 활성화되어 있으며 ``insert_sentinel`` 구성으로 제어합니다. ``--no-sentinel`` 플래그로 비활성화할 수 있습니다.
 

@@ -34,6 +34,15 @@ def test_validate_accepts_matching_ids(node_factory: NodeFactory) -> None:
     validator.validate(dag, node_ids_crc32([node]))
 
 
+def test_validate_accepts_legacy_schema_id(node_factory: NodeFactory) -> None:
+    validator = NodeIdentityValidator()
+    node = node_factory.build()
+    node["schema_id"] = node["schema_compat_id"]
+    node.pop("schema_compat_id", None)
+    dag = _with_version({"nodes": [node]})
+    validator.validate(dag, node_ids_crc32([node]))
+
+
 def test_validate_missing_fields_raises(node_factory: NodeFactory) -> None:
     validator = NodeIdentityValidator()
     node = node_factory.build(assign_id=False, schema_hash="", schema_compat_id="")
@@ -69,6 +78,18 @@ def test_validate_detects_mismatch(node_factory: NodeFactory) -> None:
 
     detail = exc.value.detail  # type: ignore[attr-defined]
     assert detail["code"] == "E_NODE_ID_MISMATCH"
+
+
+def test_validate_rejects_schema_conflict(node_factory: NodeFactory) -> None:
+    validator = NodeIdentityValidator()
+    node = node_factory.build()
+    node["schema_id"] = "legacy-mismatch"
+    dag = _with_version({"nodes": [node]})
+    with pytest.raises(Exception) as exc:
+        validator.validate(dag, node_ids_crc32([node]))
+
+    detail = exc.value.detail  # type: ignore[attr-defined]
+    assert detail["code"] == "E_SCHEMA_COMPAT_MISMATCH"
 
 
 def test_validate_ignores_nondeterministic_params(node_factory: NodeFactory) -> None:
