@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import types
-import pandas as pd
+import polars as pl
 import pytest
 
 from qmtl.runtime.io.ccxt_fetcher import (
@@ -67,8 +67,8 @@ async def test_ccxt_fetcher_normalizes_rows_and_filters_range():
     fetcher = CcxtOHLCVFetcher(cfg, exchange=ex)
     df = await fetcher.fetch(60, 180, node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
     assert list(df.columns) == ["ts", "open", "high", "low", "close", "volume"]
-    assert df["ts"].tolist() == [60, 120, 180]
-    assert df.iloc[0]["open"] == 1
+    assert df.get_column("ts").to_list() == [60, 120, 180]
+    assert df.get_column("open")[0] == 1
 
 
 @pytest.mark.asyncio
@@ -85,7 +85,7 @@ async def test_ccxt_fetcher_chunks_requests_with_window_size():
     )
     fetcher = CcxtOHLCVFetcher(cfg, exchange=ex)
     df = await fetcher.fetch(60, 240, node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
-    assert df["ts"].tolist() == [60, 120, 180, 240]
+    assert df.get_column("ts").to_list() == [60, 120, 180, 240]
     # Two calls due to window_size
     assert len(ex.calls) >= 2
 
@@ -113,7 +113,7 @@ async def test_ccxt_fetcher_retries_on_error_then_succeeds():
     )
     fetcher = CcxtOHLCVFetcher(cfg, exchange=ex)
     df = await fetcher.fetch(60, 60, node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
-    assert df["ts"].tolist() == [60]
+    assert df.get_column("ts").to_list() == [60]
 
 
 @pytest.mark.asyncio
@@ -140,7 +140,7 @@ async def test_ccxt_fetcher_penalty_backoff_on_429(monkeypatch):
     fetcher = CcxtOHLCVFetcher(cfg, exchange=ex)
 
     df = await fetcher.fetch(60, 60, node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
-    assert df["ts"].tolist() == [60]
+    assert df.get_column("ts").to_list() == [60]
     assert any(pytest.approx(0.5, rel=0.1) == d for d in delays)
 
 
@@ -177,7 +177,7 @@ async def test_ccxt_fetcher_key_template_overrides_suffix(monkeypatch):
     fetcher = CcxtOHLCVFetcher(cfg, exchange=_StubExchange([[[60_000, 1, 1, 1, 1, 1]]]))
 
     df = await fetcher.fetch(60, 60, node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
-    assert df["ts"].tolist() == [60]
+    assert df.get_column("ts").to_list() == [60]
     assert calls, "expected limiter to be requested"
     key, kwargs = calls[0]
     assert key == "ccxt:binance:acct42"
@@ -326,4 +326,3 @@ async def test_ccxt_fetcher_reuses_cached_exchange(monkeypatch):
     instance = _FakeOhlcvExchange.instances[0]
     assert instance.fetch_calls >= 1
     assert instance.close_calls == 2
-

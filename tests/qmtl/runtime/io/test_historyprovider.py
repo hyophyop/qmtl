@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
+import polars as pl
 import pytest
 
 from qmtl.runtime.io import historyprovider
@@ -29,7 +29,7 @@ async def test_write_rows_builds_single_insert_statement(monkeypatch):
 
     monkeypatch.setattr(historyprovider.asyncpg, "connect", fake_connect)
 
-    rows = pd.DataFrame(
+    rows = pl.DataFrame(
         [
             {"ts": np.int64(10), "open": np.float64(1.1), "close": np.float64(1.2)},
             {"ts": np.int64(20), "open": np.float64(1.3), "close": np.float64(1.4)},
@@ -55,7 +55,7 @@ async def test_write_rows_raises_on_missing_ts_and_closes(monkeypatch):
 
     monkeypatch.setattr(historyprovider.asyncpg, "connect", fake_connect)
 
-    rows = pd.DataFrame([{"open": 1.0, "close": 1.1}])
+    rows = pl.DataFrame([{"open": 1.0, "close": 1.1}])
 
     with pytest.raises(KeyError):
         await backend.write_rows(rows, node_id="node-1", interval=60)

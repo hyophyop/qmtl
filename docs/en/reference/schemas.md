@@ -32,19 +32,26 @@ UTC.
 
 | Schema | Columns |
 | ------ | ------- |
-| ``bar`` | ``ts`` (UTC ``datetime64[ns]``), ``open`` ``float64``, ``high`` ``float64``, ``low`` ``float64``, ``close`` ``float64``, ``volume`` ``float64`` |
-| ``quote`` | ``ts`` (UTC ``datetime64[ns]``), ``bid`` ``float64``, ``ask`` ``float64``, ``bid_size`` ``float64``, ``ask_size`` ``float64`` |
-| ``trade`` | ``ts`` (UTC ``datetime64[ns]``), ``price`` ``float64``, ``size`` ``float64`` |
+| ``bar`` | ``ts`` (UTC ``Datetime(time_unit='ns', time_zone='UTC')``), ``open`` ``Float64``, ``high`` ``Float64``, ``low`` ``Float64``, ``close`` ``Float64``, ``volume`` ``Float64`` |
+| ``quote`` | ``ts`` (UTC ``Datetime(time_unit='ns', time_zone='UTC')``), ``bid`` ``Float64``, ``ask`` ``Float64``, ``bid_size`` ``Float64``, ``ask_size`` ``Float64`` |
+| ``trade`` | ``ts`` (UTC ``Datetime(time_unit='ns', time_zone='UTC')``), ``price`` ``Float64``, ``size`` ``Float64`` |
 
 Example:
 
 ```python
-import pandas as pd
+import polars as pl
 from qmtl.foundation.schema import validate_schema
 
-df = pd.DataFrame(
+df = pl.DataFrame(
     {
-        "ts": pd.date_range("2024-01-01", periods=1, tz="UTC"),
+        "ts": pl.datetime_range(
+            "2024-01-01",
+            "2024-01-01",
+            interval="1d",
+            eager=True,
+            time_unit="ns",
+            time_zone="UTC",
+        ),
         "open": [1.0],
         "high": [1.0],
         "low": [1.0],

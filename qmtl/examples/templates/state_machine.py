@@ -9,7 +9,7 @@ ASCII DAG::
 """
 
 import argparse
-import pandas as pd
+import polars as pl
 from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import Node, StreamInput
 
@@ -24,12 +24,12 @@ class StateMachineStrategy(Strategy):
 
         def update_state(view):
             # Determine trend direction and emit whether it changed
-            df = pd.DataFrame([v for _, v in view[price][60]])
-            ema = df["close"].ewm(span=10).mean().iloc[-1]
-            trend = "long" if df["close"].iloc[-1] > ema else "short"
+            df = pl.DataFrame([v for _, v in view[price][60]])
+            ema = df.get_column("close").ewm_mean(span=10)[-1]
+            trend = "long" if df.get_column("close")[-1] > ema else "short"
             changed = trend != state.get("trend")
             state["trend"] = trend
-            return pd.DataFrame({"trend": [trend], "changed": [changed]})
+            return pl.DataFrame({"trend": [trend], "changed": [changed]})
 
         trend_node = Node(input=price, compute_fn=update_state, name="trend_state")
         # Register nodes to form the DAG

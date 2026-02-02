@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import pandas as pd
+import polars as pl
 import pytest
 
 from qmtl.runtime.io import CcxtQuestDBProvider
@@ -11,7 +11,7 @@ class _InMemoryBackend:
     def __init__(self) -> None:
         self._rows: dict[tuple[str, int], dict[int, dict]] = {}
 
-    async def read_range(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+    async def read_range(self, start: int, end: int, *, node_id: str, interval: int) -> pl.DataFrame:
         table = self._rows.get((node_id, interval), {})
         data = []
         for ts in sorted(table):
@@ -19,13 +19,13 @@ class _InMemoryBackend:
                 row = {"ts": ts}
                 row.update(table[ts])
                 data.append(row)
-        return pd.DataFrame(data)
+        return pl.DataFrame(data)
 
-    async def write_rows(self, rows: pd.DataFrame, *, node_id: str, interval: int) -> None:
-        if rows is None or rows.empty:
+    async def write_rows(self, rows: pl.DataFrame, *, node_id: str, interval: int) -> None:
+        if rows is None or rows.is_empty():
             return
         table = self._rows.setdefault((node_id, interval), {})
-        for rec in rows.to_dict("records"):
+        for rec in rows.to_dicts():
             ts = int(rec["ts"])
             payload = {k: v for k, v in rec.items() if k != "ts"}
             table[ts] = payload
@@ -75,7 +75,7 @@ async def test_ccxt_questdb_provider_wiring_and_backfill(monkeypatch):
 
     # Verify data materialized
     df = await backend.read_range(0, 120, node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
-    assert df["ts"].tolist() == [60]
+    assert df.get_column("ts").to_list() == [60]
 
 
 def _base_provider_config(**rate_limiter: object) -> dict[str, object]:
@@ -123,4 +123,3 @@ def test_from_config_propagates_key_template():
     rl = fetcher.config.rate_limiter  # type: ignore[union-attr]
     assert rl.key_template == "ccxt:{exchange}:{suffix}"
     assert rl.key_suffix == "acct42"
-

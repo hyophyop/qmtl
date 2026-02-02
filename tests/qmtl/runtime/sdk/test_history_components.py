@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import pandas as pd
+import polars as pl
 import pytest
 
 from qmtl.runtime.sdk.history_coverage import (
@@ -18,8 +18,8 @@ class ProxyHistoryProvider(HistoryProvider):
 
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:  # pragma: no cover - unused helper
-        return pd.DataFrame()
+    ) -> pl.DataFrame:  # pragma: no cover - unused helper
+        return pl.DataFrame()
 
     async def coverage(
         self, *, node_id: str, interval: int

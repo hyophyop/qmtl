@@ -232,12 +232,12 @@ class NodeFeedMixin(CacheActivationMixin):
             return None
 
     def _should_validate_schema(self, payload: Any) -> bool:
-        try:  # Optional pandas dependency
-            import pandas as pd
-        except Exception:  # pragma: no cover - pandas not installed
+        try:  # Optional polars dependency
+            import polars as pl
+        except Exception:  # pragma: no cover - polars not installed
             return False
 
-        return isinstance(payload, pd.DataFrame)
+        return isinstance(payload, pl.DataFrame)
 
     def _record_resident_bytes(self) -> None:
         if hasattr(self.cache, "record_resident_bytes"):

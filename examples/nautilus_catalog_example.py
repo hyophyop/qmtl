@@ -26,8 +26,8 @@ Prerequisites:
 from __future__ import annotations
 
 import asyncio
+import polars as pl
 from pathlib import Path
-import pandas as pd
 
 # QMTL imports
 from qmtl.runtime.io.nautilus_catalog_source import (
@@ -93,7 +93,7 @@ async def example_basic_fetch():
         )
         
         print(f"Retrieved {len(bars)} bars")
-        if not bars.empty:
+        if not bars.is_empty():
             print("\nFirst 5 rows:")
             print(bars.head())
             print(f"\nColumns: {list(bars.columns)}")
@@ -131,7 +131,7 @@ async def example_ticks_and_quotes():
         )
         
         print(f"Retrieved {len(ticks)} ticks")
-        if not ticks.empty:
+        if not ticks.is_empty():
             print("\nFirst 5 ticks:")
             print(ticks.head())
             print(f"\nColumns: {list(ticks.columns)}")
@@ -149,7 +149,7 @@ async def example_ticks_and_quotes():
         )
         
         print(f"Retrieved {len(quotes)} quotes")
-        if not quotes.empty:
+        if not quotes.is_empty():
             print("\nFirst 5 quotes:")
             print(quotes.head())
             print(f"\nColumns: {list(quotes.columns)}")
@@ -203,13 +203,13 @@ async def example_strategy_integration():
             def compute(view):
                 # Access latest 10 bars
                 bars = view[self.price][10]
-                if not bars.empty:
-                    print(f"Latest close: {bars['close'].iloc[-1]}")
+                if not bars.is_empty():
+                    print(f"Latest close: {bars.get_column('close')[-1]}")
                 
                 # Access latest 100 ticks
                 ticks = view[self.ticks][100]
-                if not ticks.empty:
-                    print(f"Latest tick price: {ticks['price'].iloc[-1]}")
+                if not ticks.is_empty():
+                    print(f"Latest tick price: {ticks.get_column('price')[-1]}")
             
             self.compute = compute
     
@@ -283,14 +283,15 @@ async def example_timestamp_conversion():
     print(f"QMTL timestamp (sec):    {qmtl_sec}")
     print(f"Difference factor:       1,000,000,000")
     
-    # Show in pandas
-    df_nautilus = pd.DataFrame([
+    # Show in polars
+    df_nautilus = pl.DataFrame([
         {'ts_event': 1700000000 * 1_000_000_000},
         {'ts_event': 1700000060 * 1_000_000_000},
     ])
     
-    df_qmtl = pd.DataFrame()
-    df_qmtl['ts'] = (df_nautilus['ts_event'].values // 1_000_000_000).astype('int64')
+    df_qmtl = df_nautilus.with_columns(
+        (pl.col('ts_event') // 1_000_000_000).cast(pl.Int64).alias('ts')
+    ).select(['ts'])
     
     print("\n\nExample conversion in DataFrame:")
     print("Nautilus (nanoseconds):")

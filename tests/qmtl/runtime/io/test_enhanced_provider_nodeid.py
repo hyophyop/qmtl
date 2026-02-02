@@ -1,4 +1,4 @@
-import pandas as pd
+import polars as pl
 import pytest
 
 from qmtl.runtime.io.seamless_provider import (
@@ -18,11 +18,11 @@ class _QuestDBLoaderStub:
         self.fetcher = fetcher
         self.fetch_calls = 0
 
-    async def fetch(self, start, end, *, node_id: str, interval: int) -> pd.DataFrame:
+    async def fetch(self, start, end, *, node_id: str, interval: int) -> pl.DataFrame:
         self.fetch_calls += 1
-        frame = pd.DataFrame(
+        frame = pl.DataFrame(
             {
-                "ts": pd.Series([start], dtype="int64"),
+                "ts": pl.Series([start], dtype="int64"),
                 "open": [1.0],
                 "high": [1.5],
                 "low": [0.9],
@@ -68,7 +68,7 @@ async def test_enhanced_provider_validates_node_ids(monkeypatch):
 
     # Well-formed identifier is accepted.
     df = await provider.fetch(0, 60, node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
-    assert df.empty or "ts" in df.columns
+    assert df.is_empty() or "ts" in df.columns
     assert storage.fetch_calls == 1
 
 

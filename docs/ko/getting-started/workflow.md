@@ -37,7 +37,7 @@ QMTL 사용자의 핵심 사이클은 **개발 → 평가 → 개선**입니다.
 
 ```python
 from qmtl.sdk import Strategy, StreamInput, Node
-import pandas as pd
+import polars as pl
 
 class MyStrategy(Strategy):
     """
@@ -54,19 +54,17 @@ class MyStrategy(Strategy):
         )
         
         def compute_signal(view):
-            df = view.as_frame(price, columns=["close"])
+            frame = view.as_frame(price, columns=["close"]).frame
             
-            ma_short = df["close"].rolling(10).mean()
-            ma_long = df["close"].rolling(50).mean()
+            ma_short = frame.get_column("close").rolling_mean(window_size=10)
+            ma_long = frame.get_column("close").rolling_mean(window_size=50)
             
             # 골든크로스: 1, 데드크로스: -1, 그 외: 0
-            signal = pd.Series(0, index=df.index)
-            signal[ma_short > ma_long] = 1
-            signal[ma_short < ma_long] = -1
+            signal = (ma_short > ma_long).cast(pl.Int64) - (ma_short < ma_long).cast(pl.Int64)
             
-            returns = df["close"].pct_change()
+            returns = frame.get_column("close").pct_change()
             
-            return pd.DataFrame({
+            return pl.DataFrame({
                 "signal": signal,
                 "returns": returns
             })
@@ -173,14 +171,14 @@ class MyStrategy_v2(Strategy):
         price = StreamInput(tags=["BTC", "price"], interval="5m", period=100)
         
         def compute_signal(view):
-            df = view.as_frame(price, columns=["close"])
+            frame = view.as_frame(price, columns=["close"]).frame
             # ... 기존 로직
             
             # 손절: 5% 이상 하락 시 포지션 청산
-            drawdown = (df["close"] / df["close"].cummax() - 1)
-            signal[drawdown < -0.05] = 0  # 손절
+            drawdown = (frame.get_column("close") / frame.get_column("close").cum_max() - 1)
+            signal = pl.when(drawdown < -0.05).then(0).otherwise(signal)
             
-            return pd.DataFrame({"signal": signal, "returns": returns})
+            return pl.DataFrame({"signal": signal, "returns": returns})
 
 # 버전 3: 분산 효과 - 다른 자산 추가
 class MyStrategy_v3(Strategy):

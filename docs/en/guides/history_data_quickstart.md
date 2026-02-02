@@ -33,7 +33,7 @@ The simplest way to attach external history is to use
 to load your data (CSV, Parquet, HTTP, internal APIs, etc.).
 
 ```python
-import pandas as pd
+import polars as pl
 
 from qmtl.runtime.io.seamless_provider import EnhancedQuestDBProvider
 from qmtl.runtime.sdk.seamless_data_provider import DataAvailabilityStrategy
@@ -48,10 +48,10 @@ class ExampleMarketDataFetcher:
         *,
         node_id: str,
         interval: int,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         # Replace this stub with your own loader
         ts = list(range(start, end, interval))
-        return pd.DataFrame(
+        return pl.DataFrame(
             {
                 "ts": ts,
                 "price": [100.0 + i * 0.01 for i in range(len(ts))],
@@ -95,7 +95,7 @@ Key points:
 - `EnhancedQuestDBProvider` is a concrete `SeamlessDataProvider` subclass that
   already implements the `fetch`, `coverage`, and `fill_missing` methods
   expected by the warm‑up layer.
-- Your `DataFetcher` only needs to return a `DataFrame` with a `ts` column;
+- Your `DataFetcher` only needs to return a polars `DataFrame` with a `ts` column;
   the provider takes care of coverage, auto‑backfill, and conformance.
 - `StreamInput(history_provider=provider)` is the only wiring change needed in
   the strategy.

@@ -422,7 +422,9 @@ Runner.submit(FlowExample, world="arch_world")
 3. **프로세싱 함수(Compute-Fn) 규약** — 노드의 계산 함수는 순수 함수로, `data_cache` 외부 상태를 읽거나 쓰지 않는다. 모든 `compute_fn`은 `NodeCache.view()`이 반환하는 **read-only CacheView** 한 개만을 인자로 받으며, I/O(큐 publish, DB write) 역시 금지.
 
    ```python
-   def fn(view) -> pd.DataFrame:
+   import polars as pl
+
+   def fn(view) -> pl.DataFrame:
            ...
    ```
 4. **Period 충족 조건** — 노드 트리거 공식: `∀ u ∈ upstreams : len(view[u][interval]) ≥ period`.
@@ -538,7 +540,7 @@ Warmup 규칙은 동일하다. 각 노드는 종속 업스트림 큐로부터 `p
 
 ```python
 from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner
-import pandas as pd
+import polars as pl
 
 # 전략 정의
 class GeneralStrategy(Strategy):
@@ -548,11 +550,11 @@ class GeneralStrategy(Strategy):
             period=30       # 최소 30개 필요
         )
 
-        def generate_signal(view) -> pd.DataFrame:
+        def generate_signal(view) -> pl.DataFrame:
             price = view.as_frame(price_stream, 60, columns=["close"]).validate_columns(["close"])
-            momentum = price.frame["close"].pct_change().rolling(5).mean()
-            signal = (momentum > 0).astype(int)
-            return pd.DataFrame({"signal": signal})
+            momentum = price.frame.get_column("close").pct_change().rolling_mean(window_size=5)
+            signal = (momentum > 0).cast(pl.Int64)
+            return pl.DataFrame({"signal": signal})
 
         signal_node = Node(
             input=price_stream,
@@ -587,16 +589,16 @@ if __name__ == "__main__":
 
 ```python
 from qmtl.runtime.sdk import Strategy, Node, Runner, TagQueryNode, MatchMode
-import pandas as pd
+import polars as pl
 
 # 사용자 정의 상관계수 계산 함수
-def calc_corr(view) -> pd.DataFrame:
+def calc_corr(view) -> pl.DataFrame:
     aligned = view.align_frames([(node_id, 3600) for node_id in view], window=24)
-    frames = [frame.frame for frame in aligned if not frame.frame.empty]
+    frames = [frame.frame for frame in aligned if not frame.frame.is_empty()]
     if not frames:
-        return pd.DataFrame()
+        return pl.DataFrame()
 
-    corr = pd.concat(frames, axis=1).corr(method="pearson")
+    corr = pl.concat(frames, how="horizontal").corr()
     return corr
 
 class CorrelationStrategy(Strategy):
@@ -659,14 +661,14 @@ sequenceDiagram
 
 ```python
 from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner
-import pandas as pd
+import polars as pl
 
-def lagged_corr(view) -> pd.DataFrame:
-    btc = pd.DataFrame([v for _, v in view[btc_price][60]])
-    mstr = pd.DataFrame([v for _, v in view[mstr_price][60]])
-    btc_shift = btc["close"].shift(90)
-    corr = btc_shift.corr(mstr["close"])
-    return pd.DataFrame({"lag_corr": [corr]})
+def lagged_corr(view) -> pl.DataFrame:
+    btc = pl.DataFrame([v for _, v in view[btc_price][60]])
+    mstr = pl.DataFrame([v for _, v in view[mstr_price][60]])
+    btc_shift = btc.get_column("close").shift(90)
+    corr = btc_shift.pearson_corr(mstr.get_column("close"))
+    return pl.DataFrame({"lag_corr": [corr]})
 
 class CrossMarketLagStrategy(Strategy):
     def setup(self):

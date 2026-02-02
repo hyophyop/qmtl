@@ -1,4 +1,4 @@
-import pandas as pd
+import polars as pl
 
 from qmtl.runtime.sdk import DataFetcher
 
@@ -12,7 +12,7 @@ class DummyDataFetcher:
                 {"ts": 120, "value": 1},
                 {"ts": 180, "value": 2},
             ]
-        self.df = pd.DataFrame(rows)
+        self.df = pl.DataFrame(rows)
 
     async def fetch(self, start, end, *, node_id, interval):
         # ignore parameters and return the stored dataframe

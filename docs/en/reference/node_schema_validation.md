@@ -9,7 +9,7 @@ last_modified: 2025-09-08
 
 # Node DataFrame Schema Validation
 
-Nodes may declare an `expected_schema` to validate incoming pandas
+Nodes may declare an `expected_schema` to validate incoming polars
 `DataFrame` payloads. Schemas map column names to dtype strings and are
 checked automatically when data is fed into a node.
 
@@ -21,7 +21,7 @@ from qmtl.runtime.sdk import SourceNode
 price = SourceNode(
     interval="1s",
     period=1,
-    expected_schema={"ts": "int64", "close": "float64"},
+    expected_schema={"ts": "Int64", "close": "Float64"},
 )
 ```
 

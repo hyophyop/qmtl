@@ -1,4 +1,4 @@
-import pandas as pd
+import polars as pl
 import pytest
 
 from qmtl.runtime.sdk.cache_view import CacheView
@@ -11,19 +11,19 @@ def test_window_and_as_frame_single_node():
     assert window == [(2, {"price": 2}), (3, {"price": 3})]
 
     frame = view.as_frame("a", 1, window=2, columns=["price"])
-    assert list(frame.frame.index) == [2, 3]
-    assert frame.frame["price"].tolist() == [2, 3]
-    assert pytest.approx(frame.returns().tolist()) == [0.5]
+    assert frame.frame.get_column("t").to_list() == [2, 3]
+    assert frame.frame.get_column("price").to_list() == [2, 3]
+    assert pytest.approx(frame.returns().to_list()) == [0.5]
 
 
-def test_as_frame_accepts_pandas_series_cache_leaf():
-    series = pd.Series([(1, {"price": 1}), (2, {"price": 2})])
+def test_as_frame_accepts_polars_series_cache_leaf():
+    series = pl.Series([(1, {"price": 1}), (2, {"price": 2})], dtype=pl.Object)
     view = CacheView({"a": {1: series}})
 
     frame = view.as_frame("a", 1)
 
-    assert list(frame.frame.index) == [1, 2]
-    assert frame.frame["price"].tolist() == [1, 2]
+    assert frame.frame.get_column("t").to_list() == [1, 2]
+    assert frame.frame.get_column("price").to_list() == [1, 2]
 
 
 def test_align_frames_with_shared_timestamps():
@@ -38,9 +38,9 @@ def test_align_frames_with_shared_timestamps():
     assert len(aligned) == 2
 
     left, right = aligned
-    assert list(left.frame.index) == [2, 3]
-    assert left.frame["value"].tolist() == [2, 3]
-    assert right.frame["value"].tolist() == [20, 30]
+    assert left.frame.get_column("t").to_list() == [2, 3]
+    assert left.frame.get_column("value").to_list() == [2, 3]
+    assert right.frame.get_column("value").to_list() == [20, 30]
 
 
 def test_missing_columns_raise():
@@ -63,8 +63,8 @@ def test_track_access_and_pct_change():
     assert view.access_log() == [("a", 1)]
 
     pct = frame.pct_change(window=2)
-    assert isinstance(pct, pd.Series)
-    assert pct.tolist() == [3.0]
+    assert isinstance(pct, pl.Series)
+    assert pct.to_list() == [3.0]
 
 
 def test_compute_fn_end_to_end_alignment():
@@ -75,17 +75,24 @@ def test_compute_fn_end_to_end_alignment():
         }
     )
 
-    def compute(cache_view: CacheView) -> pd.DataFrame:
+    def compute(cache_view: CacheView) -> pl.DataFrame:
         price_frame, signal_frame = cache_view.align_frames([("price", 60), ("signal", 60)], window=3)
 
         returns = price_frame.validate_columns(["close"]).returns(window=1, dropna=False)
-        flags = signal_frame.validate_columns(["flag"]).frame["flag"]
-
-        return returns.to_frame("close_return").assign(flag=flags.values)
+        flags = signal_frame.validate_columns(["flag"]).frame.get_column("flag")
+        t_col = price_frame.frame.get_column("t")
+        return pl.DataFrame(
+            {
+                "t": t_col,
+                "close_return": returns,
+                "flag": flags,
+            }
+        )
 
     result = compute(view)
 
-    assert list(result.index) == [1, 2, 3]
-    assert result["flag"].tolist() == [0, 1, 1]
-    assert pd.isna(result["close_return"].iloc[0])
-    assert pytest.approx(result["close_return"].iloc[-1]) == 0.0196078431372549
+    assert result.get_column("t").to_list() == [1, 2, 3]
+    assert result.get_column("flag").to_list() == [0, 1, 1]
+    close_returns = result.get_column("close_return").to_list()
+    assert close_returns[0] is None
+    assert pytest.approx(close_returns[-1]) == 0.0196078431372549

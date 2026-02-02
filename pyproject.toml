@@ -8,6 +8,7 @@ dependencies = [
     "xarray",
     "networkx",
     "numpy",
+    "polars",
     "httpx",
     "fastapi",
     "uvicorn",
@@ -39,6 +40,7 @@ dev = [
     "jsonschema>=4.0.0",
     "fakeredis",
     "grpcio-tools>=1.74.0",
+    "polars",
     "pyarrow",
     "mkdocs-material",
     "mkdocs-macros-plugin",
@@ -48,7 +50,6 @@ dev = [
     "Babel>=2.13",
     "mypy",
     "types-protobuf",
-    "pandas-stubs",
     "types-grpcio",
     "types-PyYAML",
     "types-networkx",
@@ -57,7 +58,6 @@ dev = [
 ]
 
 ray = ["ray"]
-io = ["pandas"]
 ccxt = ["ccxt"]
 questdb = ["asyncpg"]
 nautilus = ["nautilus_trader>=1.200.0"]
@@ -74,6 +74,7 @@ dev = [
     "jsonschema>=4.0.0",
     "fakeredis",
     "grpcio-tools>=1.74.0",
+    "polars",
     "pyarrow",
     "mkdocs-material",
     "mkdocs-macros-plugin",
@@ -83,7 +84,6 @@ dev = [
     "Babel>=2.13",
     "mypy",
     "types-protobuf",
-    "pandas-stubs",
     "types-grpcio",
     "types-PyYAML",
     "types-networkx",

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-import pandas as pd
+import polars as pl
 
 from qmtl.runtime.sdk import build_seamless_assembly, hydrate_builder
 from qmtl.runtime.sdk.seamless_data_provider import DataSourcePriority
@@ -77,7 +77,7 @@ def test_preset_assembly_uses_loader_and_fetcher(monkeypatch) -> None:
             }
 
         async def fetch(self, start, end, *, node_id, interval):
-            return pd.DataFrame()
+            return pl.DataFrame()
 
         async def coverage(self, *, node_id, interval):
             return []

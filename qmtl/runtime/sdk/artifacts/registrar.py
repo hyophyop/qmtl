@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from typing import Any, MutableMapping, Protocol
 
-import pandas as pd
+import polars as pl
 
 from qmtl.foundation.config import SeamlessConfig
 from qmtl.runtime.io.artifact import (
@@ -66,7 +66,7 @@ class ArtifactRegistrar(Protocol):
 
     def publish(
         self,
-        frame: pd.DataFrame,
+        frame: pl.DataFrame,
         *,
         node_id: str,
         interval: int,
@@ -174,16 +174,16 @@ class FileSystemArtifactRegistrar(_IOArtifactRegistrar):
     def _write_manifest(self, path: Path, manifest: MutableMapping[str, Any]) -> None:
         path.write_text(json.dumps(manifest, sort_keys=True))
 
-    def _store(self, frame: pd.DataFrame, manifest: MutableMapping[str, Any]) -> str:
+    def _store(self, frame: pl.DataFrame, manifest: MutableMapping[str, Any]) -> str:
         target = self._target_dir(manifest)
         target.mkdir(parents=True, exist_ok=True)
 
         data_path = target / "data.parquet"
         try:
-            frame.to_parquet(data_path)
+            frame.write_parquet(data_path)
         except (ImportError, ValueError):  # pragma: no cover - exercised in environments w/o parquet
             data_path = target / "data.json"
-            data_path.write_text(frame.to_json(orient="records"))
+            data_path.write_text(json.dumps(frame.to_dicts()))
 
         manifest_path = target / "manifest.json"
         watermark = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")

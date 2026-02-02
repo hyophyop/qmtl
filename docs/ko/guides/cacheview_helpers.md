@@ -6,6 +6,7 @@
 
 ```python
 from qmtl.runtime.sdk import CacheView
+import polars as pl
 
 def compute(view: CacheView):
     price_win = view.window("prices", 60, count=50)
@@ -13,7 +14,7 @@ def compute(view: CacheView):
 
     frame = price_win.as_frame()  # ts, close, volume 컬럼을 포함
     closes = price_win.to_series("close")
-    returns = closes.pct_change().dropna()
+    returns = closes.pct_change().drop_nulls()
 ```
 
 - `window(node, interval, count=N)` 은 최근 N개만 슬라이스합니다. `count=None`이면 전체 창을 사용합니다.
@@ -24,22 +25,32 @@ def compute(view: CacheView):
 
 ```python
 def compute(view: CacheView):
-    asset = view.window("asset_prices", 60, count=120).to_series("close")
-    bench = view.window("benchmark", 60, count=120).to_series("close")
-
-    aligned = (
-        pd.concat({"asset": asset, "bench": bench}, axis=1)
-        .dropna()
-        .pct_change()
-        .dropna()
+    asset = (
+        view.window("asset_prices", 60, count=120)
+        .as_frame()
+        .select(["ts", "close"])
+        .rename({"close": "asset"})
     )
-    cov = aligned.cov().loc["asset", "bench"]
-    var = aligned["bench"].var()
+    bench = (
+        view.window("benchmark", 60, count=120)
+        .as_frame()
+        .select(["ts", "close"])
+        .rename({"close": "bench"})
+    )
+
+    aligned = asset.join(bench, on="ts", how="inner").drop_nulls()
+    returns = aligned.select(
+        pl.col("asset").pct_change().alias("asset_ret"),
+        pl.col("bench").pct_change().alias("bench_ret"),
+    ).drop_nulls()
+
+    cov = returns.select(pl.cov("asset_ret", "bench_ret")).item()
+    var = returns.get_column("bench_ret").var()
     beta = cov / var if var else None
     return {"beta": beta}
 ```
 
-- 시계열 인덱스는 자동으로 `ts`(기본) 기반으로 맞춰집니다.
+- `ts` 컬럼을 기준으로 조인해서 정렬합니다.
 - 필요한 경우 `to_series(..., dropna=False)` 로 정렬 전 빈 구간을 남겨둘 수 있습니다.
 
 ## 스칼라·빈 창 처리

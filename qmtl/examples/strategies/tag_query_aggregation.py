@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import cast
 
-import pandas as pd
+import polars as pl
 
 from qmtl.runtime.io import QuestDBRecorder
 from qmtl.runtime.sdk import Runner, Strategy
@@ -24,15 +24,15 @@ class TagQueryAggregationStrategy(Strategy):
         )
         # Runner takes care of queue resolution and subscriptions via TagQueryManager
 
-        def calc_corr(view) -> pd.DataFrame:
+        def calc_corr(view) -> pl.DataFrame:
             aligned = view.align_frames([(node_id, 3600) for node_id in view], window=24)
             frames = [
-                cast(pd.DataFrame, frame.frame) for frame in aligned if not frame.frame.empty
+                cast(pl.DataFrame, frame.frame) for frame in aligned if not frame.frame.is_empty()
             ]
             if not frames:
-                return pd.DataFrame()
-            df = pd.concat(frames, axis=1)
-            return df.corr(method="pearson")
+                return pl.DataFrame()
+            df = pl.concat(frames, how="horizontal")
+            return df.corr()
 
         corr_node = Node(
             input=indicators,

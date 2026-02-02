@@ -21,7 +21,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from importlib import resources
 import inspect
-import pandas as pd
+import polars as pl
 from enum import Enum
 import asyncio
 import logging
@@ -362,7 +362,7 @@ class SeamlessFetchMetadata:
 
 @dataclass(slots=True)
 class SeamlessFetchResult:
-    frame: pd.DataFrame
+    frame: pl.DataFrame
     metadata: SeamlessFetchMetadata
 
     def __getattr__(self, item: str) -> Any:
@@ -495,7 +495,7 @@ class DataSource(Protocol):
     
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Fetch data for the given range."""
         ...
     
@@ -518,7 +518,7 @@ class AutoBackfiller(Protocol):
     async def backfill(
         self, start: int, end: int, *, node_id: str, interval: int,
         target_storage: Optional[DataSource] = None
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Backfill data and optionally store in target storage."""
         ...
     
@@ -526,7 +526,7 @@ class AutoBackfiller(Protocol):
         self, start: int, end: int, *, node_id: str, interval: int,
         target_storage: Optional[DataSource] = None,
         progress_callback: Optional[Callable[[float], None]] = None
-    ) -> AsyncIterator[pd.DataFrame]:
+    ) -> AsyncIterator[pl.DataFrame]:
         """Backfill data asynchronously with progress updates."""
         ...
 
@@ -542,7 +542,7 @@ class LiveDataFeed(Protocol):
     
     async def subscribe(
         self, *, node_id: str, interval: int
-    ) -> AsyncIterator[tuple[int, pd.DataFrame]]:
+    ) -> AsyncIterator[tuple[int, pl.DataFrame]]:
         """Subscribe to live data stream."""
         ...
 
@@ -925,11 +925,11 @@ class SeamlessDataProvider(HistoryProvider):
     ) -> None:
         if self._cache is None:
             return
-        stored_frame = response.frame.copy(deep=True)
+        stored_frame = response.frame.clone()
         stored_metadata = replace(response.metadata)
         self._sync_metadata_attrs(stored_frame, stored_metadata)
         stored_result = SeamlessFetchResult(stored_frame, stored_metadata)
-        resident_bytes = int(stored_frame.memory_usage(deep=True).sum()) if not stored_frame.empty else 0
+        resident_bytes = int(stored_frame.estimated_size()) if not stored_frame.is_empty() else 0
         entry = _CacheEntry(
             result=stored_result,
             report=self._last_conformance_report,
@@ -939,7 +939,7 @@ class SeamlessDataProvider(HistoryProvider):
         self._cache_store(key, entry)
 
     def _materialize_cached_result(self, entry: _CacheEntry) -> SeamlessFetchResult:
-        frame_copy = entry.result.frame.copy(deep=True)
+        frame_copy = entry.result.frame.clone()
         metadata_copy = replace(entry.result.metadata)
         metadata_copy.downgraded = False
         metadata_copy.downgrade_mode = None
@@ -1030,7 +1030,7 @@ class SeamlessDataProvider(HistoryProvider):
         target_storage: DataSource | None,
         sla_tracker: "_SLATracker | None",
         collect_results: bool,
-    ) -> list[pd.DataFrame]:
+    ) -> list[pl.DataFrame]:
         if not chunks:
             return []
         if self.backfiller is None:
@@ -1048,7 +1048,7 @@ class SeamlessDataProvider(HistoryProvider):
         jitter_enabled = base_delay > 0 and jitter_ratio > 0
         max_attempts = max(1, int(self._backfill_config.max_attempts))
 
-        results: dict[int, pd.DataFrame] | None = {} if collect_results else None
+        results: dict[int, pl.DataFrame] | None = {} if collect_results else None
 
         def _prepare_backfill_kwargs(attempt: int, batch_id: str) -> dict[str, Any]:
             """Prepare kwargs for backfiller.backfill respecting its signature.
@@ -1140,7 +1140,7 @@ class SeamlessDataProvider(HistoryProvider):
 
         if not collect_results or results is None:
             return []
-        return [results.get(i, pd.DataFrame()) for i in range(len(chunks))]
+        return [results.get(i, pl.DataFrame()) for i in range(len(chunks))]
 
     async def _execute_backfill_range(
         self,
@@ -1152,7 +1152,7 @@ class SeamlessDataProvider(HistoryProvider):
         target_storage: DataSource | None,
         sla_tracker: "_SLATracker | None" = None,
         collect_results: bool = False,
-    ) -> list[pd.DataFrame]:
+    ) -> list[pl.DataFrame]:
         if not self.backfiller:
             return []
         chunks = self._chunk_backfill_ranges(start, end, interval)
@@ -1695,7 +1695,7 @@ class SeamlessDataProvider(HistoryProvider):
         interval: int,
         tracker: "_SLATracker | None",
         context: _RequestContext,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         if self.strategy == DataAvailabilityStrategy.FAIL_FAST:
             return await self._fetch_fail_fast(
                 start,
@@ -1787,7 +1787,7 @@ class SeamlessDataProvider(HistoryProvider):
         interval: int,
         sla_tracker: "_SLATracker | None" = None,
         request_context: _RequestContext | None = None,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Implement seamless fetching strategy."""
         self._last_conformance_report = None
         planner = _SeamlessFetchPlanner(
@@ -1808,14 +1808,16 @@ class SeamlessDataProvider(HistoryProvider):
         interval: int,
         sla_tracker: "_SLATracker | None" = None,
         request_context: _RequestContext | None = None,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Fail fast strategy - only use existing data."""
         for source in self._get_ordered_sources():
             try:
                 available = await source.is_available(
                     start, end, node_id=node_id, interval=interval
                 )
-                if available:
+                if available or (
+                    self._partial_ok and source.priority == DataSourcePriority.STORAGE
+                ):
                     fetch_coro = source.fetch(start, end, node_id=node_id, interval=interval)
                     if sla_tracker and source.priority == DataSourcePriority.STORAGE:
                         return await sla_tracker.observe_async(
@@ -1828,7 +1830,9 @@ class SeamlessDataProvider(HistoryProvider):
                 if isinstance(exc, SeamlessSLAExceeded):
                     raise
                 continue
-        
+        if self._partial_ok:
+            return pl.DataFrame()
+
         raise RuntimeError(f"No data available for range [{start}, {end}] in fail-fast mode")
     
     async def _fetch_auto_backfill(
@@ -1840,7 +1844,7 @@ class SeamlessDataProvider(HistoryProvider):
         interval: int,
         sla_tracker: "_SLATracker | None" = None,
         request_context: _RequestContext | None = None,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Auto-backfill strategy - ensure data is backfilled before returning."""
         await self.ensure_data_available(
             start,
@@ -1868,7 +1872,7 @@ class SeamlessDataProvider(HistoryProvider):
         interval: int,
         sla_tracker: "_SLATracker | None" = None,
         request_context: _RequestContext | None = None,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Partial fill strategy - return what's available, backfill in background."""
         # Start background backfill but don't wait
         if self.backfiller:
@@ -1893,7 +1897,7 @@ class SeamlessDataProvider(HistoryProvider):
     # ------------------------------------------------------------------
     async def _finalize_response(
         self,
-        frame: pd.DataFrame,
+        frame: pl.DataFrame,
         *,
         start: int,
         end: int,
@@ -1909,7 +1913,7 @@ class SeamlessDataProvider(HistoryProvider):
             requested_as_of,
         ) = self._extract_request_details(request_context)
 
-        if frame.empty:
+        if frame.is_empty():
             self._last_conformance_report = None
             return self._build_empty_result(
                 frame,
@@ -1934,7 +1938,7 @@ class SeamlessDataProvider(HistoryProvider):
         self._register_conformance_schema(node_id)
 
         stabilized = self._stabilize_frame(normalized)
-        if stabilized.empty:
+        if stabilized.is_empty():
             return self._build_empty_result(
                 stabilized,
                 node_id=node_id,
@@ -1970,7 +1974,7 @@ class SeamlessDataProvider(HistoryProvider):
             node_id=node_id,
             interval=int(interval),
             requested_range=(int(start), int(end)),
-            rows=int(len(stabilized)),
+            rows=int(stabilized.height),
             coverage_bounds=publication_ctx.coverage_bounds,
             conformance_flags=dict(report.flags_counts),
             conformance_warnings=report.warnings,
@@ -2004,7 +2008,7 @@ class SeamlessDataProvider(HistoryProvider):
 
     def _build_empty_result(
         self,
-        frame: pd.DataFrame,
+        frame: pl.DataFrame,
         *,
         node_id: str,
         interval: int,
@@ -2038,10 +2042,10 @@ class SeamlessDataProvider(HistoryProvider):
         return SeamlessFetchResult(frame, metadata)
 
     def _normalize_with_conformance(
-        self, frame: pd.DataFrame, interval: int
-    ) -> tuple[pd.DataFrame, ConformanceReport]:
+        self, frame: pl.DataFrame, interval: int
+    ) -> tuple[pl.DataFrame, ConformanceReport]:
         if not self._conformance:
-            return frame.copy(), ConformanceReport()
+            return frame.clone(), ConformanceReport()
         try:
             interval_override = self._conformance_interval or interval
             normalized, report = self._conformance.normalize(
@@ -2053,7 +2057,7 @@ class SeamlessDataProvider(HistoryProvider):
         except ConformancePipelineError:
             raise
         except Exception:  # pragma: no cover - defensive guard
-            return frame.copy(), ConformanceReport()
+            return frame.clone(), ConformanceReport()
 
     def _record_conformance_metrics(
         self, report: ConformanceReport, *, node_id: str, interval: int
@@ -2100,7 +2104,7 @@ class SeamlessDataProvider(HistoryProvider):
 
     def _compute_initial_fingerprints(
         self,
-        stabilized: pd.DataFrame,
+        stabilized: pl.DataFrame,
         *,
         canonical_metadata: Mapping[str, Any],
     ) -> tuple[str | None, str | None]:
@@ -2126,7 +2130,7 @@ class SeamlessDataProvider(HistoryProvider):
     def _build_publish_call(
         self,
         *,
-        stabilized: pd.DataFrame,
+        stabilized: pl.DataFrame,
         report: ConformanceReport,
         start: int,
         end: int,
@@ -2205,7 +2209,7 @@ class SeamlessDataProvider(HistoryProvider):
 
     async def _handle_artifact_publication(
         self,
-        stabilized: pd.DataFrame,
+        stabilized: pl.DataFrame,
         report: ConformanceReport,
         *,
         start: int,
@@ -2223,7 +2227,7 @@ class SeamlessDataProvider(HistoryProvider):
         manifest_uri: str | None = None
         publication: ArtifactPublication | None = None
         approx_bytes = (
-            int(stabilized.memory_usage(deep=True).sum()) if not stabilized.empty else 0
+            int(stabilized.estimated_size()) if not stabilized.is_empty() else 0
         )
 
         if self._registrar:
@@ -2284,7 +2288,7 @@ class SeamlessDataProvider(HistoryProvider):
     def _normalize_publication(
         self,
         publication: ArtifactPublication,
-        stabilized: pd.DataFrame,
+        stabilized: pl.DataFrame,
         coverage_bounds: tuple[int, int] | None,
         canonical_metadata: Mapping[str, Any],
         fingerprint: str | None,
@@ -2328,7 +2332,7 @@ class SeamlessDataProvider(HistoryProvider):
         self,
         publication: ArtifactPublication,
         pub_fingerprint: str,
-        stabilized: pd.DataFrame,
+        stabilized: pl.DataFrame,
         canonical_metadata: Mapping[str, Any],
         fingerprint: str | None,
         preview_fingerprint: str | None,
@@ -2359,7 +2363,7 @@ class SeamlessDataProvider(HistoryProvider):
         self,
         *,
         pub_fingerprint: str,
-        stabilized: pd.DataFrame,
+        stabilized: pl.DataFrame,
         canonical_metadata: Mapping[str, Any],
         fingerprint: str | None,
     ) -> tuple[str, str | None, str | None]:
@@ -2452,33 +2456,11 @@ class SeamlessDataProvider(HistoryProvider):
         )
 
     def _sync_metadata_attrs(
-        self, frame: pd.DataFrame, metadata: SeamlessFetchMetadata
+        self, frame: pl.DataFrame, metadata: SeamlessFetchMetadata
     ) -> None:
-        attrs = dict(frame.attrs)
-        attrs.update(
-            {
-                "dataset_fingerprint": metadata.dataset_fingerprint,
-                "as_of": metadata.as_of,
-                "coverage_bounds": metadata.coverage_bounds,
-                "conformance_flags": metadata.conformance_flags,
-                "conformance_warnings": metadata.conformance_warnings,
-                "conformance_version": metadata.conformance_version,
-                "manifest_uri": metadata.manifest_uri,
-                "requested_range": metadata.requested_range,
-                "rows": metadata.rows,
-                "downgraded": metadata.downgraded,
-                "downgrade_mode": metadata.downgrade_mode,
-                "downgrade_reason": metadata.downgrade_reason,
-                "sla_violation": metadata.sla_violation,
-                "coverage_ratio": metadata.coverage_ratio,
-                "staleness_ms": metadata.staleness_ms,
-                "world_id": metadata.world_id,
-                "execution_domain": metadata.execution_domain,
-                "requested_as_of": metadata.requested_as_of,
-                "cache_key": metadata.cache_key,
-            }
-        )
-        frame.attrs = attrs
+        # Polars DataFrame does not support .attrs; metadata is carried on
+        # SeamlessFetchResult.metadata instead.
+        return
 
     def _compute_coverage_ratio(
         self, metadata: SeamlessFetchMetadata
@@ -2636,27 +2618,26 @@ class SeamlessDataProvider(HistoryProvider):
                 reason=reason,
             )
 
-    def _stabilize_frame(self, frame: pd.DataFrame) -> pd.DataFrame:
-        if frame.empty:
+    def _stabilize_frame(self, frame: pl.DataFrame) -> pl.DataFrame:
+        if frame.is_empty():
             return frame
         if self._stabilization_bars <= 0:
-            return frame.reset_index(drop=True)
-        if len(frame) <= self._stabilization_bars:
-            return frame.iloc[0:0].copy()
-        stabilized = frame.iloc[:-self._stabilization_bars].copy()
-        stabilized.reset_index(drop=True, inplace=True)
-        return stabilized
+            return frame
+        if frame.height <= self._stabilization_bars:
+            return frame.head(0)
+        return frame.head(frame.height - self._stabilization_bars)
 
-    def _coverage_bounds(self, frame: pd.DataFrame) -> tuple[int, int] | None:
-        if frame.empty or "ts" not in frame.columns:
+    def _coverage_bounds(self, frame: pl.DataFrame) -> tuple[int, int] | None:
+        if frame.is_empty() or "ts" not in frame.columns:
             return None
-        start = int(frame["ts"].iloc[0])
-        end = int(frame["ts"].iloc[-1])
+        ts = frame.get_column("ts")
+        start = int(ts[0])
+        end = int(ts[-1])
         return (start, end)
 
     def _compute_fingerprint_value(
         self,
-        frame: pd.DataFrame,
+        frame: pl.DataFrame,
         *,
         canonical_metadata: Mapping[str, Any],
         mode: str,
@@ -3346,8 +3327,8 @@ class _SeamlessFetchPlanner:
         self._tracker = tracker
         self._context = request_context
 
-    async def fetch(self, start: int, end: int) -> pd.DataFrame:
-        result_frames: list[pd.DataFrame] = []
+    async def fetch(self, start: int, end: int) -> pl.DataFrame:
+        result_frames: list[pl.DataFrame] = []
         remaining_ranges: list[tuple[int, int]] = [(start, end)]
         for source in self._provider._get_ordered_sources():
             if not remaining_ranges:
@@ -3359,17 +3340,17 @@ class _SeamlessFetchPlanner:
             backfilled = await self._backfill_remaining(remaining_ranges)
             result_frames.extend(backfilled)
         if result_frames:
-            combined = pd.concat(result_frames, ignore_index=True)
+            combined = pl.concat(result_frames, how="vertical")
             if "ts" in combined.columns:
-                combined = combined.sort_values("ts").reset_index(drop=True)
+                combined = combined.sort("ts")
             return combined
-        return pd.DataFrame()
+        return pl.DataFrame()
 
     async def _consume_source(
         self,
         source: DataSource,
         ranges: list[tuple[int, int]],
-        result_frames: list[pd.DataFrame],
+        result_frames: list[pl.DataFrame],
     ) -> list[tuple[int, int]]:
         new_remaining: list[tuple[int, int]] = []
         for range_start, range_end in ranges:
@@ -3411,8 +3392,8 @@ class _SeamlessFetchPlanner:
         self,
         source: DataSource,
         available_ranges: list[tuple[int, int]],
-    ) -> list[pd.DataFrame]:
-        frames: list[pd.DataFrame] = []
+    ) -> list[pl.DataFrame]:
+        frames: list[pl.DataFrame] = []
         for avail_start, avail_end in available_ranges:
             fetch_coro = source.fetch(
                 avail_start,
@@ -3428,14 +3409,14 @@ class _SeamlessFetchPlanner:
                 )
             else:
                 frame = await fetch_coro
-            if not frame.empty:
+            if not frame.is_empty():
                 frames.append(frame)
         return frames
 
     async def _backfill_remaining(
         self, remaining_ranges: list[tuple[int, int]]
-    ) -> list[pd.DataFrame]:
-        result: list[pd.DataFrame] = []
+    ) -> list[pl.DataFrame]:
+        result: list[pl.DataFrame] = []
         for range_start, range_end in remaining_ranges:
             try:
                 frames = await self._provider._execute_backfill_range(
@@ -3451,9 +3432,9 @@ class _SeamlessFetchPlanner:
                 if isinstance(exc, SeamlessSLAExceeded):
                     raise
                 continue
-            non_empty = [frame for frame in frames if not frame.empty]
+            non_empty = [frame for frame in frames if not frame.is_empty()]
             if non_empty:
-                result.append(pd.concat(non_empty, ignore_index=True))
+                result.append(pl.concat(non_empty, how="vertical"))
         return result
 
 

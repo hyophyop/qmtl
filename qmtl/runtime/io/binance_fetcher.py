@@ -6,7 +6,7 @@ import asyncio
 import atexit
 
 import httpx
-import pandas as pd
+import polars as pl
 
 from qmtl.runtime.sdk.data_io import DataFetcher
 
@@ -92,7 +92,7 @@ class BinanceFetcher(DataFetcher):
 
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: str
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         global _CLIENT
         params = {
             "symbol": self.symbol or node_id,
@@ -113,31 +113,27 @@ class BinanceFetcher(DataFetcher):
             resp = await client.get(self.base_url, params=params, timeout=10.0)
         resp.raise_for_status()
         data = resp.json()
-        frame = pd.DataFrame(
-            data,
-            columns=[
-                "open_time",
-                "open",
-                "high",
-                "low",
-                "close",
-                "volume",
-                "close_time",
-                "quote_asset_volume",
-                "number_of_trades",
-                "taker_buy_base",
-                "taker_buy_quote",
-                "ignore",
-            ],
+        columns = [
+            "open_time",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "close_time",
+            "quote_asset_volume",
+            "number_of_trades",
+            "taker_buy_base",
+            "taker_buy_quote",
+            "ignore",
+        ]
+        frame = pl.DataFrame(data, schema=columns, orient="row")
+        frame = frame.with_columns(
+            pl.col("open").cast(pl.Float64),
+            pl.col("high").cast(pl.Float64),
+            pl.col("low").cast(pl.Float64),
+            pl.col("close").cast(pl.Float64),
+            pl.col("volume").cast(pl.Float64),
+            (pl.col("close_time").cast(pl.Int64) // 1000).alias("ts"),
         )
-        frame = frame.astype(
-            {
-                "open": float,
-                "high": float,
-                "low": float,
-                "close": float,
-                "volume": float,
-            }
-        )
-        frame["ts"] = frame["close_time"].astype(int) // 1000
-        return frame[["ts", "open", "high", "low", "close", "volume"]]
+        return frame.select(["ts", "open", "high", "low", "close", "volume"])

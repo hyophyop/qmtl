@@ -7,7 +7,7 @@ import time
 from collections.abc import Awaitable, Callable, Iterable, MutableMapping
 from typing import Any, TYPE_CHECKING, NamedTuple
 
-import pandas as pd
+import polars as pl
 
 from .data_io import AutoBackfillRequest, DataFetcher, HistoryBackend
 from .history_coverage import CoverageRange, WarmupWindow, compute_missing_ranges
@@ -98,10 +98,10 @@ class AutoBackfillStrategy(ABC):
 
     # ------------------------------------------------------------------
     @staticmethod
-    def _ranges_from_dataframe(df: pd.DataFrame, interval: int) -> list[tuple[int, int]]:
-        if "ts" not in df.columns or df.empty:
+    def _ranges_from_dataframe(df: pl.DataFrame, interval: int) -> list[tuple[int, int]]:
+        if "ts" not in df.columns or df.is_empty():
             return []
-        timestamps = sorted(int(ts) for ts in df["ts"].tolist())
+        timestamps = sorted(int(ts) for ts in df.get_column("ts").to_list())
         if not timestamps:
             return []
         ranges: list[tuple[int, int]] = []
@@ -118,32 +118,31 @@ class AutoBackfillStrategy(ABC):
     # ------------------------------------------------------------------
     @staticmethod
     def _drop_existing(
-        frame: pd.DataFrame,
-        existing: pd.DataFrame | None,
-    ) -> tuple[pd.DataFrame, bool]:
-        if existing is None or existing.empty or "ts" not in existing.columns:
+        frame: pl.DataFrame,
+        existing: pl.DataFrame | None,
+    ) -> tuple[pl.DataFrame, bool]:
+        if existing is None or existing.is_empty() or "ts" not in existing.columns:
             return frame, False
-        existing_ts = {int(ts) for ts in existing["ts"].tolist()}
+        existing_ts = {int(ts) for ts in existing.get_column("ts").to_list()}
         if not existing_ts:
             return frame, False
-        before = len(frame)
-        filtered = frame[~frame["ts"].isin(existing_ts)]
-        return filtered, len(filtered) != before
+        before = frame.height
+        filtered = frame.filter(~pl.col("ts").is_in(list(existing_ts)))
+        return filtered, filtered.height != before
 
     # ------------------------------------------------------------------
     @staticmethod
     def _normalize_frame(
-        frame: pd.DataFrame | None, start: int, end: int
-    ) -> pd.DataFrame:
-        if frame is None or frame.empty:
-            return pd.DataFrame()
+        frame: pl.DataFrame | None, start: int, end: int
+    ) -> pl.DataFrame:
+        if frame is None or frame.is_empty():
+            return pl.DataFrame()
         if "ts" not in frame.columns:
             raise KeyError("DataFetcher returned frame without 'ts' column")
-        df = frame.copy()
-        df["ts"] = df["ts"].astype(int)
-        df = df.sort_values("ts")
-        df = df[(df["ts"] >= start) & (df["ts"] <= end)]
-        return df
+        df = frame.clone()
+        df = df.with_columns(pl.col("ts").cast(pl.Int64, strict=False))
+        df = df.sort("ts")
+        return df.filter((pl.col("ts") >= start) & (pl.col("ts") <= end))
 
 
 class FetcherBackfillStrategy(AutoBackfillStrategy):
@@ -190,7 +189,7 @@ class FetcherBackfillStrategy(AutoBackfillStrategy):
                 interval=request.interval,
             )
             normalized = self._normalize_frame(frame, gap.start, gap.end)
-            if normalized.empty:
+            if normalized.is_empty():
                 continue
 
             existing = await backend.read_range(
@@ -201,13 +200,13 @@ class FetcherBackfillStrategy(AutoBackfillStrategy):
             )
             normalized, refreshed = self._drop_existing(normalized, existing)
             refresh_post_write = refresh_post_write or refreshed
-            if normalized.empty:
+            if normalized.is_empty():
                 continue
 
             await backend.write_rows(
                 normalized, node_id=request.node_id, interval=request.interval
             )
-            rows_written += len(normalized)
+            rows_written += normalized.height
             updated = self._merge_ranges(
                 updated,
                 self._ranges_from_dataframe(normalized, request.interval),
@@ -240,7 +239,7 @@ class LiveReplayBackfillStrategy(AutoBackfillStrategy):
         *,
         event_service: EventRecorderService | None = None,
         replay_source: ReplaySource | None = None,
-        normalizer: Callable[[Iterable[ReplayEvent]], pd.DataFrame] | None = None,
+        normalizer: Callable[[Iterable[ReplayEvent]], pl.DataFrame] | None = None,
     ) -> None:
         if event_service is None and replay_source is None:
             raise ValueError(
@@ -325,7 +324,7 @@ class LiveReplayBackfillStrategy(AutoBackfillStrategy):
             gap.start, gap.end, request.node_id, request.interval
         )
         frame = self._normalize_frame(self._normalizer(events), gap.start, gap.end)
-        if frame is None or frame.empty:
+        if frame is None or frame.is_empty():
             return _GapResult(ranges=[], rows_written=0, refresh=False)
 
         existing = await backend.read_range(
@@ -335,14 +334,14 @@ class LiveReplayBackfillStrategy(AutoBackfillStrategy):
             interval=request.interval,
         )
         frame, refreshed = self._drop_existing(frame, existing)
-        if frame.empty:
+        if frame.is_empty():
             return _GapResult(ranges=[], rows_written=0, refresh=refreshed)
 
         await backend.write_rows(
             frame, node_id=request.node_id, interval=request.interval
         )
         ranges = self._ranges_from_dataframe(frame, request.interval)
-        return _GapResult(ranges=ranges, rows_written=len(frame), refresh=refreshed)
+        return _GapResult(ranges=ranges, rows_written=frame.height, refresh=refreshed)
 
     # ------------------------------------------------------------------
     async def _collect_events(
@@ -377,10 +376,10 @@ class LiveReplayBackfillStrategy(AutoBackfillStrategy):
         read_fn = getattr(recorder, "read_range", None)
         if callable(read_fn):
             result = await read_fn(start, end, node_id=node_id, interval=interval)
-            if isinstance(result, pd.DataFrame):
+            if isinstance(result, pl.DataFrame):
                 return [
-                    (int(row["ts"]), {k: row[k] for k in row.index if k != "ts"})
-                    for _, row in result.iterrows()
+                    (int(row["ts"]), {k: row[k] for k in row.keys() if k != "ts"})
+                    for row in result.iter_rows(named=True)
                 ]
             return list(result)
         return []
@@ -397,23 +396,26 @@ class LiveReplayBackfillStrategy(AutoBackfillStrategy):
 
     # ------------------------------------------------------------------
     @staticmethod
-    def _default_normalizer(events: Iterable[ReplayEvent]) -> pd.DataFrame:
+    def _default_normalizer(events: Iterable[ReplayEvent]) -> pl.DataFrame:
         records = []
         for ts, payload in events:
             record: dict[str, Any] = {"ts": int(ts)}
-            if isinstance(payload, pd.Series):
-                record.update({str(key): value for key, value in payload.to_dict().items()})
-            elif isinstance(payload, pd.DataFrame):
+            if isinstance(payload, pl.Series):
+                if payload.name:
+                    values = payload.to_list()
+                    record[payload.name] = values[0] if len(values) == 1 else values
+                else:
+                    record["value"] = payload.to_list()
+            elif isinstance(payload, pl.DataFrame):
                 # Flatten DataFrame by taking first row per event
-                if not payload.empty:
-                    first = payload.iloc[0].to_dict()
-                    record.update({str(key): value for key, value in first.items()})
+                if not payload.is_empty():
+                    record.update({str(key): value for key, value in payload.row(0, named=True).items()})
             elif isinstance(payload, dict):
                 record.update({str(key): value for key, value in payload.items()})
             else:
                 record["value"] = payload
             records.append(record)
-        return pd.DataFrame(records)
+        return pl.DataFrame(records)
 
 
 __all__ = [

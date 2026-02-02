@@ -1,4 +1,4 @@
-import pandas as pd
+import polars as pl
 import pytest
 
 from qmtl.runtime.sdk.history_provider_facade import AugmentedHistoryProvider
@@ -12,7 +12,7 @@ class InMemoryBackend:
 
     async def read_range(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         table = self._rows.get((node_id, interval), {})
         data = []
         for ts in sorted(table):
@@ -20,15 +20,15 @@ class InMemoryBackend:
                 row = {"ts": ts}
                 row.update(table[ts])
                 data.append(row)
-        return pd.DataFrame(data)
+        return pl.DataFrame(data)
 
     async def write_rows(
-        self, rows: pd.DataFrame, *, node_id: str, interval: int
+        self, rows: pl.DataFrame, *, node_id: str, interval: int
     ) -> None:
-        if rows.empty:
+        if rows.is_empty():
             return
         table = self._rows.setdefault((node_id, interval), {})
-        for record in rows.to_dict("records"):
+        for record in rows.to_dicts():
             ts = int(record["ts"])
             if ts in table:
                 raise RuntimeError(f"duplicate write for ts={ts}")
@@ -59,7 +59,7 @@ class RecordingFetcher:
 
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         self.requests.append((start, end, node_id, interval))
         table = self._rows.get((node_id, interval), {})
         data = []
@@ -68,7 +68,7 @@ class RecordingFetcher:
                 row = {"ts": ts}
                 row.update(payload)
                 data.append(row)
-        return pd.DataFrame(data)
+        return pl.DataFrame(data)
 
 
 class ConcurrentFetcher:
@@ -79,8 +79,8 @@ class ConcurrentFetcher:
 
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
-        df = pd.DataFrame([{"ts": start, "value": 42}])
+    ) -> pl.DataFrame:
+        df = pl.DataFrame([{"ts": start, "value": 42}])
         await self.backend.write_rows(df, node_id=node_id, interval=interval)
         return df
 
@@ -93,12 +93,12 @@ async def test_fill_missing_refreshes_cached_coverage() -> None:
     provider = AugmentedHistoryProvider(backend, fetcher=fetcher)
 
     await backend.write_rows(
-        pd.DataFrame([{"ts": 60, "value": 1}]), node_id="node", interval=60
+        pl.DataFrame([{"ts": 60, "value": 1}]), node_id="node", interval=60
     )
     await provider.coverage(node_id="node", interval=60)
 
     await backend.write_rows(
-        pd.DataFrame([{"ts": 120, "value": 2}]), node_id="node", interval=60
+        pl.DataFrame([{"ts": 120, "value": 2}]), node_id="node", interval=60
     )
 
     await provider.fill_missing(60, 120, node_id="node", interval=60)
@@ -116,6 +116,6 @@ async def test_fill_missing_skips_rows_inserted_during_fetch() -> None:
     await provider.fill_missing(0, 0, node_id="node", interval=60)
 
     data = await backend.read_range(0, 60, node_id="node", interval=60)
-    assert list(data["ts"]) == [0]
+    assert data.get_column("ts").to_list() == [0]
     coverage = await provider.coverage(node_id="node", interval=60)
     assert coverage == [(0, 0)]

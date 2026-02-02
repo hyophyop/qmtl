@@ -274,7 +274,7 @@ config:
 | Layer      | Requires | Optional dependencies                  |
 |------------|----------|----------------------------------------|
 | Data       | None     | QuestDB, Redis for caching             |
-| Signal     | Data     | NumPy, pandas, indicator libraries     |
+| Signal     | Data     | NumPy, polars, indicator libraries     |
 | Execution  | Signal   | Risk engine, order throttling service  |
 | Brokerage  | Execution| Exchange SDKs (CCXT, IBKR), secrets    |
 | Monitoring | None     | Prometheus, Grafana, logging sink      |

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import pandas as pd
+import polars as pl
 
 from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import Node, StreamInput
@@ -24,9 +24,10 @@ class BackfillHistoryStrategy(Strategy):
             history_provider=loader,
         )
 
-        def pct_change(view) -> pd.DataFrame:
-            df = pd.DataFrame([v for _, v in view[self.price][60]])
-            return pd.DataFrame({"ret": df["close"].pct_change()})
+        def pct_change(view) -> pl.DataFrame:
+            df = pl.DataFrame([v for _, v in view[self.price][60]])
+            ret = df.get_column("close").pct_change()
+            return pl.DataFrame({"ret": ret})
 
         ret_node = Node(input=self.price, compute_fn=pct_change, name="returns")
         self.add_nodes([self.price, ret_node])

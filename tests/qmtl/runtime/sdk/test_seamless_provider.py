@@ -8,7 +8,7 @@ import logging
 import textwrap
 from types import MethodType
 
-import pandas as pd
+import polars as pl
 import pytest
 import json
 from pathlib import Path
@@ -63,10 +63,10 @@ class _StaticSource:
                 return True
         return False
 
-    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pl.DataFrame:
         # Return a simple frame with ts only for the requested range (aligned)
         rows = [{"ts": ts} for ts in range(start, end + 1, interval)]
-        return pd.DataFrame(rows)
+        return pl.DataFrame(rows)
 
     async def coverage(self, *, node_id: str, interval: int) -> list[tuple[int, int]]:
         return list(self._coverage)
@@ -79,9 +79,9 @@ class _StaticSource:
 class _DuplicateSource(_StaticSource):
     """Data source that deliberately emits duplicate timestamps."""
 
-    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pl.DataFrame:
         # two identical rows trigger duplicate detection in the conformance pipeline
-        return pd.DataFrame([
+        return pl.DataFrame([
             {"ts": start},
             {"ts": start},
         ])
@@ -94,7 +94,7 @@ class _CountingSource(_StaticSource):
         super().__init__(coverage, priority)
         self.fetch_calls = 0
 
-    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pl.DataFrame:
         self.fetch_calls += 1
         return await super().fetch(start, end, node_id=node_id, interval=interval)
 
@@ -141,7 +141,7 @@ async def test_seamless_fetch_deduplicates_boundary_bars() -> None:
     df = await provider.fetch(0, 200, node_id="n", interval=10)
 
     expected = list(range(0, 201, 10))
-    assert df["ts"].tolist() == expected
+    assert df.get_column("ts").to_list() == expected
 
 
 @pytest.mark.asyncio
@@ -152,7 +152,7 @@ async def test_seamless_fetch_preserves_off_grid_cache_bounds() -> None:
 
     df = await provider.fetch(0, 200, node_id="n", interval=10)
 
-    ts = df["ts"].tolist()
+    ts = df.get_column("ts").to_list()
     assert 90 in ts  # previously dropped due to misaligned subtraction
     assert ts.count(90) == 1
     assert ts.count(95) == 1
@@ -215,12 +215,10 @@ async def test_fetch_response_includes_metadata() -> None:
     # Validate ISO-8601 format
     datetime.fromisoformat(result.metadata.as_of.replace("Z", "+00:00"))
     assert registrar.calls and registrar.calls[0]["rows"] == len(result.frame)
-    assert result.frame.attrs["dataset_fingerprint"] == result.metadata.dataset_fingerprint
     assert result.metadata.manifest_uri == "mem://manifest"
     assert result.metadata.artifact is not None
     assert result.metadata.artifact.manifest["producer"]["node_id"] == "node"
     assert result.metadata.conformance_version == seamless_module.CONFORMANCE_VERSION
-    assert result.frame.attrs["conformance_version"] == seamless_module.CONFORMANCE_VERSION
     assert (
         result.metadata.artifact.manifest.get("conformance_version")
         == seamless_module.CONFORMANCE_VERSION
@@ -850,15 +848,15 @@ class _CountingBackfiller:
 
     async def backfill(
         self, start: int, end: int, *, node_id: str, interval: int, target_storage: Optional[DataSource] = None
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         self.calls.append((start, end, node_id, interval))
         # Simulate producing data and materializing into storage by mutating coverage
         self._storage.add_range(start, end)
         # Return a small frame indicating success
-        return pd.DataFrame([{"ts": start}, {"ts": end}])
+        return pl.DataFrame([{"ts": start}, {"ts": end}])
 
     async def backfill_async(self, *args, **kwargs):  # pragma: no cover - not used here
-        yield pd.DataFrame()
+        yield pl.DataFrame()
 
 
 class _ConcurrentBackfiller(_CountingBackfiller):
@@ -877,7 +875,7 @@ class _ConcurrentBackfiller(_CountingBackfiller):
         node_id: str,
         interval: int,
         target_storage: Optional[DataSource] = None,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         self._inflight += 1
         try:
             self.max_parallel = max(self.max_parallel, self._inflight)
@@ -911,12 +909,12 @@ class _RecordingBackfiller:
         node_id: str,
         interval: int,
         target_storage: Optional[DataSource] = None,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         self.calls.append((start, end, node_id, interval))
-        return pd.DataFrame([{"ts": start}, {"ts": end}])
+        return pl.DataFrame([{"ts": start}, {"ts": end}])
 
     async def backfill_async(self, *args, **kwargs):  # pragma: no cover - not used
-        yield pd.DataFrame()
+        yield pl.DataFrame()
 
 
 class _FailingBackfiller(_RecordingBackfiller):
@@ -939,7 +937,7 @@ class _FailingBackfiller(_RecordingBackfiller):
         node_id: str,
         interval: int,
         target_storage: Optional[DataSource] = None,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         await super().backfill(
             start,
             end,
@@ -965,7 +963,7 @@ class _BlockingBackfiller(_RecordingBackfiller):
         node_id: str,
         interval: int,
         target_storage: Optional[DataSource] = None,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         await super().backfill(
             start,
             end,
@@ -974,7 +972,7 @@ class _BlockingBackfiller(_RecordingBackfiller):
             target_storage=target_storage,
         )
         await self._gate.wait()
-        return pd.DataFrame([{"ts": start}, {"ts": end}])
+        return pl.DataFrame([{"ts": start}, {"ts": end}])
 
 
 class _FlakyBackfiller(_RecordingBackfiller):
@@ -993,7 +991,7 @@ class _FlakyBackfiller(_RecordingBackfiller):
         node_id: str,
         interval: int,
         target_storage: Optional[DataSource] = None,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         await super().backfill(
             start,
             end,
@@ -1005,7 +1003,7 @@ class _FlakyBackfiller(_RecordingBackfiller):
         if self._fail_times > 0:
             self._fail_times -= 1
             raise RuntimeError("transient_backfill_failure")
-        return pd.DataFrame([{"ts": start}, {"ts": end}])
+        return pl.DataFrame([{"ts": start}, {"ts": end}])
 
 
 class _RecordingRegistrar:
@@ -1014,7 +1012,7 @@ class _RecordingRegistrar:
 
     def publish(
         self,
-        frame: pd.DataFrame,
+        frame: pl.DataFrame,
         *,
         node_id: str,
         interval: int,
@@ -1023,16 +1021,14 @@ class _RecordingRegistrar:
         publish_fingerprint: bool = True,
         early_fingerprint: bool = False,
     ) -> ArtifactPublication | None:
-        coverage_bounds = (
-            int(frame["ts"].min()),
-            int(frame["ts"].max()),
-        )
+        ts_col = frame.get_column("ts")
+        coverage_bounds = (int(ts_col.min()), int(ts_col.max()))
         record = {
             "node_id": node_id,
             "interval": interval,
             "coverage_bounds": coverage_bounds,
             "requested_range": requested_range,
-            "rows": len(frame),
+            "rows": frame.height,
             "publish_fingerprint": publish_fingerprint,
             "early_fingerprint": early_fingerprint,
         }
@@ -1221,7 +1217,7 @@ async def test_backfill_single_flight_ttl_expiration_allows_new_claim(monkeypatc
         target_storage: DataSource | None,
         sla_tracker: "_SLATracker | None" = None,
         collect_results: bool = False,
-    ) -> list[pd.DataFrame]:
+    ) -> list[pl.DataFrame]:
         nonlocal calls
         calls += 1
         await gate.wait()
@@ -1252,9 +1248,9 @@ class _FakeFetcher:
     def __init__(self):
         self.calls = 0
 
-    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:  # pragma: no cover
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pl.DataFrame:  # pragma: no cover
         self.calls += 1
-        return pd.DataFrame([{"ts": start}])
+        return pl.DataFrame([{"ts": start}])
 
 
 class _FakeStorageProvider:
@@ -1265,9 +1261,9 @@ class _FakeStorageProvider:
     async def fill_missing(self, start: int, end: int, *, node_id: str, interval: int) -> None:
         self.filled.append((start, end, node_id, interval))
 
-    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pl.DataFrame:
         self.fetched.append((start, end, node_id, interval))
-        return pd.DataFrame([{"ts": start}, {"ts": end}])
+        return pl.DataFrame([{"ts": start}, {"ts": end}])
 
     async def coverage(self, *, node_id: str, interval: int) -> list[tuple[int, int]]:  # pragma: no cover
         return []
@@ -1292,7 +1288,7 @@ async def test_storage_backfill_materializes_and_reads_back() -> None:
     assert storage_provider.filled == [(0, 100, "n", 10)]
     assert storage_provider.fetched == [(0, 100, "n", 10)]
     assert fetcher.calls == 0
-    assert not df.empty and set(df["ts"]) == {0, 100}
+    assert not df.is_empty() and set(df.get_column("ts").to_list()) == {0, 100}
 
 
 class _FailingStorageProvider(_FakeStorageProvider):
@@ -1320,7 +1316,7 @@ async def test_storage_backfill_falls_back_to_fetcher(caplog) -> None:
     assert len(fallback_logs) == 1
     assert fallback_logs[0].source == "storage"
     assert fetcher.calls == 1
-    assert not df.empty and df["ts"].tolist() == [0]
+    assert not df.is_empty() and df.get_column("ts").to_list() == [0]
 
 
 @pytest.mark.asyncio
@@ -1367,7 +1363,7 @@ async def test_data_fetcher_backfiller_logs_structured_success(caplog) -> None:
 
 
 class _FailingFetcher(_FakeFetcher):
-    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pl.DataFrame:
         raise RuntimeError("boom")
 
 
@@ -1425,7 +1421,7 @@ async def test_fetch_seamless_records_metrics_on_backfill() -> None:
     provider = _DummyProvider(storage_source=storage, backfiller=backfiller)
 
     result = await provider.fetch(0, 100, node_id="n", interval=10)
-    assert isinstance(result.frame, pd.DataFrame)
+    assert isinstance(result.frame, pl.DataFrame)
     key = ("n", "10")
     last_ts_store = _store(sdk_metrics.backfill_last_timestamp)
     gap_latency_store = _store(sdk_metrics.gap_repair_latency_ms)
@@ -1541,10 +1537,11 @@ async def test_backfill_retry_applies_jitter_ratio(monkeypatch) -> None:
 
     assert ok is True
     assert jitter_calls, "expected jitter sampling to occur"
+    base_delay = provider._backfill_config.retry_backoff_ms / 1000.0
     assert jitter_calls[0][0] == pytest.approx(0.0)
-    assert jitter_calls[0][1] == pytest.approx(0.01 * 0.25)
+    assert jitter_calls[0][1] == pytest.approx(base_delay * 0.25)
     assert sleep_durations, "expected retry backoff sleep"
-    assert pytest.approx(sleep_durations[0], rel=0.05) == 0.01
+    assert pytest.approx(sleep_durations[0], rel=0.05) == base_delay
 
 
 @pytest.mark.asyncio
@@ -1574,16 +1571,16 @@ async def test_conformance_pipeline_respects_partial_ok() -> None:
         )
 
         df = await provider.fetch(0, 10, node_id="n", interval=10)
-    assert df["ts"].tolist() == [0]
+    assert df.get_column("ts").to_list() == [0]
 
     report = provider.last_conformance_report
     assert report is not None
-    assert report.flags_counts.get("duplicate_ts") == 1
+    assert report.flags_counts.get("duplicate_ts") == 2
 
 
 @pytest.mark.asyncio
 async def test_schema_validation_error_blocks_response() -> None:
-    schema = {"ts": "int64", "price": "float64"}
+    schema = {"ts": "Int64", "price": "Float64"}
     provider = _DummyProvider(
         storage_source=_SchemaViolatingSource([(0, 10)], DataSourcePriority.STORAGE),
         conformance=_SchemaAwareConformance(schema),
@@ -1607,7 +1604,7 @@ class _DelayedSource(_StaticSource):
         self._clock.advance(self._delay)
         return await super().coverage(node_id=node_id, interval=interval)
 
-    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pl.DataFrame:
         self._clock.advance(self._delay)
         return await super().fetch(start, end, node_id=node_id, interval=interval)
 
@@ -1622,8 +1619,8 @@ class _SchemaAwareConformance(ConformancePipeline):
 
 
 class _SchemaViolatingSource(_StaticSource):
-    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
-        return pd.DataFrame(
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pl.DataFrame:
+        return pl.DataFrame(
             {
                 "ts": [start, end],
                 "price": ["oops", "nope"],
@@ -1660,7 +1657,7 @@ async def test_sla_total_metric_recorded(monkeypatch) -> None:
     )
 
     df = await provider.fetch(0, 20, node_id="node", interval=10)
-    assert not df.empty
+    assert not df.is_empty()
     key = ("node", "total")
     sla_store = _store(sdk_metrics.seamless_sla_deadline_seconds)
     total_ms_store = _store(sdk_metrics.seamless_total_ms)

@@ -20,7 +20,7 @@ from typing import Any, AsyncIterator, Iterable, Literal, Optional
 import logging
 import time
 
-import pandas as pd
+import polars as pl
 
 from qmtl.runtime.sdk.ohlcv_nodeid import parse as _parse_ohlcv_node_id
 from qmtl.runtime.sdk.seamless_data_provider import LiveDataFeed
@@ -99,7 +99,7 @@ class CcxtProLiveFeed(LiveDataFeed):
             return hasattr(ex, "watch_ohlcv")
         return hasattr(ex, "watch_trades")
 
-    async def subscribe(self, *, node_id: str, interval: int) -> AsyncIterator[tuple[int, pd.DataFrame]]:  # type: ignore[override]
+    async def subscribe(self, *, node_id: str, interval: int) -> AsyncIterator[tuple[int, pl.DataFrame]]:  # type: ignore[override]
         params = self._build_subscription_params(node_id=node_id, interval=interval)
         backoff = self._build_backoff_controller()
         self._subs[params.key] = True
@@ -116,7 +116,7 @@ class CcxtProLiveFeed(LiveDataFeed):
         timeframe: str,
         interval: int,
         key: str,
-    ) -> AsyncIterator[tuple[int, pd.DataFrame]]:
+    ) -> AsyncIterator[tuple[int, pl.DataFrame]]:
         interval_s = int(interval if interval > 0 else _tf_to_seconds(timeframe))
         # resolve method name once
         watch = getattr(exchange, "watch_ohlcv", None) or getattr(exchange, "watchOHLCV", None)
@@ -161,7 +161,7 @@ class CcxtProLiveFeed(LiveDataFeed):
         symbol: str,
         interval: int,
         key: str,
-    ) -> AsyncIterator[tuple[int, pd.DataFrame]]:
+    ) -> AsyncIterator[tuple[int, pl.DataFrame]]:
         watch = getattr(exchange, "watch_trades", None) or getattr(exchange, "watchTrades", None)
         if watch is None:
             raise RuntimeError("exchange does not support watch_trades/watchTrades")
@@ -217,7 +217,7 @@ class CcxtProLiveFeed(LiveDataFeed):
         *,
         params: _SubscriptionParams,
         backoff: _BackoffController,
-    ) -> AsyncIterator[tuple[int, pd.DataFrame]]:
+    ) -> AsyncIterator[tuple[int, pl.DataFrame]]:
         key = params.key
         while self._subs.get(key, False):
             try:
@@ -250,7 +250,7 @@ class CcxtProLiveFeed(LiveDataFeed):
         interval: int,
         mode: str,
         key: str,
-    ) -> AsyncIterator[tuple[int, pd.DataFrame]]:
+    ) -> AsyncIterator[tuple[int, pl.DataFrame]]:
         if mode == "ohlcv":
             effective_timeframe = timeframe or self.config.timeframe or "1m"
             async for ts, df in self._stream_ohlcv(
@@ -296,7 +296,7 @@ class CcxtProLiveFeed(LiveDataFeed):
         key: str,
         symbol: str | None,
         records: Iterable[dict[str, Any]],
-    ) -> tuple[int, pd.DataFrame] | None:
+    ) -> tuple[int, pl.DataFrame] | None:
         last_token = self._last_emitted_token.get(key)
         ready_records: list[dict[str, Any]] = []
         for raw in records:
@@ -311,14 +311,15 @@ class CcxtProLiveFeed(LiveDataFeed):
         if not ready_records:
             return None
 
-        df = pd.DataFrame.from_records(ready_records)
-        if df.empty:
+        df = pl.DataFrame(ready_records)
+        if df.is_empty():
             return None
-        df = df.drop_duplicates(subset=self._dedupe_subset())
-        df = df.sort_values("ts")
-        last_ts = int(df["ts"].iloc[-1])
+        df = df.unique(subset=self._dedupe_subset()).sort("ts")
+        last_ts = int(df.get_column("ts")[-1])
         if self._uses_symbol_dedupe():
-            symbol_value = df.iloc[-1].get("symbol")
+            symbol_value = None
+            if "symbol" in df.columns:
+                symbol_value = df.get_column("symbol")[-1]
             if symbol_value is None and symbol is not None:
                 symbol_value = symbol
             last_token = (last_ts, str(symbol_value) if symbol_value is not None else "")

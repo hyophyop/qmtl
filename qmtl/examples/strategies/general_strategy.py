@@ -4,7 +4,7 @@ Demonstrates the simplified Runner.submit() API for strategy submission.
 """
 
 import argparse
-import pandas as pd
+import polars as pl
 from qmtl.runtime.io import QuestDBHistoryProvider, QuestDBRecorder
 from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import Node, StreamInput
@@ -30,9 +30,11 @@ class GeneralStrategy(Strategy):
             price_frame = view.as_frame(price_stream, 60, columns=["close"]).validate_columns(
                 ["close"]
             )
-            momentum = price_frame.frame["close"].pct_change().rolling(5).mean()
-            signal = (momentum > 0).astype(int)
-            return pd.DataFrame({"signal": signal})
+            momentum = price_frame.frame.get_column("close").pct_change().rolling_mean(
+                window_size=5
+            )
+            signal = (momentum > 0).cast(pl.Int64)
+            return pl.DataFrame({"signal": signal})
 
         signal_node = Node(
             input=price_stream,

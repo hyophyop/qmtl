@@ -1,4 +1,4 @@
-import pandas as pd
+import polars as pl
 import pytest
 
 from qmtl.runtime.generators import GarchInput, HestonInput, RoughBergomiInput
@@ -16,7 +16,7 @@ def test_synthetic_generators_stream_through_pipeline(generator_cls):
     """Generators should honour StreamInput contracts when wired into a DAG."""
 
     generator = generator_cls(interval="1s", period=3, seed=7)
-    outputs: list[pd.DataFrame] = []
+    outputs: list[pl.DataFrame] = []
 
     def collecting_transform(view):
         frame = identity_transform_node(view)
@@ -51,4 +51,4 @@ def test_synthetic_generators_stream_through_pipeline(generator_cls):
     latest = outputs[-1]
     assert list(latest.columns) == ["price"]
     assert latest.shape == (3, 1)
-    assert latest.iloc[-1]["price"] == pytest.approx(payloads[-1]["price"])
+    assert latest.get_column("price")[-1] == pytest.approx(payloads[-1]["price"])

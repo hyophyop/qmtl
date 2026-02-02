@@ -36,7 +36,7 @@
 읽어오는 책임만 가지면 됩니다.
 
 ```python
-import pandas as pd
+import polars as pl
 
 from qmtl.runtime.io.seamless_provider import EnhancedQuestDBProvider
 from qmtl.runtime.sdk.seamless_data_provider import DataAvailabilityStrategy
@@ -51,10 +51,10 @@ class ExampleMarketDataFetcher:
         *,
         node_id: str,
         interval: int,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         # 실제 구현에서는 여기서 여러분의 데이터 소스를 호출하세요.
         ts = list(range(start, end, interval))
-        return pd.DataFrame(
+        return pl.DataFrame(
             {
                 "ts": ts,
                 "price": [100.0 + i * 0.01 for i in range(len(ts))],
@@ -98,7 +98,7 @@ class MyStrategy(Strategy):
 - `EnhancedQuestDBProvider` 는 `SeamlessDataProvider` 의 구체 구현으로,
   워머프 레이어가 기대하는 `fetch`, `coverage`, `fill_missing` 메서드를
   이미 제공합니다.
-- 여러분의 `DataFetcher` 는 `ts` 컬럼을 포함한 `DataFrame` 만 돌려주면 되고,
+- 여러분의 `DataFetcher` 는 `ts` 컬럼을 포함한 polars `DataFrame` 만 돌려주면 되고,
   커버리지·자동 백필·정합성 체크는 프로바이더가 맡습니다.
 - 전략 쪽 변경은 `StreamInput(history_provider=provider)` 한 줄이면 충분합니다.
 

@@ -10,7 +10,6 @@ import hashlib
 from pathlib import Path
 import asyncio
 
-import pandas as pd
 
 from qmtl.foundation.config import SeamlessConfig
 from qmtl.runtime.sdk.configuration import get_seamless_config

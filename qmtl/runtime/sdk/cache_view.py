@@ -28,20 +28,22 @@ class CacheWindow(Generic[PayloadT]):
         return payload
 
     def as_frame(self, *, ts_col: str = "ts"):
-        """Return a pandas DataFrame with a timestamp column."""
+        """Return a polars DataFrame with a timestamp column."""
 
-        import pandas as pd
+        import polars as pl
 
         if not self._rows:
-            return pd.DataFrame(columns=[ts_col])
+            return pl.DataFrame(schema=[(ts_col, pl.Int64)])
 
         timestamps, payloads = zip(*self._rows)
+        rows: list[dict[str, Any]] = []
         if payloads and isinstance(payloads[0], Mapping):
-            frame = pd.DataFrame(list(payloads))
+            for ts, payload in zip(timestamps, payloads):
+                rows.append({ts_col: int(ts), **dict(payload)})
         else:
-            frame = pd.DataFrame({"value": payloads})
-        frame.insert(0, ts_col, list(timestamps))
-        return frame
+            for ts, payload in zip(timestamps, payloads):
+                rows.append({ts_col: int(ts), "value": payload})
+        return pl.DataFrame(rows)
 
     def require_columns(self, columns: Sequence[str], *, ts_col: str = "ts") -> None:
         """Raise if any ``columns`` are missing from the window payload."""
@@ -60,15 +62,15 @@ class CacheWindow(Generic[PayloadT]):
         ts_col: str = "ts",
         dropna: bool = True,
     ):
-        """Return a pandas Series indexed by ``ts_col`` for ``column``."""
+        """Return a polars Series for ``column``."""
 
         frame = self.as_frame(ts_col=ts_col)
         if column not in frame:
             raise KeyError(
                 f"column={column!r} not found in CacheWindow[{self.node_id!r}, {self.interval!r}]"
             )
-        series = frame.set_index(ts_col)[column]
-        return series.dropna() if dropna else series
+        series = frame.get_column(column)
+        return series.drop_nulls() if dropna else series
 
     def rows(self) -> list[CacheEntry[PayloadT]]:
         """Return the underlying rows (ts, payload) as a new list."""

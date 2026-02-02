@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import types
-import pandas as pd
+import polars as pl
 import pytest
 
 from qmtl.runtime.io.ccxt_fetcher import (
@@ -54,8 +54,8 @@ async def test_trades_fetcher_normalizes_and_sorts():
     fetcher = CcxtTradesFetcher(cfg, exchange=ex)
     df = await fetcher.fetch(60, 120, node_id="trades:binance:BTC/USDT", interval=60)
     assert list(df.columns)[:1] == ["ts"]
-    assert df["ts"].tolist() == [60, 120]
-    assert df.iloc[0]["price"] == 10.0
+    assert df.get_column("ts").to_list() == [60, 120]
+    assert df.get_column("price")[0] == 10.0
 
 
 @pytest.mark.asyncio
@@ -93,7 +93,7 @@ async def test_trades_fetcher_retries_then_succeeds():
     cfg = CcxtTradesConfig(exchange_id="binance", symbols=["BTC/USDT"], max_retries=2, retry_backoff_s=0.01)
     fetcher = CcxtTradesFetcher(cfg, exchange=ex)
     df = await fetcher.fetch(60, 60, node_id="trades:binance:BTC/USDT", interval=60)
-    assert df["ts"].tolist() == [60]
+    assert df.get_column("ts").to_list() == [60]
 
 
 @pytest.mark.asyncio
@@ -133,7 +133,7 @@ async def test_trades_fetcher_penalty_backoff_on_429(monkeypatch):
     fetcher = CcxtTradesFetcher(cfg, exchange=ex)
 
     df = await fetcher.fetch(60, 60, node_id="trades:binance:BTC/USDT", interval=60)
-    assert df["ts"].tolist() == [60]
+    assert df.get_column("ts").to_list() == [60]
     assert any(pytest.approx(0.5, rel=0.1) == d for d in delays)
 
 
@@ -216,4 +216,3 @@ async def test_trades_fetcher_reuses_cached_exchange(monkeypatch):
     instance = _FakeTradesExchange.instances[0]
     assert instance.fetch_calls >= 1
     assert instance.close_calls == 2
-

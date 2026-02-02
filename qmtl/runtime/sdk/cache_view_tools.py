@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Generic, Mapping, Protocol, Sequence, TypeVar
 
-import pandas as pd
+import polars as pl
 
 PayloadT = TypeVar("PayloadT")
 CacheEntry = tuple[int, PayloadT]
@@ -19,9 +19,9 @@ from .protocols import NodeLike
 
 @dataclass(frozen=True)
 class CacheFrame(Generic[PayloadT]):
-    """Pandas-backed view over a cache leaf."""
+    """Polars-backed view over a cache leaf."""
 
-    frame: pd.DataFrame
+    frame: pl.DataFrame
 
     def returns(self, *, window: int = 1, dropna: bool = True):
         """Percentage change over ``window`` periods."""
@@ -32,9 +32,24 @@ class CacheFrame(Generic[PayloadT]):
         if window < 1:
             raise ValueError("window must be >= 1")
 
-        target = self.frame if self.frame.shape[1] > 1 else self.frame.iloc[:, 0]
-        changed = target.pct_change(periods=window)
-        return changed.dropna() if dropna else changed
+        value_columns = [col for col in self.frame.columns if col != "t"]
+        if not value_columns:
+            return pl.Series(name="value", values=[])
+
+        if len(value_columns) == 1:
+            series = self.frame.get_column(value_columns[0]).pct_change(window)
+            return series.drop_nulls() if dropna else series
+
+        changed = self.frame.select(
+            [pl.col("t")]
+            + [pl.col(col).pct_change(window).alias(col) for col in value_columns]
+        )
+        if dropna:
+            mask = pl.all_horizontal(
+                [pl.col(col).is_not_null() for col in value_columns]
+            )
+            return changed.filter(mask)
+        return changed
 
     def validate_columns(self, required: Sequence[str]) -> "CacheFrame[PayloadT]":
         missing = [column for column in required if column not in self.frame.columns]
@@ -47,12 +62,19 @@ class CacheFrame(Generic[PayloadT]):
         if not frames:
             return []
 
-        common_index = frames[0].index
+        common_ts = set(frames[0].get_column("t").to_list())
         for frame in frames[1:]:
-            common_index = common_index.intersection(frame.index)
-        common_index = common_index.sort_values()
+            common_ts &= set(frame.get_column("t").to_list())
+        ordered_ts = sorted(common_ts)
+        if not ordered_ts:
+            return [CacheFrame(_empty_frame([col for col in frame.columns if col != "t"])) for frame in frames]
 
-        return [CacheFrame(frame.loc[common_index]) for frame in frames]
+        return [
+            CacheFrame(
+                frame.filter(pl.col("t").is_in(ordered_ts)).sort("t")
+            )
+            for frame in frames
+        ]
 
 
 def window(
@@ -152,7 +174,7 @@ def _as_sequence(series_view: Any) -> Sequence[CacheEntry[PayloadT]]:
 
 def _build_frame(
     timestamps: Sequence[int], values: Sequence[Any], columns: Sequence[str] | None
-) -> pd.DataFrame:
+) -> pl.DataFrame:
     if not values:
         return _empty_frame(columns)
 
@@ -166,45 +188,50 @@ def _build_frame(
     return _frame_from_scalar(timestamps, values, columns)
 
 
-def _empty_frame(columns: Sequence[str] | None) -> pd.DataFrame:
+def _empty_frame(columns: Sequence[str] | None) -> pl.DataFrame:
     if columns is None:
-        return pd.DataFrame(index=pd.Index([], name="t"))
-    return pd.DataFrame(columns=list(columns), index=pd.Index([], name="t"))
+        return pl.DataFrame(schema=[("t", pl.Int64)])
+    schema = [("t", pl.Int64), *[(col, pl.Null) for col in columns]]
+    return pl.DataFrame(schema=schema)
 
 
 def _frame_from_mapping(
     timestamps: Sequence[int],
     values: Sequence[Mapping[str, Any]],
     columns: Sequence[str] | None,
-) -> pd.DataFrame:
+) -> pl.DataFrame:
     inferred_columns = columns or _collect_mapping_columns(values)
     _validate_mapping_columns(values, inferred_columns)
-    rows = [{column: value.get(column) for column in inferred_columns} for value in values]
-    return pd.DataFrame(rows, index=pd.Index(timestamps, name="t"), columns=list(inferred_columns))
+    rows = [
+        {"t": ts, **{column: value.get(column) for column in inferred_columns}}
+        for ts, value in zip(timestamps, values)
+    ]
+    return pl.DataFrame(rows)
 
 
 def _frame_from_sequence(
     timestamps: Sequence[int],
     values: Sequence[Sequence[Any]],
     columns: Sequence[str] | None,
-) -> pd.DataFrame:
+) -> pl.DataFrame:
     inferred_columns = columns or [f"value_{i}" for i in range(len(values[0]))]
     if columns is not None and len(values[0]) != len(columns):
         raise ValueError("sequence values must match the number of columns")
     rows = [
-        {column: value[i] for i, column in enumerate(inferred_columns)}
-        for value in values
+        {"t": ts, **{column: value[i] for i, column in enumerate(inferred_columns)}}
+        for ts, value in zip(timestamps, values)
     ]
-    return pd.DataFrame(rows, index=pd.Index(timestamps, name="t"), columns=list(inferred_columns))
+    return pl.DataFrame(rows)
 
 
 def _frame_from_scalar(
     timestamps: Sequence[int], values: Sequence[Any], columns: Sequence[str] | None
-) -> pd.DataFrame:
+) -> pl.DataFrame:
     inferred_columns = columns or ["value"]
     if columns is not None and len(inferred_columns) != 1:
         raise ValueError("scalar values can only map to a single column")
-    return pd.DataFrame(values, index=pd.Index(timestamps, name="t"), columns=list(inferred_columns))
+    rows = [{"t": ts, inferred_columns[0]: value} for ts, value in zip(timestamps, values)]
+    return pl.DataFrame(rows)
 
 
 def _collect_mapping_columns(values: Sequence[Mapping[str, Any]]) -> list[str]:

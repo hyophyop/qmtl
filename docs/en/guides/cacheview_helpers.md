@@ -6,6 +6,7 @@
 
 ```python
 from qmtl.runtime.sdk import CacheView
+import polars as pl
 
 def compute(view: CacheView):
     price_win = view.window("prices", 60, count=50)
@@ -13,7 +14,7 @@ def compute(view: CacheView):
 
     frame = price_win.as_frame()  # includes ts, close, volume
     closes = price_win.to_series("close")
-    returns = closes.pct_change().dropna()
+    returns = closes.pct_change().drop_nulls()
 ```
 
 - `window(node, interval, count=N)` returns the latest N entries; `count=None` keeps the full window.
@@ -24,22 +25,32 @@ def compute(view: CacheView):
 
 ```python
 def compute(view: CacheView):
-    asset = view.window("asset_prices", 60, count=120).to_series("close")
-    bench = view.window("benchmark", 60, count=120).to_series("close")
-
-    aligned = (
-        pd.concat({"asset": asset, "bench": bench}, axis=1)
-        .dropna()
-        .pct_change()
-        .dropna()
+    asset = (
+        view.window("asset_prices", 60, count=120)
+        .as_frame()
+        .select(["ts", "close"])
+        .rename({"close": "asset"})
     )
-    cov = aligned.cov().loc["asset", "bench"]
-    var = aligned["bench"].var()
+    bench = (
+        view.window("benchmark", 60, count=120)
+        .as_frame()
+        .select(["ts", "close"])
+        .rename({"close": "bench"})
+    )
+
+    aligned = asset.join(bench, on="ts", how="inner").drop_nulls()
+    returns = aligned.select(
+        pl.col("asset").pct_change().alias("asset_ret"),
+        pl.col("bench").pct_change().alias("bench_ret"),
+    ).drop_nulls()
+
+    cov = returns.select(pl.cov("asset_ret", "bench_ret")).item()
+    var = returns.get_column("bench_ret").var()
     beta = cov / var if var else None
     return {"beta": beta}
 ```
 
-- Series index is timestamp-based (`ts` by default), so `pd.concat(..., axis=1)` aligns rows automatically.
+- Use a join on the `ts` column to align frames when combining multiple inputs.
 - Use `to_series(..., dropna=False)` when you want to preserve gaps before alignment.
 
 ## Scalars and empty windows

@@ -9,7 +9,7 @@ last_modified: 2025-09-08
 
 # 노드 DataFrame 스키마 검증
 
-노드는 `expected_schema` 를 선언해 입력되는 pandas `DataFrame` 페이로드를 검증할 수 있습니다. 스키마는 컬럼 이름을 dtype 문자열에 매핑하며, 데이터가 노드로 공급될 때 자동으로 확인됩니다.
+노드는 `expected_schema` 를 선언해 입력되는 polars `DataFrame` 페이로드를 검증할 수 있습니다. 스키마는 컬럼 이름을 dtype 문자열에 매핑하며, 데이터가 노드로 공급될 때 자동으로 확인됩니다.
 
 ## 스키마 선언
 
@@ -19,7 +19,7 @@ from qmtl.runtime.sdk import SourceNode
 price = SourceNode(
     interval="1s",
     period=1,
-    expected_schema={"ts": "int64", "close": "float64"},
+    expected_schema={"ts": "Int64", "close": "Float64"},
 )
 ```
 

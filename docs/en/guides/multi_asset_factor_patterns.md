@@ -21,7 +21,8 @@ Use `CacheView.window()` / `CacheWindow` to cut down the list→DataFrame pivot 
 
 ```python
 from qmtl.runtime.sdk import CacheView
-import pandas as pd
+import numpy as np
+import polars as pl
 
 UNIVERSE = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
 
@@ -30,24 +31,30 @@ def compute(view: CacheView):
     for sym in UNIVERSE:
         win = view.window(f"px:{sym}", 60, count=200)
         frame = win.as_frame()
-        if frame.empty:
+        if frame.is_empty():
             continue
-        frame["symbol"] = sym
-        frames.append(frame[["ts", "symbol", "close"]])
+        frame = frame.with_columns(pl.lit(sym).alias("symbol"))
+        frames.append(frame.select(["ts", "symbol", "close"]))
 
     if not frames:
         return None
 
-    tall = pd.concat(frames).sort_values("ts")
-    wide = tall.pivot(index="ts", columns="symbol", values="close")
-    returns = wide.pct_change().dropna()
+    tall = pl.concat(frames).sort("ts")
+    wide = tall.pivot(values="close", index="ts", columns="symbol")
+    returns = wide.select(pl.all().pct_change()).drop_nulls()
 
-    if "baseline" not in returns:
+    if "baseline" not in returns.columns:
         return None
-    cov = returns.cov()
-    var_b = cov.loc["baseline", "baseline"]
-    betas = cov["baseline"] / var_b if var_b else None
-    return {"beta": betas.to_dict() if betas is not None else None}
+    cov = np.cov(returns.to_numpy(), rowvar=False)
+    cols = returns.columns
+    idx = cols.index("baseline")
+    var_b = cov[idx, idx]
+    betas = (
+        {col: cov[cols.index(col), idx] / var_b for col in cols}
+        if var_b
+        else None
+    )
+    return {"beta": betas}
 ```
 
 - Use `count=` to keep window size bounded.

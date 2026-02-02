@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import pandas as pd
+import polars as pl
 
 from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import Node, StreamInput
@@ -20,10 +20,11 @@ class RecorderStrategy(Strategy):
             event_service=EventRecorderService(QuestDBRecorder("postgresql://localhost:8812/qdb")),
         )
 
-        def momentum(view) -> pd.DataFrame:
-            df = pd.DataFrame([v for _, v in view[price][60]])
-            mom = df["close"].pct_change().rolling(5).mean()
-            return pd.DataFrame({"momentum": mom})
+        def momentum(view) -> pl.DataFrame:
+            df = pl.DataFrame([v for _, v in view[price][60]])
+            close = df.get_column("close")
+            mom = close.pct_change().rolling_mean(window_size=5)
+            return pl.DataFrame({"momentum": mom})
 
         mom_node = Node(input=price, compute_fn=momentum, name="momentum")
         self.add_nodes([price, mom_node])

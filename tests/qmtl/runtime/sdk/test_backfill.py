@@ -1,4 +1,5 @@
-import pandas as pd
+import polars as pl
+from polars.testing import assert_frame_equal
 import pytest
 
 from qmtl.runtime.sdk import (
@@ -40,8 +41,8 @@ async def test_questdb_fetch(monkeypatch):
     src = QuestDBHistoryProvider("db", table="node_data")
     assert isinstance(src, HistoryProvider)
     df = await src.fetch(1, 3, node_id="n1", interval=60)
-    expected = pd.DataFrame([{"ts": 1, "value": 10}, {"ts": 2, "value": 20}])
-    pd.testing.assert_frame_equal(df.reset_index(drop=True), expected)
+    expected = pl.DataFrame([{"ts": 1, "value": 10}, {"ts": 2, "value": 20}])
+    assert_frame_equal(df, expected)
 
 
 @pytest.mark.asyncio
@@ -200,7 +201,7 @@ class _InMemoryBackend:
 
     async def read_range(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         table = self._rows.get((node_id, interval), {})
         data = []
         for ts in sorted(table):
@@ -208,15 +209,15 @@ class _InMemoryBackend:
                 row = {"ts": ts}
                 row.update(table[ts])
                 data.append(row)
-        return pd.DataFrame(data)
+        return pl.DataFrame(data)
 
     async def write_rows(
-        self, rows: pd.DataFrame, *, node_id: str, interval: int
+        self, rows: pl.DataFrame, *, node_id: str, interval: int
     ) -> None:
-        if rows.empty:
+        if rows.is_empty():
             return
         table = self._rows.setdefault((node_id, interval), {})
-        for record in rows.to_dict("records"):
+        for record in rows.to_dicts():
             ts = int(record["ts"])
             payload = {k: v for k, v in record.items() if k != "ts"}
             table[ts] = payload
@@ -244,14 +245,14 @@ class _RecordingFetcher:
 
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         self.calls.append((start, end, node_id, interval))
         rows = []
         ts = start
         while ts <= end:
             rows.append({"ts": ts, "value": ts})
             ts += interval
-        return pd.DataFrame(rows)
+        return pl.DataFrame(rows)
 
 
 @pytest.mark.asyncio
@@ -269,7 +270,7 @@ async def test_augmented_provider_ensure_range_auto_backfills() -> None:
     assert coverage == [(60, 180)]
 
     frame = await provider.fetch(60, 240, node_id="node", interval=60)
-    assert list(frame["ts"]) == [60, 120, 180]
+    assert frame.get_column("ts").to_list() == [60, 120, 180]
 
 
 @pytest.mark.asyncio

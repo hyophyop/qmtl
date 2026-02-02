@@ -15,7 +15,7 @@ This guide explains how to populate node caches with past values before a strate
 
 A `HistoryProvider` supplies historical data for a `(node_id, interval)` pair. It
 must implement an asynchronous
-`fetch(start, end, *, node_id, interval)` method and return a `pandas.DataFrame`
+`fetch(start, end, *, node_id, interval)` method and return a `polars.DataFrame`
 where each row contains a timestamp column `ts` and any payload fields.  The
 method signature mirrors that of :py:meth:`DataFetcher.fetch` which providers may
 delegate to when retrieving rows from external services.  Advanced providers can
@@ -66,11 +66,11 @@ Below is a minimal fetcher that reads candlesticks from Binance:
 
 ```python
 import httpx
-import pandas as pd
+import polars as pl
 from qmtl.runtime.sdk import DataFetcher
 
 class BinanceFetcher:
-    async def fetch(self, start: int, end: int, *, node_id: str, interval: str) -> pd.DataFrame:
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: str) -> pl.DataFrame:
         url = (
             "https://api.binance.com/api/v3/klines"
             f"?symbol={node_id}&interval={interval}"
@@ -78,7 +78,7 @@ class BinanceFetcher:
         )
         async with httpx.AsyncClient() as client:
             data = (await client.get(url)).json()
-        return pd.DataFrame(
+        return pl.DataFrame(
             [
                 {"ts": int(r[0] / 1000), "open": float(r[1]), "close": float(r[4])}
                 for r in data
@@ -101,7 +101,7 @@ recorders may implement ``bind_stream()`` to infer a table name from
 ``stream.node_id``.
 
 When building custom providers or fetchers simply follow these method
-signatures and return ``pandas.DataFrame`` objects with a ``ts`` column.
+signatures and return ``polars.DataFrame`` objects with a ``ts`` column.
 Subclasses are optional—any object adhering to the protocol works with the
 SDK.
 

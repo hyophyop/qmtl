@@ -5,8 +5,11 @@ from __future__ import annotations
 from typing import Any, Iterable, Mapping, Sequence
 import hashlib
 import json
+import math
+from datetime import datetime, date, timedelta
 
-import pandas as pd
+import numpy as np
+import polars as pl
 
 __all__ = [
     "compute_artifact_fingerprint",
@@ -18,14 +21,20 @@ _CANONICAL_PREFIX = "sha256:"
 
 def _canonicalize_value(value: Any) -> Any:
     if isinstance(value, (int, float, str, bool)):
+        if isinstance(value, float) and math.isnan(value):
+            return None
         return value
     if value is None:
         return None
-    if isinstance(value, pd.Timestamp):
-        return int(value.value // 10**9)
-    if isinstance(value, pd.Timedelta):
-        return int(value.value // 10**9)
-    if pd.isna(value):
+    if isinstance(value, datetime):
+        return int(value.timestamp())
+    if isinstance(value, date):
+        return int(datetime(value.year, value.month, value.day).timestamp())
+    if isinstance(value, timedelta):
+        return int(value.total_seconds())
+    if isinstance(value, (np.datetime64, np.timedelta64)):
+        return int(value.astype("int64") // 10**9)
+    if isinstance(value, float) and math.isnan(value):
         return None
     if hasattr(value, "item"):
         try:
@@ -63,29 +72,25 @@ def _canonicalize_columns(columns: Sequence[str]) -> list[str]:
     return ordered
 
 
-def _canonicalize_frame(frame: pd.DataFrame) -> list[dict[str, Any]]:
-    if frame.empty:
+def _canonicalize_frame(frame: pl.DataFrame) -> list[dict[str, Any]]:
+    if frame.is_empty():
         return []
 
-    working = frame.copy()
+    working = frame.clone()
     if "ts" in working.columns:
-        working["ts"] = pd.to_numeric(working["ts"], errors="coerce").astype("Int64")
-        working.dropna(subset=["ts"], inplace=True)
-        working["ts"] = working["ts"].astype("int64")
-        working.sort_values("ts", inplace=True)
-    else:
-        working.sort_index(inplace=True)
-    working.reset_index(drop=True, inplace=True)
+        working = working.with_columns(pl.col("ts").cast(pl.Int64, strict=False))
+        working = working.filter(pl.col("ts").is_not_null())
+        working = working.sort("ts")
 
     columns = _canonicalize_columns(list(working.columns))
     records: list[dict[str, Any]] = []
-    for _, row in working[columns].iterrows():
+    for row in working.select(columns).iter_rows(named=True):
         record = {col: _canonicalize_value(row[col]) for col in columns}
         records.append(record)
     return records
 
 
-def _serialize_payload(frame: pd.DataFrame, metadata: Mapping[str, Any], *, sort_metadata: bool) -> bytes:
+def _serialize_payload(frame: pl.DataFrame, metadata: Mapping[str, Any], *, sort_metadata: bool) -> bytes:
     payload = {
         "frame": _canonicalize_frame(frame),
         "metadata": _normalize_metadata(metadata, sort_keys=sort_metadata),
@@ -93,7 +98,7 @@ def _serialize_payload(frame: pd.DataFrame, metadata: Mapping[str, Any], *, sort
     return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
-def compute_artifact_fingerprint(frame: pd.DataFrame, metadata: Mapping[str, Any]) -> str:
+def compute_artifact_fingerprint(frame: pl.DataFrame, metadata: Mapping[str, Any]) -> str:
     """Return the canonical ``sha256:<digest>`` fingerprint for *frame* and *metadata*."""
 
     serialized = _serialize_payload(frame, metadata, sort_metadata=True)

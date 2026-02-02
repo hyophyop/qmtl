@@ -23,7 +23,7 @@ from typing import (
 import asyncio
 import re
 
-import pandas as pd
+import polars as pl
 
 from qmtl.runtime.sdk.data_io import DataFetcher
 from qmtl.runtime.sdk.ohlcv_nodeid import (
@@ -393,7 +393,7 @@ class CcxtOHLCVFetcher(_BaseCcxtFetcher[CcxtOHLCVExchange]):
 
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         symbol, timeframe = self._resolve_symbol_and_timeframe(node_id)
         step_s = _try_parse_timeframe_s(timeframe)
         self._ensure_interval_alignment(interval, step_s)
@@ -432,9 +432,9 @@ class CcxtOHLCVFetcher(_BaseCcxtFetcher[CcxtOHLCVExchange]):
 
     # ------------------------------------------------------------------
     @staticmethod
-    def _normalize_ohlcv(rows: Iterable[Sequence[Any]], start: int, end: int) -> pd.DataFrame:
+    def _normalize_ohlcv(rows: Iterable[Sequence[Any]], start: int, end: int) -> pl.DataFrame:
         if not rows:
-            return pd.DataFrame()
+            return pl.DataFrame()
         records = []
         for r in rows:
             if not r:
@@ -453,11 +453,9 @@ class CcxtOHLCVFetcher(_BaseCcxtFetcher[CcxtOHLCVExchange]):
             }
             records.append(rec)
         if not records:
-            return pd.DataFrame()
-        df = pd.DataFrame.from_records(records)
-        # Deduplicate on ts and sort
-        df = df.drop_duplicates(subset=["ts"]).sort_values("ts").reset_index(drop=True)
-        return df
+            return pl.DataFrame()
+        df = pl.DataFrame(records)
+        return df.unique(subset=["ts"]).sort("ts")
 
 
 @dataclass(slots=True)
@@ -492,7 +490,7 @@ class CcxtTradesFetcher(_BaseCcxtFetcher[CcxtTradesExchange]):
 
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         parsed = _parse_ohlcv_node_id(node_id)
         symbol = parsed[1] if parsed else None
         symbol = symbol or (self.config.symbols[0] if self.config.symbols else None)
@@ -542,9 +540,9 @@ class CcxtTradesFetcher(_BaseCcxtFetcher[CcxtTradesExchange]):
         return await self._with_retry(_operation)
 
     @staticmethod
-    def _normalize_trades(rows: Iterable[dict], start: int, end: int) -> pd.DataFrame:
+    def _normalize_trades(rows: Iterable[dict], start: int, end: int) -> pl.DataFrame:
         if not rows:
-            return pd.DataFrame()
+            return pl.DataFrame()
         records = []
         for tr in rows:
             try:
@@ -562,10 +560,9 @@ class CcxtTradesFetcher(_BaseCcxtFetcher[CcxtTradesExchange]):
                 rec["side"] = tr["side"]
             records.append(rec)
         if not records:
-            return pd.DataFrame()
-        df = pd.DataFrame.from_records(records)
-        df = df.sort_values(["ts"]).reset_index(drop=True)
-        return df
+            return pl.DataFrame()
+        df = pl.DataFrame(records)
+        return df.sort("ts")
 
 
 __all__ = [

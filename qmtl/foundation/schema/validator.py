@@ -1,44 +1,35 @@
 from __future__ import annotations
 
-from typing import Any, Mapping, TYPE_CHECKING
+from typing import Mapping, TYPE_CHECKING
+
+import polars as pl
 
 from qmtl.runtime.sdk.exceptions import InvalidSchemaError
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    import pandas as pd
-
-_PANDAS_IMPORT_ERROR: ModuleNotFoundError | None
-pandas_module: Any | None
-try:  # pragma: no cover - optional dependency shim
-    import pandas as _pandas_module
-except ModuleNotFoundError as exc:  # pragma: no cover - exercised when pandas missing
-    _PANDAS_IMPORT_ERROR = exc
-    pandas_module = None
-else:  # pragma: no cover - import side effects only
-    _PANDAS_IMPORT_ERROR = None
-    pandas_module = _pandas_module
+    from polars import DataFrame as PolarsDataFrame
 
 # Built-in DataFrame schemas for node I/O
 SCHEMAS: dict[str, dict[str, str]] = {
     "bar": {
-        "ts": "datetime64[ns, UTC]",
-        "open": "float64",
-        "high": "float64",
-        "low": "float64",
-        "close": "float64",
-        "volume": "float64",
+        "ts": "Datetime(time_unit='ns', time_zone='UTC')",
+        "open": "Float64",
+        "high": "Float64",
+        "low": "Float64",
+        "close": "Float64",
+        "volume": "Float64",
     },
     "quote": {
-        "ts": "datetime64[ns, UTC]",
-        "bid": "float64",
-        "ask": "float64",
-        "bid_size": "float64",
-        "ask_size": "float64",
+        "ts": "Datetime(time_unit='ns', time_zone='UTC')",
+        "bid": "Float64",
+        "ask": "Float64",
+        "bid_size": "Float64",
+        "ask_size": "Float64",
     },
     "trade": {
-        "ts": "datetime64[ns, UTC]",
-        "price": "float64",
-        "size": "float64",
+        "ts": "Datetime(time_unit='ns', time_zone='UTC')",
+        "price": "Float64",
+        "size": "Float64",
     },
 }
 
@@ -52,16 +43,16 @@ def _resolve_schema(expected: str | Mapping[str, str]) -> Mapping[str, str]:
     return expected
 
 
-def validate_schema(df: "pd.DataFrame", expected: str | Mapping[str, str]) -> None:
+def validate_schema(df: "PolarsDataFrame", expected: str | Mapping[str, str]) -> None:
     """Validate that ``df`` conforms to ``expected`` schema.
 
     Parameters
     ----------
     df:
-        Input ``pandas.DataFrame``.
+        Input ``polars.DataFrame``.
     expected:
         Built-in schema name (``"bar"``, ``"quote"`` or ``"trade"``) or a
-        mapping of column names to ``pandas`` dtypes.
+        mapping of column names to ``polars`` dtype strings.
 
     Raises
     ------
@@ -70,10 +61,8 @@ def validate_schema(df: "pd.DataFrame", expected: str | Mapping[str, str]) -> No
         column dtypes do not match the schema.
     """
 
-    if pandas_module is None:
-        raise ModuleNotFoundError(
-            "pandas is required for schema validation; install the 'io' extra"
-        ) from _PANDAS_IMPORT_ERROR
+    if not isinstance(df, pl.DataFrame):
+        raise InvalidSchemaError("payload must be a polars DataFrame")
 
     spec = _resolve_schema(expected)
 
@@ -82,24 +71,28 @@ def validate_schema(df: "pd.DataFrame", expected: str | Mapping[str, str]) -> No
     _ensure_column_types_match(df, spec)
 
 
-def _ensure_required_columns_present(df: "pd.DataFrame", spec: Mapping[str, str]) -> None:
+def _dtype_to_string(dtype: pl.DataType | None) -> str:
+    return str(dtype) if dtype is not None else "Unknown"
+
+
+def _ensure_required_columns_present(df: "PolarsDataFrame", spec: Mapping[str, str]) -> None:
     missing = [col for col in spec if col not in df.columns]
     if not missing:
         return
     raise InvalidSchemaError(f"missing columns: {', '.join(missing)}")
 
 
-def _ensure_no_unexpected_columns(df: "pd.DataFrame", spec: Mapping[str, str]) -> None:
+def _ensure_no_unexpected_columns(df: "PolarsDataFrame", spec: Mapping[str, str]) -> None:
     unexpected = [col for col in df.columns if col not in spec]
     if not unexpected:
         return
     raise InvalidSchemaError(f"unexpected columns: {', '.join(unexpected)}")
 
 
-def _ensure_column_types_match(df: "pd.DataFrame", spec: Mapping[str, str]) -> None:
+def _ensure_column_types_match(df: "PolarsDataFrame", spec: Mapping[str, str]) -> None:
     for col, dtype in spec.items():
-        series = df[col]
-        if str(series.dtype) != dtype:
+        actual = _dtype_to_string(df.schema.get(col))
+        if actual != dtype:
             raise InvalidSchemaError(
-                f"column '{col}' expected dtype {dtype}, got {series.dtype}"
+                f"column '{col}' expected dtype {dtype}, got {actual}"
             )
