@@ -1,7 +1,7 @@
 """Tests for Tick and Quote conformance rules."""
 
 import pytest
-import pandas as pd
+import polars as pl
 
 from qmtl.runtime.sdk.conformance import (
     TickConformanceRule,
@@ -15,7 +15,7 @@ class TestTickConformanceRule:
     
     def test_valid_tick_data(self):
         """Valid tick data passes without warnings."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ts': [1700000000, 1700000001, 1700000002],
             'price': [100.0, 100.5, 101.0],
             'size': [1.0, 2.0, 1.5],
@@ -29,7 +29,7 @@ class TestTickConformanceRule:
     
     def test_missing_columns(self):
         """Missing required columns triggers warning."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ts': [1700000000],
             'price': [100.0],
             # missing 'size'
@@ -44,7 +44,7 @@ class TestTickConformanceRule:
     
     def test_non_positive_price(self):
         """Non-positive prices trigger warning."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ts': [1700000000, 1700000001],
             'price': [100.0, -50.0],
             'size': [1.0, 2.0],
@@ -58,7 +58,7 @@ class TestTickConformanceRule:
     
     def test_non_positive_size(self):
         """Non-positive sizes trigger warning."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ts': [1700000000, 1700000001],
             'price': [100.0, 100.5],
             'size': [1.0, 0.0],
@@ -72,7 +72,7 @@ class TestTickConformanceRule:
     
     def test_unsorted_timestamps(self):
         """Unsorted timestamps trigger warning."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ts': [1700000002, 1700000001, 1700000000],
             'price': [100.0, 100.5, 101.0],
             'size': [1.0, 2.0, 1.5],
@@ -86,7 +86,7 @@ class TestTickConformanceRule:
     
     def test_duplicate_timestamps(self):
         """Duplicate timestamps trigger warning."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ts': [1700000000, 1700000000, 1700000001],
             'price': [100.0, 100.5, 101.0],
             'size': [1.0, 2.0, 1.5],
@@ -100,7 +100,7 @@ class TestTickConformanceRule:
     
     def test_invalid_timestamp_range(self):
         """Invalid timestamp range triggers warning."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ts': [-100, 1700000001],
             'price': [100.0, 100.5],
             'size': [1.0, 2.0],
@@ -114,7 +114,7 @@ class TestTickConformanceRule:
     
     def test_nan_values(self):
         """NaN values trigger warning."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ts': [1700000000, 1700000001],
             'price': [100.0, float('nan')],
             'size': [1.0, 2.0],
@@ -132,7 +132,7 @@ class TestQuoteConformanceRule:
     
     def test_valid_quote_data(self):
         """Valid quote data passes without warnings."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ts': [1700000000, 1700000001],
             'bid': [100.0, 100.5],
             'ask': [100.5, 101.0],
@@ -148,7 +148,7 @@ class TestQuoteConformanceRule:
     
     def test_missing_columns(self):
         """Missing required columns triggers warning."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ts': [1700000000],
             'bid': [100.0],
             'ask': [100.5],
@@ -164,7 +164,7 @@ class TestQuoteConformanceRule:
     
     def test_crossed_quotes(self):
         """Crossed quotes (bid >= ask) trigger warning."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ts': [1700000000, 1700000001],
             'bid': [100.0, 101.0],
             'ask': [100.5, 100.5],  # Crossed on second row
@@ -180,7 +180,7 @@ class TestQuoteConformanceRule:
     
     def test_non_positive_bid(self):
         """Non-positive bid prices trigger warning."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ts': [1700000000],
             'bid': [0.0],
             'ask': [100.5],
@@ -196,7 +196,7 @@ class TestQuoteConformanceRule:
     
     def test_non_positive_sizes(self):
         """Non-positive sizes trigger warning."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ts': [1700000000],
             'bid': [100.0],
             'ask': [100.5],
@@ -212,7 +212,7 @@ class TestQuoteConformanceRule:
     
     def test_wide_spreads(self):
         """Wide spreads (>10%) trigger warning."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ts': [1700000000],
             'bid': [100.0],
             'ask': [120.0],  # 20% spread
@@ -228,7 +228,7 @@ class TestQuoteConformanceRule:
     
     def test_unsorted_timestamps(self):
         """Unsorted timestamps trigger warning."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ts': [1700000001, 1700000000],
             'bid': [100.0, 100.5],
             'ask': [100.5, 101.0],
@@ -244,7 +244,7 @@ class TestQuoteConformanceRule:
     
     def test_nan_values(self):
         """NaN values trigger warning."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ts': [1700000000],
             'bid': [float('nan')],
             'ask': [100.5],
@@ -264,7 +264,7 @@ class TestConformanceRulesIntegration:
     
     def test_tick_rule_with_optional_columns(self):
         """Tick rule accepts optional columns."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ts': [1700000000],
             'price': [100.0],
             'size': [1.0],
@@ -280,7 +280,7 @@ class TestConformanceRulesIntegration:
     
     def test_quote_rule_with_optional_columns(self):
         """Quote rule accepts optional columns."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ts': [1700000000],
             'bid': [100.0],
             'ask': [100.5],
@@ -297,7 +297,7 @@ class TestConformanceRulesIntegration:
     
     def test_multiple_validation_issues(self):
         """Multiple issues are all reported."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ts': [1700000001, 1700000000],  # Unsorted
             'price': [100.0, -50.0],  # Negative price
             'size': [1.0, 0.0],  # Zero size

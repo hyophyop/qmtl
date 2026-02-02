@@ -6,7 +6,7 @@ import asyncio
 import logging
 from typing import Any, cast
 
-import pandas as pd
+import polars as pl
 
 from qmtl.runtime.sdk.data_io import HistoryProvider
 from . import metrics as sdk_metrics
@@ -46,7 +46,7 @@ class BackfillEngine:
         while True:
             try:
                 df = cast(
-                    pd.DataFrame | None,
+                    pl.DataFrame | None,
                     await self.source.fetch(
                         start,
                         end,
@@ -68,10 +68,9 @@ class BackfillEngine:
                         },
                     )
                     return
-                items = [
-                    (int(row.get("ts", 0)), row.to_dict())
-                    for _, row in df.iterrows()
-                ]
+                items = []
+                for row in df.iter_rows(named=True):
+                    items.append((int(row.get("ts", 0)), dict(row)))
                 await self._process_metadata(node, metadata)
                 node.cache.backfill_bulk(node.node_id, node.interval, items)
                 sdk_metrics.observe_backfill_complete(node.node_id, node.interval, end)

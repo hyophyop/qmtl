@@ -1,6 +1,6 @@
 """Correlation strategy example - QMTL v2.0."""
 
-import pandas as pd
+import polars as pl
 from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import Node, TagQueryNode, MatchMode
 
@@ -17,11 +17,11 @@ class CorrelationStrategy(Strategy):
 
         def calc_corr(view):
             aligned = view.align_frames([(node_id, 3600) for node_id in view], window=24)
-            frames = [frame.frame for frame in aligned if not frame.frame.empty]
+            frames = [frame.frame for frame in aligned if not frame.frame.is_empty()]
             if not frames:
-                return pd.DataFrame()
-            df = pd.concat(frames, axis=1)
-            return df.corr(method="pearson")
+                return pl.DataFrame()
+            df = pl.concat(frames, how="horizontal")
+            return df.corr()
 
         corr_node = Node(
             input=indicators,

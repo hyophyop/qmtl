@@ -16,7 +16,7 @@ from pathlib import Path
 import argparse
 from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import Node, StreamInput
-import pandas as pd
+import polars as pl
 
 
 class BranchingStrategy(Strategy):
@@ -28,14 +28,15 @@ class BranchingStrategy(Strategy):
 
         def calc_momentum(view):
             # Momentum computed from recent price history
-            df = pd.DataFrame([v for _, v in view[price][60]])
-            return pd.DataFrame({"momentum": df["close"].pct_change()})
+            df = pl.DataFrame([v for _, v in view[price][60]])
+            momentum = df.get_column("close").pct_change()
+            return pl.DataFrame({"momentum": momentum})
 
         def calc_volatility(view):
             # Volatility branch calculating rolling standard deviation
-            df = pd.DataFrame([v for _, v in view[price][60]])
-            vol = df["close"].pct_change().rolling(10).std()
-            return pd.DataFrame({"volatility": vol})
+            df = pl.DataFrame([v for _, v in view[price][60]])
+            vol = df.get_column("close").pct_change().rolling_std(10)
+            return pl.DataFrame({"volatility": vol})
 
         momentum = Node(input=price, compute_fn=calc_momentum, name="momentum")
         volatility = Node(input=price, compute_fn=calc_volatility, name="volatility")

@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from qmtl.runtime.sdk.cache_view import CacheView
-import pandas as pd
+import polars as pl
 
 
 def identity_transform_node(view: CacheView):
@@ -24,4 +24,4 @@ def identity_transform_node(view: CacheView):
         raise TypeError(f"Unexpected window payload for (stream={stream!r}, interval={interval!r})")
 
     data = [payload for _, payload in window_data]
-    return pd.DataFrame(data)
+    return pl.DataFrame(data)

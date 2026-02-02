@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import asyncpg
-import pandas as pd
+import polars as pl
 
 from qmtl.runtime.sdk.data_io import DataFetcher
 from qmtl.runtime.sdk.history_provider_facade import AugmentedHistoryProvider
@@ -41,7 +41,7 @@ class QuestDBBackend:
     # ------------------------------------------------------------------
     async def read_range(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         conn = await asyncpg.connect(dsn=self.dsn)
         try:
             sql = (
@@ -53,11 +53,11 @@ class QuestDBBackend:
         finally:
             await conn.close()
 
-        return pd.DataFrame([dict(r) for r in rows])
+        return pl.from_dicts([dict(r) for r in rows])
 
     # ------------------------------------------------------------------
     async def write_rows(
-        self, rows: pd.DataFrame, *, node_id: str, interval: int
+        self, rows: pl.DataFrame, *, node_id: str, interval: int
     ) -> None:
         if self._is_empty(rows):
             return
@@ -109,8 +109,8 @@ class QuestDBBackend:
         return value
 
     @staticmethod
-    def _is_empty(rows: pd.DataFrame | None) -> bool:
-        return rows is None or rows.empty
+    def _is_empty(rows: pl.DataFrame | None) -> bool:
+        return rows is None or rows.is_empty()
 
     def _build_insert_sql(self, payload_columns: list[str]) -> str:
         columns_sql = ", ".join(payload_columns)
@@ -124,14 +124,14 @@ class QuestDBBackend:
         )
 
     def _iter_row_payloads(
-        self, rows: pd.DataFrame, payload_columns: list[str]
+        self, rows: pl.DataFrame, payload_columns: list[str]
     ) -> list[tuple[int, list]]:
         normalized_rows: list[tuple[int, list]] = []
-        for _, row in rows.iterrows():
-            if "ts" not in row.index:
+        for row in rows.iter_rows(named=True):
+            if "ts" not in row:
                 raise KeyError("row missing 'ts' column")
             ts = int(row["ts"])
-            values = [self._normalize_value(row[c]) for c in payload_columns]
+            values = [self._normalize_value(row.get(c)) for c in payload_columns]
             normalized_rows.append((ts, values))
         return normalized_rows
 

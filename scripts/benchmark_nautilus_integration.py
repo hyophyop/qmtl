@@ -294,8 +294,8 @@ async def benchmark_conformance_rules(results: BenchmarkResults) -> None:
 
 def _benchmark_tick_conformance() -> float:
     """Benchmark tick data validation."""
-    import pandas as pd
-    tick_df = pd.DataFrame({
+    import polars as pl
+    tick_df = pl.DataFrame({
         'ts': list(range(1700000000, 1700001000)),
         'price': [100.0 + i * 0.01 for i in range(1000)],
         'size': [1.0 + i * 0.001 for i in range(1000)],
@@ -310,8 +310,8 @@ def _benchmark_tick_conformance() -> float:
 
 def _benchmark_quote_conformance() -> float:
     """Benchmark quote data validation."""
-    import pandas as pd
-    quote_df = pd.DataFrame({
+    import polars as pl
+    quote_df = pl.DataFrame({
         'ts': list(range(1700000000, 1700001000)),
         'bid': [100.0 + i * 0.01 for i in range(1000)],
         'ask': [100.5 + i * 0.01 for i in range(1000)],

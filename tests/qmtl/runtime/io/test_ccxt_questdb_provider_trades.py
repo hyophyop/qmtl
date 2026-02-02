@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import pandas as pd
+import polars as pl
 import pytest
 
 from qmtl.runtime.io import CcxtQuestDBProvider
@@ -10,7 +10,7 @@ class _InMemoryBackend:
     def __init__(self) -> None:
         self._rows: dict[tuple[str, int], dict[int, dict]] = {}
 
-    async def read_range(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+    async def read_range(self, start: int, end: int, *, node_id: str, interval: int) -> pl.DataFrame:
         table = self._rows.get((node_id, interval), {})
         data = []
         for ts in sorted(table):
@@ -18,13 +18,13 @@ class _InMemoryBackend:
                 row = {"ts": ts}
                 row.update(table[ts])
                 data.append(row)
-        return pd.DataFrame(data)
+        return pl.DataFrame(data)
 
-    async def write_rows(self, rows: pd.DataFrame, *, node_id: str, interval: int) -> None:
-        if rows is None or rows.empty:
+    async def write_rows(self, rows: pl.DataFrame, *, node_id: str, interval: int) -> None:
+        if rows is None or rows.is_empty():
             return
         table = self._rows.setdefault((node_id, interval), {})
-        for rec in rows.to_dict("records"):
+        for rec in rows.to_dicts():
             ts = int(rec["ts"])
             payload = {k: v for k, v in rec.items() if k != "ts"}
             table[ts] = payload
@@ -70,5 +70,4 @@ async def test_ccxt_questdb_provider_from_config_trades(monkeypatch):
     node_id = "trades:binance:BTC/USDT"
     await provider.fill_missing(60, 60, node_id=node_id, interval=1)
     df = await backend.read_range(0, 120, node_id=node_id, interval=1)
-    assert df["ts"].tolist() == [60]
-
+    assert df.get_column("ts").to_list() == [60]

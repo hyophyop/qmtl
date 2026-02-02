@@ -9,7 +9,7 @@ from dataclasses import dataclass, replace
 from typing import Any, Callable, Iterable, Literal, Mapping, Sequence, cast
 
 import numpy as np
-import pandas as pd
+import polars as pl
 
 from qmtl.foundation.config import SeamlessConfig
 from qmtl.runtime.sdk.configuration import get_seamless_config
@@ -406,7 +406,7 @@ def _generate_demo_ohlcv_frame(
     interval_ms: int,
     seed: int,
     symbols: Sequence[Any] | None,
-) -> pd.DataFrame:
+) -> pl.DataFrame:
     rng = np.random.default_rng(seed)
     interval_sec = max(1, int(interval_ms / 1000))
     now_bucket = int(time.time()) // interval_sec * interval_sec
@@ -434,7 +434,7 @@ def _generate_demo_ohlcv_frame(
             }
         )
         price = close_px
-    return pd.DataFrame(rows)
+    return pl.DataFrame(rows)
 
 
 __all__ = [

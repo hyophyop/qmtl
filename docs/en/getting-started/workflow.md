@@ -37,7 +37,7 @@ The core cycle for QMTL users is **Develop → Evaluate → Improve**.
 
 ```python
 from qmtl.sdk import Strategy, StreamInput, Node
-import pandas as pd
+import polars as pl
 
 class MyStrategy(Strategy):
     """
@@ -54,19 +54,17 @@ class MyStrategy(Strategy):
         )
         
         def compute_signal(view):
-            df = view.as_frame(price, columns=["close"])
+            frame = view.as_frame(price, columns=["close"]).frame
             
-            ma_short = df["close"].rolling(10).mean()
-            ma_long = df["close"].rolling(50).mean()
+            ma_short = frame.get_column("close").rolling_mean(window_size=10)
+            ma_long = frame.get_column("close").rolling_mean(window_size=50)
             
             # Golden cross: 1, Death cross: -1, Other: 0
-            signal = pd.Series(0, index=df.index)
-            signal[ma_short > ma_long] = 1
-            signal[ma_short < ma_long] = -1
+            signal = (ma_short > ma_long).cast(pl.Int64) - (ma_short < ma_long).cast(pl.Int64)
             
-            returns = df["close"].pct_change()
+            returns = frame.get_column("close").pct_change()
             
-            return pd.DataFrame({
+            return pl.DataFrame({
                 "signal": signal,
                 "returns": returns
             })
@@ -173,14 +171,14 @@ class MyStrategy_v2(Strategy):
         price = StreamInput(tags=["BTC", "price"], interval="5m", period=100)
         
         def compute_signal(view):
-            df = view.as_frame(price, columns=["close"])
+            frame = view.as_frame(price, columns=["close"]).frame
             # ... existing logic
             
             # Stop-loss: Close position on 5%+ decline
-            drawdown = (df["close"] / df["close"].cummax() - 1)
-            signal[drawdown < -0.05] = 0  # Stop-loss
+            drawdown = (frame.get_column("close") / frame.get_column("close").cum_max() - 1)
+            signal = pl.when(drawdown < -0.05).then(0).otherwise(signal)
             
-            return pd.DataFrame({"signal": signal, "returns": returns})
+            return pl.DataFrame({"signal": signal, "returns": returns})
 
 # Version 3: Diversification - Add other assets
 class MyStrategy_v3(Strategy):

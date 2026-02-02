@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import pandas as pd
+import polars as pl
 import pytest
 
 from qmtl.runtime.sdk.conformance import ConformanceReport
@@ -19,7 +19,7 @@ class _StubProvider:
         return self._report
 
     async def fetch(self, start: int, end: int, *, node_id: str, interval: int, **_: object) -> SeamlessFetchResult:
-        frame = pd.DataFrame({"ts": [start, end]})
+        frame = pl.DataFrame({"ts": [start, end]})
         metadata = SeamlessFetchMetadata(
             node_id=node_id,
             interval=interval,

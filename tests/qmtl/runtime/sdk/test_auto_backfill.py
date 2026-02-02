@@ -1,4 +1,4 @@
-import pandas as pd
+import polars as pl
 import pytest
 
 from qmtl.foundation.common.metrics_factory import get_mapping_store
@@ -18,7 +18,7 @@ class InMemoryBackend:
 
     async def read_range(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         table = self._rows.get((node_id, interval), {})
         data = []
         for ts in sorted(table):
@@ -26,15 +26,15 @@ class InMemoryBackend:
                 row = {"ts": ts}
                 row.update(table[ts])
                 data.append(row)
-        return pd.DataFrame(data)
+        return pl.DataFrame(data)
 
     async def write_rows(
-        self, rows: pd.DataFrame, *, node_id: str, interval: int
+        self, rows: pl.DataFrame, *, node_id: str, interval: int
     ) -> None:
-        if rows.empty:
+        if rows.is_empty():
             return
         table = self._rows.setdefault((node_id, interval), {})
-        for record in rows.to_dict("records"):
+        for record in rows.to_dicts():
             ts = int(record["ts"])
             payload = {k: v for k, v in record.items() if k != "ts"}
             table.setdefault(ts, payload)
@@ -58,12 +58,12 @@ class InMemoryBackend:
 
 class StaticFetcher:
     def __init__(self, rows: list[dict]) -> None:
-        self._frame = pd.DataFrame(rows)
+        self._frame = pl.DataFrame(rows)
 
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
-        return self._frame.copy()
+    ) -> pl.DataFrame:
+        return self._frame.clone()
 
 
 class ReplayBuffer:
@@ -94,7 +94,7 @@ async def test_fetcher_backfill_strategy_records_metrics() -> None:
     await provider.fill_missing(120, 180, node_id="node", interval=60)
 
     data = await backend.read_range(60, 240, node_id="node", interval=60)
-    assert list(data["ts"]) == [120, 180]
+    assert data.get_column("ts").to_list() == [120, 180]
 
     key = ("fetcher", "node", "60")
     requests_store = get_mapping_store(metrics.history_auto_backfill_requests_total, dict)
@@ -122,7 +122,7 @@ async def test_live_replay_strategy_replays_from_buffer() -> None:
     await provider.fill_missing(60, 120, node_id="node", interval=60)
 
     data = await backend.read_range(0, 180, node_id="node", interval=60)
-    assert list(data["ts"]) == [60, 120]
+    assert data.get_column("ts").to_list() == [60, 120]
 
     coverage = await provider.coverage(node_id="node", interval=60)
     assert coverage == [(60, 120)]

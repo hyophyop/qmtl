@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-import pandas as pd
+import polars as pl
 import pytest
 
 from qmtl.runtime.io.ccxt_fetcher import (

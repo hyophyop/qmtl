@@ -1,4 +1,5 @@
-import pandas as pd
+from datetime import datetime, timezone
+import polars as pl
 import pytest
 
 from qmtl.foundation.schema import validate_schema
@@ -6,9 +7,13 @@ from qmtl.runtime.sdk.exceptions import InvalidSchemaError
 
 
 def test_missing_column_raises_friendly_error():
-    df = pd.DataFrame(
+    df = pl.DataFrame(
         {
-            "ts": pd.date_range("2024-01-01", periods=1, tz="UTC"),
+            "ts": pl.Series(
+                "ts",
+                [datetime(2024, 1, 1, tzinfo=timezone.utc)],
+                dtype=pl.Datetime(time_unit="ns", time_zone="UTC"),
+            ),
             "open": [1.0],
             "high": [1.0],
             "low": [1.0],
@@ -23,9 +28,13 @@ def test_missing_column_raises_friendly_error():
 
 
 def test_valid_bar_schema_passes():
-    df = pd.DataFrame(
+    df = pl.DataFrame(
         {
-            "ts": pd.date_range("2024-01-01", periods=1, tz="UTC"),
+            "ts": pl.Series(
+                "ts",
+                [datetime(2024, 1, 1, tzinfo=timezone.utc)],
+                dtype=pl.Datetime(time_unit="ns", time_zone="UTC"),
+            ),
             "open": [1.0],
             "high": [1.0],
             "low": [1.0],
@@ -35,4 +44,3 @@ def test_valid_bar_schema_passes():
     )
 
     validate_schema(df, "bar")  # should not raise
-

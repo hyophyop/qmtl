@@ -199,7 +199,7 @@ def parse_qmtl_node_id(node_id: str) -> NautilusIdentifier:
 # qmtl/runtime/io/nautilus_catalog_source.py
 
 from typing import Optional
-import pandas as pd
+import polars as pl
 from qmtl.runtime.sdk.seamless_data_provider import (
     DataSource,
     DataSourcePriority,
@@ -232,7 +232,7 @@ class NautilusCatalogDataSource:
     
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Fetch data from Nautilus Catalog."""
         identifier = parse_qmtl_node_id(node_id)
         
@@ -271,7 +271,7 @@ class NautilusCatalogDataSource:
         self._coverage_cache[cache_key] = (time.time(), ranges)
         return ranges
     
-    def _fetch_bars(self, identifier, start_ns, end_ns) -> pd.DataFrame:
+    def _fetch_bars(self, identifier, start_ns, end_ns) -> pl.DataFrame:
         """Fetch OHLCV bars from Nautilus catalog."""
         bars = self.catalog.read_bars(
             instrument=identifier.instrument,
@@ -280,64 +280,74 @@ class NautilusCatalogDataSource:
             end=end_ns,
         )
         # Convert to DataFrame if needed
-        if not isinstance(bars, pd.DataFrame):
-            bars = pd.DataFrame([bar.to_dict() for bar in bars])
+        if not isinstance(bars, pl.DataFrame):
+            bars = pl.DataFrame([bar.to_dict() for bar in bars])
         return bars
     
-    def _fetch_ticks(self, identifier, start_ns, end_ns) -> pd.DataFrame:
+    def _fetch_ticks(self, identifier, start_ns, end_ns) -> pl.DataFrame:
         """Fetch trade ticks from Nautilus catalog."""
         ticks = self.catalog.read_ticks(
             instrument=identifier.instrument,
             start=start_ns,
             end=end_ns,
         )
-        if not isinstance(ticks, pd.DataFrame):
-            ticks = pd.DataFrame([tick.to_dict() for tick in ticks])
+        if not isinstance(ticks, pl.DataFrame):
+            ticks = pl.DataFrame([tick.to_dict() for tick in ticks])
         return ticks
     
-    def _fetch_quotes(self, identifier, start_ns, end_ns) -> pd.DataFrame:
+    def _fetch_quotes(self, identifier, start_ns, end_ns) -> pl.DataFrame:
         """Fetch quote ticks from Nautilus catalog."""
         quotes = self.catalog.read_quotes(
             instrument=identifier.instrument,
             start=start_ns,
             end=end_ns,
         )
-        if not isinstance(quotes, pd.DataFrame):
-            quotes = pd.DataFrame([quote.to_dict() for quote in quotes])
+        if not isinstance(quotes, pl.DataFrame):
+            quotes = pl.DataFrame([quote.to_dict() for quote in quotes])
         return quotes
     
     def _normalize_to_qmtl(
-        self, df: pd.DataFrame, data_type: str
-    ) -> pd.DataFrame:
+        self, df: pl.DataFrame, data_type: str
+    ) -> pl.DataFrame:
         """Convert Nautilus schema to QMTL schema."""
-        if df.empty:
+        if df.is_empty():
             return df
         
-        result = pd.DataFrame()
+        result = pl.DataFrame()
         
         # Convert timestamp from nanoseconds to seconds
         if 'ts_event' in df.columns:
-            result['ts'] = (df['ts_event'] / 1_000_000_000).astype('int64')
+            result = result.with_columns(
+                (pl.col('ts_event') / 1_000_000_000).cast(pl.Int64).alias('ts')
+            )
         elif 'ts_init' in df.columns:
-            result['ts'] = (df['ts_init'] / 1_000_000_000).astype('int64')
+            result = result.with_columns(
+                (pl.col('ts_init') / 1_000_000_000).cast(pl.Int64).alias('ts')
+            )
         
         # Convert Decimal to float
         if data_type == 'bar':
             for col in ['open', 'high', 'low', 'close', 'volume']:
                 if col in df.columns:
-                    result[col] = df[col].astype('float64')
+                    result = result.with_columns(pl.col(col).cast(pl.Float64))
         
         elif data_type == 'tick':
-            result['price'] = df['price'].astype('float64')
-            result['size'] = df['size'].astype('float64')
+            result = result.with_columns(
+                pl.col('price').cast(pl.Float64),
+                pl.col('size').cast(pl.Float64),
+            )
             if 'aggressor_side' in df.columns:
-                result['side'] = df['aggressor_side'].str.lower()
+                result = result.with_columns(
+                    pl.col('aggressor_side').str.to_lowercase().alias('side')
+                )
         
         elif data_type == 'quote':
-            result['bid'] = df['bid_price'].astype('float64')
-            result['ask'] = df['ask_price'].astype('float64')
-            result['bid_size'] = df['bid_size'].astype('float64')
-            result['ask_size'] = df['ask_size'].astype('float64')
+            result = result.with_columns(
+                pl.col('bid_price').cast(pl.Float64).alias('bid'),
+                pl.col('ask_price').cast(pl.Float64).alias('ask'),
+                pl.col('bid_size').cast(pl.Float64),
+                pl.col('ask_size').cast(pl.Float64),
+            )
         
         return result
     
@@ -436,10 +446,12 @@ QMTL의 `ConformancePipeline`은 OHLCV 바 데이터를 검증/정규화한다:
 ```python
 # qmtl/runtime/sdk/conformance.py에 추가
 
+import polars as pl
+
 class TickConformanceRule:
     """Trade tick 데이터 검증 규칙."""
     
-    def validate(self, df: pd.DataFrame) -> ConformanceReport:
+    def validate(self, df: pl.DataFrame) -> ConformanceReport:
         warnings = []
         
         # Required columns
@@ -449,13 +461,13 @@ class TickConformanceRule:
             warnings.append(f"Missing columns: {missing}")
         
         # Price/size must be positive
-        if (df['price'] <= 0).any():
+        if df.get_column('price').le(0).any():
             warnings.append("Non-positive prices detected")
-        if (df['size'] <= 0).any():
+        if df.get_column('size').le(0).any():
             warnings.append("Non-positive sizes detected")
         
         # Timestamp must be sorted
-        if not df['ts'].is_monotonic_increasing:
+        if not df.get_column('ts').is_sorted():
             warnings.append("Timestamps not sorted")
         
         return ConformanceReport(warnings=warnings)
@@ -463,7 +475,7 @@ class TickConformanceRule:
 class QuoteConformanceRule:
     """Quote tick 데이터 검증 규칙."""
     
-    def validate(self, df: pd.DataFrame) -> ConformanceReport:
+    def validate(self, df: pl.DataFrame) -> ConformanceReport:
         warnings = []
         
         required = ['ts', 'bid', 'ask', 'bid_size', 'ask_size']
@@ -472,11 +484,11 @@ class QuoteConformanceRule:
             warnings.append(f"Missing columns: {missing}")
         
         # Bid must be less than ask
-        if (df['bid'] >= df['ask']).any():
+        if df.get_column('bid').ge(df.get_column('ask')).any():
             warnings.append("Crossed quotes detected (bid >= ask)")
         
         # Sizes must be positive
-        if (df['bid_size'] <= 0).any() or (df['ask_size'] <= 0).any():
+        if df.get_column('bid_size').le(0).any() or df.get_column('ask_size').le(0).any():
             warnings.append("Non-positive quote sizes detected")
         
         return ConformanceReport(warnings=warnings)
@@ -731,19 +743,20 @@ async def test_end_to_end_nautilus_seamless(tmp_path):
 2. **타임스탬프 변환**: 나노초 → 초 변환이 대량 데이터에서 부담
    - 해결: Numpy vectorized 연산 사용
 3. **Decimal → float 변환**: Nautilus의 Decimal이 느림
-   - 해결: Pandas bulk 변환
+   - 해결: polars bulk 변환
 
 ### 최적화
 
 ```python
 # 타임스탬프 변환 최적화
-import numpy as np
+import polars as pl
 
-def convert_timestamps(df: pd.DataFrame) -> pd.DataFrame:
+def convert_timestamps(df: pl.DataFrame) -> pl.DataFrame:
     """Vectorized timestamp conversion."""
     # Instead of: df['ts'] = df['ts_event'].apply(lambda x: x // 1_000_000_000)
-    df['ts'] = (df['ts_event'].values // 1_000_000_000).astype('int64')
-    return df
+    return df.with_columns(
+        (pl.col('ts_event') // 1_000_000_000).cast(pl.Int64).alias('ts')
+    )
 ```
 
 ## 대안 검토
@@ -786,9 +799,11 @@ Nautilus Trader의 라이브 데이터 시스템은 `TradingNode` 런타임 내�
 
 **QMTL LiveDataFeed 프로토콜:**
 ```python
+import polars as pl
+
 class LiveDataFeed(Protocol):
     async def is_live_available(self, *, node_id: str, interval: int) -> bool: ...
-    async def subscribe(self, *, node_id: str, interval: int) -> AsyncIterator[tuple[int, pd.DataFrame]]: ...
+    async def subscribe(self, *, node_id: str, interval: int) -> AsyncIterator[tuple[int, pl.DataFrame]]: ...
 ```
 
 ### 통합 전략: 권장 접근법

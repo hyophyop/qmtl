@@ -3,10 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Optional
 from pathlib import Path
-import pandas as pd
+import polars as pl
 import numpy as np
 import asyncio
 import logging
+import time
 
 from qmtl.runtime.sdk.data_io import HistoryProvider, DataFetcher
 from qmtl.runtime.sdk.ohlcv_nodeid import validate as _validate_ohlcv_node_id
@@ -94,11 +95,12 @@ class HistoryProviderDataSource:
                     return True
             return False
         except Exception:
-            return False
+            # If coverage probing fails, fall back to attempting fetch.
+            return True
 
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         return await self.provider.fetch(start, end, node_id=node_id, interval=interval)
 
     async def coverage(
@@ -138,7 +140,7 @@ class DataFetcherAutoBackfiller:
             sample = await self.fetcher.fetch(
                 start, sample_end, node_id=node_id, interval=interval
             )
-            return not sample.empty
+            return not sample.is_empty()
         except Exception as e:
             logger.warning(f"Backfill check failed for {node_id}: {e}")
             return False
@@ -301,7 +303,7 @@ class DataFetcherAutoBackfiller:
         interval: int,
         batch_id: str,
         attempt: int,
-    ) -> pd.DataFrame | None:
+    ) -> pl.DataFrame | None:
         try:
             await storage_provider.fill_missing(start, end, node_id=node_id, interval=interval)
             frame = await storage_provider.fetch(start, end, node_id=node_id, interval=interval)
@@ -336,7 +338,7 @@ class DataFetcherAutoBackfiller:
         interval: int,
         batch_id: str,
         attempt: int,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         try:
             frame = await self.fetcher.fetch(start, end, node_id=node_id, interval=interval)
         except Exception as exc:
@@ -372,7 +374,7 @@ class DataFetcherAutoBackfiller:
         target_storage: Optional[DataSource] = None,
         attempt: int = 1,
         batch_id: Optional[str] = None,
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Synchronously backfill data; materialize via storage when possible."""
         batch_identifier = self._build_batch_id(
             batch_id=batch_id, node_id=node_id, interval=interval, start=start, end=end
@@ -471,7 +473,7 @@ class LiveDataFeedImpl:
             # Poll on aligned bar boundaries
             while self._subscriptions.get(key, False):
                 try:
-                    now = int(pd.Timestamp.now().timestamp())
+                    now = int(time.time())
                     current_bucket = now - (now % interval)
 
                     data = await self.live_fetcher.fetch(
@@ -481,12 +483,12 @@ class LiveDataFeedImpl:
                         interval=interval,
                     )
 
-                    if not data.empty:
+                    if not data.is_empty():
                         yield (current_bucket, data)
 
                     # Sleep until next bucket boundary
                     next_bucket = current_bucket + interval
-                    now2 = int(pd.Timestamp.now().timestamp())
+                    now2 = int(time.time())
                     sleep_s = max(0, next_bucket - now2)
                     await asyncio.sleep(sleep_s or 0.001)
 
@@ -512,76 +514,74 @@ class _FrameMappingDataSource(DataSource):
 
     def __init__(self) -> None:
         self.priority = DataSourcePriority.STORAGE
-        self._frames: dict[tuple[str, int], pd.DataFrame] = {}
+        self._frames: dict[tuple[str, int], pl.DataFrame] = {}
 
-    def register(self, *, node_id: str, interval: int, frame: pd.DataFrame) -> None:
+    def register(self, *, node_id: str, interval: int, frame: pl.DataFrame) -> None:
         if "ts" not in frame.columns:
             raise KeyError("frame missing 'ts' column")
-        normalized = frame.copy()
-        ts = normalized["ts"]
-        normalized_ts: pd.Series
-        if pd.api.types.is_integer_dtype(ts):
-            normalized_ts = ts.astype("int64")
+        normalized = frame.clone()
+        ts = normalized.get_column("ts")
+        if ts.dtype.is_integer():
+            normalized_ts = ts.cast(pl.Int64, strict=False)
         else:
-            numeric = pd.to_numeric(ts, errors="coerce")
-            if numeric.notna().all():
-                # ``ts`` already encodes epoch seconds but may be stored as
-                # floats/objects (e.g., CSV with missing values). Ensure the
-                # representation is integral rather than interpreting it as
-                # nanosecond timestamps.
-                remainder = np.modf(numeric.to_numpy(dtype="float64"))[0]
+            numeric = ts.cast(pl.Float64, strict=False)
+            if numeric.is_not_null().all():
+                remainder = np.modf(numeric.to_numpy())[0]
                 if not np.allclose(remainder, 0):
                     raise TypeError(
                         "ts column must be integer seconds or datetime-like"
                     )
-                normalized_ts = numeric.astype("int64")
+                normalized_ts = numeric.cast(pl.Int64, strict=False)
             else:
-                # Best-effort coercion from datetime-like values to epoch seconds.
                 try:
-                    dt = pd.to_datetime(ts, utc=True)
-                    normalized_ts = (dt.view("int64") // 1_000_000_000).astype("int64")
+                    dt = ts.cast(pl.Datetime(time_unit="ns", time_zone="UTC"), strict=False)
+                    if dt.is_null().any():
+                        raise TypeError(
+                            "ts column must be integer seconds or datetime-like"
+                        )
+                    normalized_ts = dt.dt.timestamp("s").cast(pl.Int64)
                 except Exception as exc:  # pragma: no cover - defensive guard
                     raise TypeError(
                         "ts column must be integer seconds or datetime-like"
                     ) from exc
 
-        normalized["ts"] = normalized_ts
-
-        normalized = normalized.sort_values("ts").reset_index(drop=True)
+        normalized = normalized.with_columns(normalized_ts.alias("ts")).sort("ts")
         self._frames[(str(node_id), int(interval))] = normalized
 
     async def is_available(
         self, start: int, end: int, *, node_id: str, interval: int
     ) -> bool:
         frame = self._frames.get((str(node_id), int(interval)))
-        if frame is None or frame.empty:
+        if frame is None or frame.is_empty():
             return False
-        ts_min = int(frame["ts"].iloc[0])
-        ts_max = int(frame["ts"].iloc[-1])
+        ts_col = frame.get_column("ts")
+        ts_min = int(ts_col[0])
+        ts_max = int(ts_col[-1])
         # Treat data as available when the requested window intersects the
         # stored range. Fail-fast semantics are enforced by the caller.
         return not (end <= ts_min or start > ts_max)
 
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         frame = self._frames.get((str(node_id), int(interval)))
-        if frame is None or frame.empty:
-            return pd.DataFrame(columns=["ts"])
-        mask = (frame["ts"] >= int(start)) & (frame["ts"] < int(end))
-        result = frame.loc[mask]
-        if result.empty:
-            return pd.DataFrame(columns=frame.columns)
-        return result.reset_index(drop=True)
+        if frame is None or frame.is_empty():
+            return pl.DataFrame(schema=[("ts", pl.Int64)])
+        result = frame.filter((pl.col("ts") >= int(start)) & (pl.col("ts") < int(end)))
+        if result.is_empty():
+            schema = [(name, dtype) for name, dtype in frame.schema.items()]
+            return pl.DataFrame(schema=schema)
+        return result
 
     async def coverage(
         self, *, node_id: str, interval: int
     ) -> list[tuple[int, int]]:
         frame = self._frames.get((str(node_id), int(interval)))
-        if frame is None or frame.empty:
+        if frame is None or frame.is_empty():
             return []
-        ts_min = int(frame["ts"].iloc[0])
-        ts_max = int(frame["ts"].iloc[-1])
+        ts_col = frame.get_column("ts")
+        ts_min = int(ts_col[0])
+        ts_max = int(ts_col[-1])
         return [(ts_min, ts_max)]
 
 
@@ -829,7 +829,7 @@ class InMemorySeamlessProvider(SeamlessDataProvider):
     def register_frame(
         self,
         stream: Any,
-        frame: pd.DataFrame,
+        frame: pl.DataFrame,
         *,
         ts_col: str = "ts",
     ) -> None:
@@ -849,7 +849,7 @@ class InMemorySeamlessProvider(SeamlessDataProvider):
         if ts_col != "ts":
             if ts_col not in payload.columns:
                 raise KeyError(f"timestamp column {ts_col!r} not found")
-            payload = payload.rename(columns={ts_col: "ts"})
+            payload = payload.rename({ts_col: "ts"})
         self._storage.register(node_id=str(node_id), interval=int(interval), frame=payload)
 
     def register_csv(
@@ -862,11 +862,11 @@ class InMemorySeamlessProvider(SeamlessDataProvider):
     ) -> None:
         """Register a CSV file as history for ``stream``.
 
-        The CSV is loaded via :func:`pandas.read_csv` and passed to
+        The CSV is loaded via :func:`polars.read_csv` and passed to
         :meth:`register_frame`.
         """
 
-        frame = pd.read_csv(path, **read_csv_kwargs)
+        frame = pl.read_csv(path, **read_csv_kwargs)
         self.register_frame(stream, frame, ts_col=ts_col)
 
 

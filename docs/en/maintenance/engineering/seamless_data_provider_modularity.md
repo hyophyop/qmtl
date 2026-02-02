@@ -41,7 +41,7 @@ Goals addressed in this change:
 ## `_SeamlessFetchPlanner`
 - Abstracts per-source coverage probing and fetching via `_consume_source`.
 - Updates remaining gaps with `_RangeOperations.subtract` to preserve interval alignment.
-- Falls back to `_execute_backfill_range` when no source can serve the outstanding window and normalizes results with `pd.concat`.
+- Falls back to `_execute_backfill_range` when no source can serve the outstanding window and normalizes results with `pl.concat`.
 
 ## `_RangeOperations`
 - Provides canonical implementations for merge, intersection, and subtraction.

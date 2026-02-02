@@ -6,7 +6,8 @@ for transparent auto-backfill and live data integration.
 """
 
 import asyncio
-import pandas as pd
+import time
+import polars as pl
 
 from qmtl.runtime.io.seamless_provider import EnhancedQuestDBProvider
 from qmtl.runtime.sdk.seamless_data_provider import DataAvailabilityStrategy
@@ -19,7 +20,7 @@ class ExampleMarketDataFetcher:
     
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Simulate fetching market data from external API."""
         # In real implementation, this would call external market data APIs
         print(f"Fetching {node_id} data from {start} to {end} with interval {interval}")
@@ -37,7 +38,7 @@ class ExampleMarketDataFetcher:
                 'volume': 1000 + (ts % 500),           # Sample volume data
             })
         
-        return pd.DataFrame(data)
+        return pl.DataFrame(data)
 
 
 class ExampleLiveDataFetcher:
@@ -45,16 +46,15 @@ class ExampleLiveDataFetcher:
     
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Simulate fetching current/live market data."""
         print(f"Fetching live {node_id} data from {start} to {end}")
         
         # In real implementation, this would connect to live data feeds
-        current_time = pd.Timestamp.now().timestamp()
-        current_time = int(current_time)
+        current_time = int(time.time())
         
         if start <= current_time < end:
-            return pd.DataFrame([{
+            return pl.DataFrame([{
                 'ts': current_time,
                 'node_id': node_id,
                 'interval': interval,
@@ -62,7 +62,7 @@ class ExampleLiveDataFetcher:
                 'volume': 1500,  # Live volume
             }])
         
-        return pd.DataFrame()
+        return pl.DataFrame()
 
 
 async def example_basic_usage():
@@ -99,7 +99,7 @@ async def example_basic_usage():
     )
     
     print(f"Retrieved {len(data)} rows of data")
-    print(data.head() if not data.empty else "No data retrieved")
+    print(data.head() if not data.is_empty() else "No data retrieved")
 
 
 async def example_strategy_comparison():
@@ -276,7 +276,7 @@ async def example_custom_backfiller():
         async def backfill(
             self, start: int, end: int, *, node_id: str, interval: int,
             target_storage=None
-        ) -> pd.DataFrame:
+        ) -> pl.DataFrame:
             print(f"Custom backfilling {node_id} from {start} to {end}")
             
             # Custom backfill logic here
@@ -295,7 +295,7 @@ async def example_custom_backfiller():
                     'price': 100.0 + (ts % 1000) * 0.01,
                 })
             
-            df = pd.DataFrame(data)
+            df = pl.DataFrame(data)
             
             # Store in target storage if provided
             if target_storage and hasattr(target_storage, 'storage_provider'):

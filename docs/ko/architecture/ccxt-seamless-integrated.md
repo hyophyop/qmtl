@@ -332,10 +332,12 @@ flowchart LR
 적재 워커는 안정화된 프레임을 아티팩트 플레인으로 승격할 책임이 있습니다. 아래 의사 코드는 하이브리드 초안의 여러 조각을 대체하는 정식 시퀀스입니다.
 
 ```python
-def conform_frame(df, interval_s) -> pd.DataFrame:
-    df = df.sort_values("ts")
-    df["ts"] = (df["ts"] // interval_s) * interval_s
-    df = df.drop_duplicates(subset=["ts"], keep="last")
+import polars as pl
+
+def conform_frame(df, interval_s) -> pl.DataFrame:
+    df = df.sort("ts")
+    df = df.with_columns(((pl.col("ts") // interval_s) * interval_s).alias("ts"))
+    df = df.unique(subset=["ts"], keep="last")
     # dtype 검증 및 갭 플래깅 로직 추가...
     return df
 
@@ -345,7 +347,7 @@ def compute_fingerprint(df, meta: dict) -> str:
 
 def maybe_publish_artifact(df, node_id, start, end, conf_ver, as_of, store):
     stable_df = drop_tail(df, bars=2)
-    if stable_df.empty:
+    if stable_df.is_empty():
         return None
     meta = {
         "node_id": node_id,

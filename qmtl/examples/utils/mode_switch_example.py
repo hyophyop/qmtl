@@ -8,7 +8,7 @@ client-side mode flag.
 from __future__ import annotations
 
 import argparse
-import pandas as pd
+import polars as pl
 
 from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import Node, StreamInput
@@ -20,9 +20,10 @@ class ModeSwitchStrategy(Strategy):
     def setup(self) -> None:
         price = StreamInput(interval="60s", period=30)
 
-        def ma(view) -> pd.DataFrame:
-            df = pd.DataFrame([v for _, v in view[price][60]])
-            return pd.DataFrame({"ma": df["close"].rolling(5).mean()})
+        def ma(view) -> pl.DataFrame:
+            df = pl.DataFrame([v for _, v in view[price][60]])
+            ma = df.get_column("close").rolling_mean(window_size=5)
+            return pl.DataFrame({"ma": ma})
 
         ma_node = Node(input=price, compute_fn=ma, name="moving_avg")
         self.add_nodes([price, ma_node])

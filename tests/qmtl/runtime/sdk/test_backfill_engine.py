@@ -2,7 +2,7 @@ import asyncio
 import logging
 from typing import Any
 
-import pandas as pd
+import polars as pl
 import pytest
 
 from qmtl.foundation.common.metrics_factory import get_mapping_store
@@ -13,7 +13,7 @@ from qmtl.runtime.sdk.backfill_engine import BackfillEngine
 class DummySource:
     def __init__(
         self,
-        df: pd.DataFrame,
+        df: pl.DataFrame,
         delay: float = 0.05,
         fail: int = 0,
         metadata: Any | None = None,
@@ -28,7 +28,7 @@ class DummySource:
         self.metadata = metadata
         self.last_fetch_metadata = None
 
-    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pl.DataFrame:
         self.calls += 1
         self.started.set()
         if self.calls <= self.fail:
@@ -49,7 +49,7 @@ class DummySource:
 @pytest.mark.asyncio
 async def test_concurrent_backfill_and_live_append():
     node = SourceNode(interval="60s", period=5)
-    df = pd.DataFrame([
+    df = pl.DataFrame([
         {"ts": 60, "value": 1},
         {"ts": 120, "value": 2},
         {"ts": 180, "value": 3},
@@ -76,7 +76,7 @@ async def test_concurrent_backfill_and_live_append():
 @pytest.mark.asyncio
 async def test_retry_logic():
     node = SourceNode(interval="60s", period=2)
-    df = pd.DataFrame([{"ts": 60, "v": 1}])
+    df = pl.DataFrame([{"ts": 60, "v": 1}])
     src = DummySource(df, delay=0.01, fail=1)
     engine = BackfillEngine(src, max_retries=2)
     engine.submit(node, 60, 60)
@@ -92,7 +92,7 @@ async def test_metrics_and_logs(caplog):
     sdk_metrics.reset_metrics()
 
     node = SourceNode(interval="60s", period=1)
-    df = pd.DataFrame([{"ts": 60, "v": 1}])
+    df = pl.DataFrame([{"ts": 60, "v": 1}])
     src = DummySource(df, delay=0.0, fail=1)
     engine = BackfillEngine(src, max_retries=2)
 
@@ -121,7 +121,7 @@ async def test_failure_metrics_and_logs(caplog):
     sdk_metrics.reset_metrics()
 
     node = SourceNode(interval="60s", period=1)
-    df = pd.DataFrame([])
+    df = pl.DataFrame([])
     src = DummySource(df, delay=0.0, fail=5)
     engine = BackfillEngine(src, max_retries=2)
 
@@ -143,7 +143,7 @@ async def test_failure_metrics_and_logs(caplog):
 
 @pytest.mark.asyncio
 async def test_streaminput_load_history():
-    df = pd.DataFrame([
+    df = pl.DataFrame([
         {"ts": 60, "v": 1},
         {"ts": 120, "v": 2},
     ])
@@ -195,7 +195,7 @@ async def test_metadata_publish(monkeypatch):
         artifact=artifact,
     )
 
-    df = pd.DataFrame([
+    df = pl.DataFrame([
         {"ts": 60, "v": 1},
         {"ts": 120, "v": 2},
     ])
@@ -261,7 +261,7 @@ async def test_metadata_publish_handles_failure(monkeypatch, caplog):
         artifact=None,
     )
 
-    df = pd.DataFrame([], columns=["ts", "v"])
+    df = pl.DataFrame(schema={"ts": pl.Int64, "v": pl.Float64})
     src = DummySource(df, delay=0.0, metadata=metadata)
     engine = BackfillEngine(src)
 

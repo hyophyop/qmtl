@@ -20,8 +20,6 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 
-import pandas as pd
-
 from qmtl.runtime.io import (
     CcxtBackfillConfig,
     CcxtOHLCVFetcher,
@@ -98,7 +96,7 @@ async def fetch_history(
     )
     frame = result.frame
     print(f"- rows: {len(frame)}")
-    if not frame.empty:
+    if not frame.is_empty():
         print(frame.head())
 
     print("▶ Coverage report")
@@ -131,7 +129,7 @@ async def main() -> None:
             interval=settings.interval_seconds,
         )
         latest = latest_result.frame
-        if not latest.empty:
+        if not latest.is_empty():
             print("- latest bars")
             print(latest.tail())
         else:

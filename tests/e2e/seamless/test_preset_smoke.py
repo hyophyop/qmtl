@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-import pandas as pd
+import polars as pl
 import pytest
 
 from qmtl.runtime.sdk import build_seamless_assembly
@@ -12,22 +12,21 @@ from qmtl.runtime.sdk.seamless_data_provider import SeamlessDataProvider, DataSo
 
 class _StubStorage:
     def __init__(self) -> None:
-        self.rows = pd.DataFrame()
+        self.rows = pl.DataFrame()
 
-    async def read_range(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+    async def read_range(self, start: int, end: int, *, node_id: str, interval: int) -> pl.DataFrame:
         df = self.rows
-        if df.empty:
+        if df.is_empty():
             return df
-        mask = (df["ts"] >= start) & (df["ts"] < end)
-        return df[mask].copy().reset_index(drop=True)
+        return df.filter((pl.col("ts") >= start) & (pl.col("ts") < end))
 
-    async def write_rows(self, rows: pd.DataFrame, *, node_id: str, interval: int) -> None:
-        self.rows = pd.concat([self.rows, rows], ignore_index=True) if not rows.empty else self.rows
+    async def write_rows(self, rows: pl.DataFrame, *, node_id: str, interval: int) -> None:
+        self.rows = pl.concat([self.rows, rows], how="vertical") if not rows.is_empty() else self.rows
 
     async def coverage(self, *, node_id: str, interval: int) -> list[tuple[int, int]]:
-        if self.rows.empty:
+        if self.rows.is_empty():
             return []
-        ts = sorted(self.rows["ts"].tolist())
+        ts = sorted(self.rows.get_column("ts").to_list())
         out: list[tuple[int, int]] = []
         start = prev = ts[0]
         for t in ts[1:]:
@@ -49,7 +48,7 @@ class _StorageSource(DataSource):  # type: ignore[misc]
         cov = await self.coverage(node_id=node_id, interval=interval)
         return any(s <= start and end <= e for s, e in cov)
 
-    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pl.DataFrame:
         return await self.backend.read_range(start, end, node_id=node_id, interval=interval)
 
     async def coverage(self, *, node_id: str, interval: int) -> list[tuple[int, int]]:
@@ -71,7 +70,7 @@ async def test_preset_builder_chaining_smoke(monkeypatch):
             self._args = args
             self._kwargs = kwargs
 
-        async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
+        async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pl.DataFrame:
             return await backend.read_range(start, end, node_id=node_id, interval=interval)
 
         async def coverage(self, *, node_id: str, interval: int) -> list[tuple[int, int]]:
@@ -79,7 +78,7 @@ async def test_preset_builder_chaining_smoke(monkeypatch):
 
         async def fill_missing(self, start: int, end: int, *, node_id: str, interval: int) -> None:
             # simulate a backfill by writing a contiguous block
-            rows = pd.DataFrame({"ts": list(range(start, end, interval))})
+            rows = pl.DataFrame({"ts": list(range(start, end, interval))})
             await backend.write_rows(rows, node_id=node_id, interval=interval)
 
     monkeypatch.setattr("qmtl.runtime.io.seamless_presets.QuestDBLoader", _FakeLoader)
@@ -103,14 +102,14 @@ async def test_preset_builder_chaining_smoke(monkeypatch):
     assert await provider.ensure_data_available(start, end, node_id=node_id, interval=interval) is False
 
     # Simulate that backfill (via preset-created backfiller) has written rows
-    await backend.write_rows(pd.DataFrame({"ts": [0, 60, 120, 180, 240]}), node_id=node_id, interval=interval)
+    await backend.write_rows(pl.DataFrame({"ts": [0, 60, 120, 180, 240]}), node_id=node_id, interval=interval)
     ok = await provider.ensure_data_available(start, end, node_id=node_id, interval=interval)
     assert ok is False  # still missing last bar
-    await backend.write_rows(pd.DataFrame({"ts": [300]}), node_id=node_id, interval=interval)
+    await backend.write_rows(pl.DataFrame({"ts": [300]}), node_id=node_id, interval=interval)
     ok2 = await provider.ensure_data_available(start, end, node_id=node_id, interval=interval)
     assert ok2 is True
 
     df = await provider.fetch(start, end + interval, node_id=node_id, interval=interval)
     # Storage coverage treats the right bound as inclusive; Seamless fetch calls
     # storage with [start, end) semantics, so last materialized bar is end - interval.
-    assert not df.empty and df["ts"].tolist()[-1] == end - interval
+    assert not df.is_empty() and df.get_column("ts").to_list()[-1] == end - interval

@@ -15,7 +15,7 @@ last_modified: 2025-08-21
 
 `HistoryProvider`는 `(node_id, interval)` 쌍에 대한 과거 데이터를 제공합니다. 
 비동기 `fetch(start, end, *, node_id, interval)` 메서드를 구현해야 하며, 
-타임스탬프 컬럼 `ts`와 페이로드 필드를 포함하는 `pandas.DataFrame`을 반환합니다. 
+타임스탬프 컬럼 `ts`와 페이로드 필드를 포함하는 `polars.DataFrame`을 반환합니다. 
 메서드 시그니처는 :py:meth:`DataFetcher.fetch`를 반영하며, 프로바이더는 외부 서비스에서 
 행을 가져올 때 이를 위임할 수 있습니다. 고급 프로바이더는 선택적으로 비동기 헬퍼를 노출할 수 있습니다:
 
@@ -59,11 +59,11 @@ source = QuestDBHistoryProvider(
 
 ```python
 import httpx
-import pandas as pd
+import polars as pl
 from qmtl.runtime.sdk import DataFetcher
 
 class BinanceFetcher:
-    async def fetch(self, start: int, end: int, *, node_id: str, interval: str) -> pd.DataFrame:
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: str) -> pl.DataFrame:
         url = (
             "https://api.binance.com/api/v3/klines"
             f"?symbol={node_id}&interval={interval}"
@@ -71,7 +71,7 @@ class BinanceFetcher:
         )
         async with httpx.AsyncClient() as client:
             data = (await client.get(url)).json()
-        return pd.DataFrame(
+        return pl.DataFrame(
             [
                 {"ts": int(r[0] / 1000), "open": float(r[1]), "close": float(r[4])}
                 for r in data
@@ -92,7 +92,7 @@ loader = QuestDBHistoryProvider(
 프로바이더처럼 레코더도 ``stream.node_id``에서 테이블 이름을 추론하기 위해 ``bind_stream()``을 구현할 수 있습니다.
 
 커스텀 프로바이더나 페처를 빌드할 때는 이러한 메서드 시그니처를 따르고 ``ts`` 컬럼이 있는 
-``pandas.DataFrame`` 객체를 반환하기만 하면 됩니다. 서브클래스는 선택 사항입니다 - 프로토콜을 
+``polars.DataFrame`` 객체를 반환하기만 하면 됩니다. 서브클래스는 선택 사항입니다 - 프로토콜을 
 준수하는 모든 객체가 SDK와 함께 작동합니다.
 
 ## 자동 백필 전략

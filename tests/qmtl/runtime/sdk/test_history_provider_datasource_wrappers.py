@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import pandas as pd
+import polars as pl
 
 from qmtl.runtime.io.seamless_provider import (
     CacheDataSource,
@@ -12,8 +12,8 @@ from qmtl.runtime.sdk.seamless_data_provider import DataSourcePriority
 
 
 class _DummyHistoryProvider(HistoryProvider):
-    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pd.DataFrame:
-        return pd.DataFrame()
+    async def fetch(self, start: int, end: int, *, node_id: str, interval: int) -> pl.DataFrame:
+        return pl.DataFrame()
 
     async def coverage(self, *, node_id: str, interval: int) -> list[tuple[int, int]]:
         return []

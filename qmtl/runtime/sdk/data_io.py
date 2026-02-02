@@ -9,18 +9,18 @@ Concrete implementations live under ``qmtl.runtime.io``.
 from typing import Any, Protocol, TypeAlias, runtime_checkable
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-import pandas as pd
+import polars as pl
 
 from .protocols import StreamLike
 
 class _SeamlessFetchResultLike(Protocol):
     """Lightweight view of seamless fetch responses without importing the provider."""
 
-    frame: pd.DataFrame
+    frame: pl.DataFrame
     metadata: Any
 
 
-HistoryFetchResult: TypeAlias = pd.DataFrame | _SeamlessFetchResultLike
+HistoryFetchResult: TypeAlias = pl.DataFrame | _SeamlessFetchResultLike
 
 
 class DataFetcher(Protocol):
@@ -28,7 +28,7 @@ class DataFetcher(Protocol):
 
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         ...
 
 
@@ -38,12 +38,12 @@ class HistoryBackend(Protocol):
 
     async def read_range(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Return rows for ``[start, end)``."""
         ...
 
     async def write_rows(
-        self, rows: pd.DataFrame, *, node_id: str, interval: int
+        self, rows: pl.DataFrame, *, node_id: str, interval: int
     ) -> None:
         """Persist ``rows`` for ``(node_id, interval)``."""
         ...

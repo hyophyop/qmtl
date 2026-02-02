@@ -23,7 +23,7 @@ Create a file `my_strategy.py`:
 
 ```python
 from qmtl.sdk import Strategy, StreamInput, Node, Runner
-import pandas as pd
+import polars as pl
 
 class MomentumStrategy(Strategy):
     """Simple momentum strategy: buy signal if recent returns are positive"""
@@ -36,17 +36,17 @@ class MomentumStrategy(Strategy):
             period=30
         )
         
-        def compute_signal(view) -> pd.DataFrame:
+        def compute_signal(view) -> pl.DataFrame:
             # Get close price data
-            df = view.as_frame(price, columns=["close"])
+            frame = view.as_frame(price, columns=["close"]).frame
             
             # Calculate 5-minute momentum
-            momentum = df["close"].pct_change().rolling(5).mean()
+            momentum = frame.get_column("close").pct_change().rolling_mean(window_size=5)
             
             # Buy (1) if momentum > 0, else hold (0)
-            signal = (momentum > 0).astype(int)
+            signal = (momentum > 0).cast(pl.Int64)
             
-            return pd.DataFrame({"signal": signal})
+            return pl.DataFrame({"signal": signal})
         
         signal_node = Node(
             input=price,
@@ -154,18 +154,18 @@ price = StreamInput(
 
 # More sophisticated signal logic
 def compute_signal(view):
-    df = view.as_frame(price, columns=["close", "volume"])
+    frame = view.as_frame(price, columns=["close", "volume"]).frame
     
     # Price momentum
-    price_mom = df["close"].pct_change().rolling(10).mean()
+    price_mom = frame.get_column("close").pct_change().rolling_mean(window_size=10)
     
     # Volume confirmation (only when volume increasing)
-    vol_increase = df["volume"].pct_change() > 0
+    vol_increase = frame.get_column("volume").pct_change() > 0
     
     # Buy only when both conditions met
-    signal = ((price_mom > 0) & vol_increase).astype(int)
+    signal = ((price_mom > 0) & vol_increase).cast(pl.Int64)
     
-    return pd.DataFrame({"signal": signal})
+    return pl.DataFrame({"signal": signal})
 ```
 
 ### B. Paper/Live are World-governed
@@ -219,10 +219,10 @@ Error: No returns produced. Cannot validate strategy.
 ```python
 # Include returns column in compute_fn
 def compute_signal(view):
-    df = view.as_frame(price, columns=["close"])
-    returns = df["close"].pct_change()
-    signal = (returns.rolling(5).mean() > 0).astype(int)
-    return pd.DataFrame({
+    frame = view.as_frame(price, columns=["close"]).frame
+    returns = frame.get_column("close").pct_change()
+    signal = (returns.rolling_mean(window_size=5) > 0).cast(pl.Int64)
+    return pl.DataFrame({
         "signal": signal,
         "returns": returns  # This column is required
     })

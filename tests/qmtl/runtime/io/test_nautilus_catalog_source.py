@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-import pandas as pd
+import polars as pl
 from unittest.mock import Mock
 from decimal import Decimal
 
@@ -156,7 +156,7 @@ class TestNautilusCatalogDataSource:
     async def test_fetch_bars_converts_schema(self, source, mock_catalog):
         """fetch() converts Nautilus bar schema to QMTL schema."""
         # Mock Nautilus bars data
-        nautilus_bars = pd.DataFrame([
+        nautilus_bars = pl.DataFrame([
             {
                 'ts_event': 1700000000 * 1_000_000_000,  # Nanoseconds
                 'ts_init': 1700000000 * 1_000_000_000,
@@ -189,22 +189,22 @@ class TestNautilusCatalogDataSource:
         
         # Verify schema conversion
         assert 'ts' in result.columns
-        assert result['ts'].dtype == 'int64'
-        assert result['ts'].iloc[0] == 1700000000  # Converted to seconds
+        assert str(result.schema.get('ts')) == 'Int64'
+        assert result.get_column('ts')[0] == 1700000000  # Converted to seconds
         
         # Verify OHLCV columns
         for col in ['open', 'high', 'low', 'close', 'volume']:
             assert col in result.columns
-            assert result[col].dtype == 'float64'
+            assert str(result.schema.get(col)) == 'Float64'
         
         # Verify values
-        assert result['open'].iloc[0] == 100.0
-        assert result['close'].iloc[1] == 101.0
+        assert result.get_column('open')[0] == 100.0
+        assert result.get_column('close')[1] == 101.0
     
     @pytest.mark.asyncio
     async def test_fetch_ticks_converts_schema(self, source, mock_catalog):
         """fetch() converts Nautilus tick schema to QMTL schema."""
-        nautilus_ticks = pd.DataFrame([
+        nautilus_ticks = pl.DataFrame([
             {
                 'ts_event': 1700000000 * 1_000_000_000,
                 'ts_init': 1700000000 * 1_000_000_000,
@@ -235,17 +235,17 @@ class TestNautilusCatalogDataSource:
         assert 'size' in result.columns
         assert 'side' in result.columns
         
-        assert result['ts'].dtype == 'int64'
-        assert result['price'].dtype == 'float64'
-        assert result['size'].dtype == 'float64'
+        assert str(result.schema.get('ts')) == 'Int64'
+        assert str(result.schema.get('price')) == 'Float64'
+        assert str(result.schema.get('size')) == 'Float64'
         
-        assert result['side'].iloc[0] == 'buy'
-        assert result['side'].iloc[1] == 'sell'
+        assert result.get_column('side')[0] == 'buy'
+        assert result.get_column('side')[1] == 'sell'
     
     @pytest.mark.asyncio
     async def test_fetch_quotes_converts_schema(self, source, mock_catalog):
         """fetch() converts Nautilus quote schema to QMTL schema."""
-        nautilus_quotes = pd.DataFrame([
+        nautilus_quotes = pl.DataFrame([
             {
                 'ts_event': 1700000000 * 1_000_000_000,
                 'ts_init': 1700000000 * 1_000_000_000,
@@ -271,13 +271,13 @@ class TestNautilusCatalogDataSource:
         assert 'bid_size' in result.columns
         assert 'ask_size' in result.columns
         
-        assert result['bid'].iloc[0] == 100.0
-        assert result['ask'].iloc[0] == 100.5
+        assert result.get_column('bid')[0] == 100.0
+        assert result.get_column('ask')[0] == 100.5
     
     @pytest.mark.asyncio
     async def test_fetch_handles_empty_result(self, source, mock_catalog):
         """fetch() handles empty results gracefully."""
-        mock_catalog.read_bars.return_value = pd.DataFrame()
+        mock_catalog.read_bars.return_value = pl.DataFrame()
         
         result = await source.fetch(
             start=1700000000,
@@ -286,7 +286,7 @@ class TestNautilusCatalogDataSource:
             interval=60,
         )
         
-        assert result.empty
+        assert result.is_empty()
     
     @pytest.mark.asyncio
     async def test_fetch_raises_on_catalog_error(self, source, mock_catalog):
@@ -322,16 +322,16 @@ class TestTimestampConversion:
         source = NautilusCatalogDataSource(catalog=Mock())
         
         # Create Nautilus-style data with nanosecond timestamps
-        nautilus_df = pd.DataFrame([
+        nautilus_df = pl.DataFrame([
             {'ts_event': 1700000000 * 1_000_000_000, 'open': 100.0},
             {'ts_event': 1700000060 * 1_000_000_000, 'open': 101.0},
         ])
         
         result = source._normalize_to_qmtl(nautilus_df, 'bar')
         
-        assert result['ts'].iloc[0] == 1700000000
-        assert result['ts'].iloc[1] == 1700000060
-        assert result['ts'].dtype == 'int64'
+        assert result.get_column('ts')[0] == 1700000000
+        assert result.get_column('ts')[1] == 1700000060
+        assert str(result.schema.get('ts')) == 'Int64'
 
 
 class TestDataTypeRouting:
@@ -342,7 +342,7 @@ class TestDataTypeRouting:
     async def test_bar_routes_to_read_bars(self):
         """OHLCV node_id routes to catalog.read_bars()."""
         mock_catalog = Mock()
-        mock_catalog.read_bars.return_value = pd.DataFrame()
+        mock_catalog.read_bars.return_value = pl.DataFrame()
         
         source = NautilusCatalogDataSource(catalog=mock_catalog)
         
@@ -363,7 +363,7 @@ class TestDataTypeRouting:
     async def test_tick_routes_to_read_ticks(self):
         """Tick node_id routes to catalog.read_ticks()."""
         mock_catalog = Mock()
-        mock_catalog.read_ticks.return_value = pd.DataFrame()
+        mock_catalog.read_ticks.return_value = pl.DataFrame()
         
         source = NautilusCatalogDataSource(catalog=mock_catalog)
         
@@ -383,7 +383,7 @@ class TestDataTypeRouting:
     async def test_quote_routes_to_read_quotes(self):
         """Quote node_id routes to catalog.read_quotes()."""
         mock_catalog = Mock()
-        mock_catalog.read_quotes.return_value = pd.DataFrame()
+        mock_catalog.read_quotes.return_value = pl.DataFrame()
         
         source = NautilusCatalogDataSource(catalog=mock_catalog)
         

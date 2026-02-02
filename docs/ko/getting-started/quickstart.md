@@ -23,7 +23,7 @@ last_modified: 2025-12-01
 
 ```python
 from qmtl.sdk import Strategy, StreamInput, Node, Runner
-import pandas as pd
+import polars as pl
 
 class MomentumStrategy(Strategy):
     """단순 모멘텀 전략: 최근 수익률이 양수면 매수 신호"""
@@ -36,17 +36,17 @@ class MomentumStrategy(Strategy):
             period=30
         )
         
-        def compute_signal(view) -> pd.DataFrame:
+        def compute_signal(view) -> pl.DataFrame:
             # 종가 데이터 가져오기
-            df = view.as_frame(price, columns=["close"])
+            frame = view.as_frame(price, columns=["close"]).frame
             
             # 5분 모멘텀 계산
-            momentum = df["close"].pct_change().rolling(5).mean()
+            momentum = frame.get_column("close").pct_change().rolling_mean(window_size=5)
             
             # 모멘텀 > 0 이면 매수(1), 아니면 홀드(0)
-            signal = (momentum > 0).astype(int)
+            signal = (momentum > 0).cast(pl.Int64)
             
-            return pd.DataFrame({"signal": signal})
+            return pl.DataFrame({"signal": signal})
         
         signal_node = Node(
             input=price,
@@ -154,18 +154,18 @@ price = StreamInput(
 
 # 더 정교한 신호 로직
 def compute_signal(view):
-    df = view.as_frame(price, columns=["close", "volume"])
+    frame = view.as_frame(price, columns=["close", "volume"]).frame
     
     # 가격 모멘텀
-    price_mom = df["close"].pct_change().rolling(10).mean()
+    price_mom = frame.get_column("close").pct_change().rolling_mean(window_size=10)
     
     # 거래량 확인 (거래량 증가 시에만)
-    vol_increase = df["volume"].pct_change() > 0
+    vol_increase = frame.get_column("volume").pct_change() > 0
     
     # 둘 다 만족할 때만 매수
-    signal = ((price_mom > 0) & vol_increase).astype(int)
+    signal = ((price_mom > 0) & vol_increase).cast(pl.Int64)
     
-    return pd.DataFrame({"signal": signal})
+    return pl.DataFrame({"signal": signal})
 ```
 
 ### B. Paper/Live는 월드가 관리
@@ -219,10 +219,10 @@ Error: No returns produced. Cannot validate strategy.
 ```python
 # compute_fn에서 returns 컬럼 포함
 def compute_signal(view):
-    df = view.as_frame(price, columns=["close"])
-    returns = df["close"].pct_change()
-    signal = (returns.rolling(5).mean() > 0).astype(int)
-    return pd.DataFrame({
+    frame = view.as_frame(price, columns=["close"]).frame
+    returns = frame.get_column("close").pct_change()
+    signal = (returns.rolling_mean(window_size=5) > 0).cast(pl.Int64)
+    return pl.DataFrame({
         "signal": signal,
         "returns": returns  # 이 컬럼 필수
     })

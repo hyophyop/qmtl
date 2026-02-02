@@ -17,6 +17,12 @@ For general contribution and testing policies, see the repository root [AGENTS.m
 - When a task needs GitHub access (issues, PRs, metadata), use the `gh` CLI commands instead of manual web actions.
 - Before assuming external tools or services are unavailable, run a quick capability check for whichever CLI or API you plan to use (e.g., `gh auth status`, `aws sts get-caller-identity`, `docker info`). If the probe succeeds, leverage the tool immediately; if it fails, guide the user through re-auth or configuration and retry. Repeat this verification for each new session since tokens can expire or reset.
 
+## Agent Autonomy
+
+- 적극적으로 서브 에이전트를 활용해 작업을 분할하고 병렬로 처리한다.
+- 적용 범위와 판단은 스스로 결정하며, 사용자에게 별도 확인을 요청하지 않고 자동으로 진행한다.
+- 단, 권한 승인/안전/규정상 필수 확인이 필요한 경우에는 예외로 명시적으로 안내한다.
+
 ## Architecture
 
 - Implementations must adhere to the specifications in `docs/ko/architecture/architecture.md`,

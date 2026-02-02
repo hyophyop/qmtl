@@ -26,8 +26,8 @@ def test_window_slice_and_frame_columns():
     frame = window.as_frame()
 
     assert list(frame.columns) == ["ts", "close", "pnl"]
-    assert frame["ts"].tolist() == [2]
-    assert frame["close"].iloc[0] == pytest.approx(1.2)
+    assert frame.get_column("ts").to_list() == [2]
+    assert frame.get_column("close")[0] == pytest.approx(1.2)
     assert window.latest() == {"close": 1.2, "pnl": 0.2}
 
 
@@ -38,11 +38,10 @@ def test_scalar_payload_frame_and_series():
     frame = window.as_frame()
 
     assert list(frame.columns) == ["ts", "value"]
-    assert frame["value"].tolist() == [10.0, 11.0]
+    assert frame.get_column("value").to_list() == [10.0, 11.0]
 
     series = window.to_series("value")
-    assert series.index.tolist() == [1, 2]
-    assert series.iloc[-1] == pytest.approx(11.0)
+    assert series.to_list() == [10.0, 11.0]
 
 
 def test_require_columns_and_missing_errors():
@@ -62,4 +61,4 @@ def test_zero_count_returns_empty_frame():
     view = _make_view()
     window = view.window("prices", 60, count=0)
 
-    assert window.as_frame().empty
+    assert window.as_frame().is_empty()

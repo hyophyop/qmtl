@@ -8,13 +8,13 @@ import inspect
 import logging
 from typing import Any, Awaitable, Callable, MutableMapping, Sequence
 
-import pandas as pd
+import polars as pl
 
 from qmtl.runtime.sdk.conformance import ConformanceReport
 
 logger = logging.getLogger(__name__)
 
-ArtifactStore = Callable[[pd.DataFrame, MutableMapping[str, Any]], Awaitable[str | None] | str | None]
+ArtifactStore = Callable[[pl.DataFrame, MutableMapping[str, Any]], Awaitable[str | None] | str | None]
 
 
 @dataclass(slots=True)
@@ -75,7 +75,7 @@ class ArtifactRegistrar:
 
     async def publish(
         self,
-        frame: pd.DataFrame,
+        frame: pl.DataFrame,
         *,
         node_id: str,
         interval: int,
@@ -95,7 +95,7 @@ class ArtifactRegistrar:
             return None
 
         stabilized = self._stabilize_frame(self._canonicalize_frame(frame))
-        if stabilized.empty:
+        if stabilized.is_empty():
             return None
 
         stats = self._frame_stats(stabilized)
@@ -125,58 +125,57 @@ class ArtifactRegistrar:
         )
 
     # ------------------------------------------------------------------
-    def _canonicalize_frame(self, frame: pd.DataFrame) -> pd.DataFrame:
-        working = frame.copy(deep=True)
+    def _canonicalize_frame(self, frame: pl.DataFrame) -> pl.DataFrame:
+        working = frame.clone()
         if "ts" in working.columns:
-            working["ts"] = pd.to_numeric(working["ts"], errors="coerce").astype("Int64")
-            working.dropna(subset=["ts"], inplace=True)
-            working["ts"] = working["ts"].astype("int64")
-            working.sort_values("ts", inplace=True)
-            working.reset_index(drop=True, inplace=True)
+            working = working.with_columns(pl.col("ts").cast(pl.Int64, strict=False))
+            working = working.filter(pl.col("ts").is_not_null())
+            working = working.sort("ts")
 
         preferred = [col for col in self._PREFERRED_COLUMNS if col in working.columns]
         extras = [col for col in working.columns if col not in preferred]
         ordered = preferred + extras
-        working = working.loc[:, ordered]
+        working = working.select(ordered)
 
         for col in ("open", "high", "low", "close", "volume"):
             if col in working.columns:
-                working[col] = pd.to_numeric(working[col], errors="coerce").astype("float64")
+                working = working.with_columns(pl.col(col).cast(pl.Float64, strict=False))
 
         return working
 
-    def _stabilize_frame(self, frame: pd.DataFrame) -> pd.DataFrame:
+    def _stabilize_frame(self, frame: pl.DataFrame) -> pl.DataFrame:
         if self._stabilization_bars <= 0:
-            return frame.copy(deep=True)
-        total = frame.shape[0]
+            return frame.clone()
+        total = frame.height
         if total <= self._stabilization_bars:
-            return frame.iloc[0:0].copy(deep=True)
-        return frame.iloc[: total - self._stabilization_bars].copy(deep=True)
+            return frame.head(0)
+        return frame.head(total - self._stabilization_bars)
 
     @staticmethod
     def _now_iso() -> str:
         return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
     @staticmethod
-    def _should_publish(frame: pd.DataFrame, publish_fingerprint: bool) -> bool:
+    def _should_publish(frame: pl.DataFrame, publish_fingerprint: bool) -> bool:
         if not publish_fingerprint:
             return False
-        if not isinstance(frame, pd.DataFrame):
+        if not isinstance(frame, pl.DataFrame):
             return False
-        if frame.empty or "ts" not in frame.columns:
+        if frame.is_empty() or "ts" not in frame.columns:
             return False
         return True
 
-    def _frame_stats(self, frame: pd.DataFrame) -> _FrameStats:
-        start = int(frame["ts"].min())
-        end = int(frame["ts"].max())
-        rows = int(frame.shape[0])
+    def _frame_stats(self, frame: pl.DataFrame) -> _FrameStats:
+        ts = frame.get_column("ts")
+        start = int(ts.min())
+        end = int(ts.max())
+        rows = int(frame.height)
         return _FrameStats(start=start, end=end, rows=rows, as_of=self._now_iso())
 
     def _compute_fingerprint(
         self,
         *,
-        stabilized: pd.DataFrame,
+        stabilized: pl.DataFrame,
         node_id: str,
         interval: int,
         start: int,
@@ -249,12 +248,12 @@ class ArtifactRegistrar:
         )
 
     async def _store_artifact(
-        self, stabilized: pd.DataFrame, manifest: dict[str, Any], *, node_id: str
+        self, stabilized: pl.DataFrame, manifest: dict[str, Any], *, node_id: str
     ) -> str | None:
         if self._store is None:
             return None
         try:
-            result = self._store(stabilized.copy(deep=True), manifest)
+            result = self._store(stabilized.clone(), manifest)
             if inspect.isawaitable(result):
                 return await result  # type: ignore[return-value]
             return result

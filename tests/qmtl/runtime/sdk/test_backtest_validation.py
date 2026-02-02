@@ -1,7 +1,7 @@
 """Tests for enhanced backtest data validation."""
 
 import pytest
-import pandas as pd
+import polars as pl
 from qmtl.runtime.sdk.backtest_validation import BacktestDataValidator, DataQualityReport, validate_backtest_data
 from qmtl.runtime.sdk import Strategy, StreamInput, Node
 

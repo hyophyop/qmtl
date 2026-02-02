@@ -2,7 +2,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pandas as pd
+import polars as pl
 import pytest
 
 from qmtl.foundation.config import SeamlessConfig, UnifiedConfig
@@ -31,7 +31,7 @@ def test_from_config_enabled_with_flag_and_dir(tmp_path) -> None:
 
 @pytest.mark.asyncio
 async def test_filesystem_registrar_applies_partition_template(tmp_path) -> None:
-    frame = pd.DataFrame(
+    frame = pl.DataFrame(
         {
             "ts": [0, 60, 120, 180],
             "open": [1.0, 1.1, 1.2, 1.3],
@@ -72,7 +72,7 @@ async def test_filesystem_registrar_applies_partition_template(tmp_path) -> None
 
 @pytest.mark.asyncio
 async def test_filesystem_registrar_falls_back_for_unknown_node(tmp_path) -> None:
-    frame = pd.DataFrame(
+    frame = pl.DataFrame(
         {
             "ts": [0, 60, 120],
             "open": [1.0, 1.1, 1.2],
@@ -101,7 +101,7 @@ async def test_filesystem_registrar_falls_back_for_unknown_node(tmp_path) -> Non
 
 @pytest.mark.asyncio
 async def test_io_registrar_includes_provenance_metadata() -> None:
-    frame = pd.DataFrame(
+    frame = pl.DataFrame(
         {
             "ts": [0, 60, 120],
             "open": [1.0, 1.1, 1.2],

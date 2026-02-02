@@ -367,7 +367,7 @@ Sample lines:
 - L49: # source = QuestDBHistoryProvider(
 - L50: #     dsn="postgresql://user:pass@localhost:8812/qdb",
 - L63: from qmtl.runtime.sdk import DataFetcher
-- L66: async def fetch(self, start: int, end: int, *, node_id: str, interval: str) -> pd.DataFrame:
+- L66: async def fetch(self, start: int, end: int, *, node_id: str, interval: str) -> pl.DataFrame:
 - L68: "https://api.binance.com/api/v3/klines"
 - L69: f"?symbol={node_id}&interval={interval}"
 - L70: f"&startTime={start * 1000}&endTime={end * 1000}"

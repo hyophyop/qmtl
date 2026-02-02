@@ -1,5 +1,5 @@
-import pandas as pd
-from pandas.testing import assert_frame_equal
+import polars as pl
+from polars.testing import assert_frame_equal
 
 from qmtl.runtime.transforms import identity_transform_node
 from qmtl.runtime.sdk.node import SourceNode, Node
@@ -17,5 +17,5 @@ def test_identity_collects_payloads_into_dataframe():
     data = {source.node_id: {1: [(0, {"p": 1}), (1, {"p": 2})]}}
     view = CacheView(data)
     df = node.compute_fn(view)
-    expected = pd.DataFrame([{"p": 1}, {"p": 2}])
+    expected = pl.DataFrame([{"p": 1}, {"p": 2}])
     assert_frame_equal(df, expected)

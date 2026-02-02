@@ -490,7 +490,7 @@ respected.
 
 ```python
 from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner
-import pandas as pd
+import polars as pl
 
 # Strategy definition
 class GeneralStrategy(Strategy):
@@ -500,11 +500,11 @@ class GeneralStrategy(Strategy):
             period=30           # require the last 30 bars
         )
 
-        def generate_signal(view) -> pd.DataFrame:
+        def generate_signal(view) -> pl.DataFrame:
             price = view.as_frame(price_stream, 60, columns=["close"]).validate_columns(["close"])
-            momentum = price.frame["close"].pct_change().rolling(5).mean()
-            signal = (momentum > 0).astype(int)
-            return pd.DataFrame({"signal": signal})
+            momentum = price.frame.get_column("close").pct_change().rolling_mean(window_size=5)
+            signal = (momentum > 0).cast(pl.Int64)
+            return pl.DataFrame({"signal": signal})
 
         signal_node = Node(
             input=price_stream,
@@ -529,16 +529,16 @@ and computes a correlation matrix.
 
 ```python
 from qmtl.runtime.sdk import Strategy, Node, Runner, TagQueryNode, MatchMode
-import pandas as pd
+import polars as pl
 
 # User-defined correlation helper
-def calc_corr(view) -> pd.DataFrame:
+def calc_corr(view) -> pl.DataFrame:
     aligned = view.align_frames([(node_id, 3600) for node_id in view], window=24)
-    frames = [frame.frame for frame in aligned if not frame.frame.empty]
+    frames = [frame.frame for frame in aligned if not frame.frame.is_empty()]
     if not frames:
-        return pd.DataFrame()
+        return pl.DataFrame()
 
-    corr = pd.concat(frames, axis=1).corr(method="pearson")
+    corr = pl.concat(frames, how="horizontal").corr()
     return corr
 
 class CorrelationStrategy(Strategy):

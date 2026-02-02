@@ -41,7 +41,7 @@ last_modified: 2025-12-15
 ## `_SeamlessFetchPlanner`
 - 소스별 커버리지 관찰과 데이터 페치를 `_consume_source`로 추상화했습니다.
 - 잔여 범위는 `_RangeOperations.subtract`를 통해 인터벌 정렬을 보존한 채 갱신됩니다.
-- 모든 소스가 실패한 후에는 `_backfill_remaining`이 동기 백필을 실행하고, 결과는 `pd.concat`으로 정규화합니다.
+- 모든 소스가 실패한 후에는 `_backfill_remaining`이 동기 백필을 실행하고, 결과는 `pl.concat`으로 정규화합니다.
 
 ## `_RangeOperations`
 - 병합/교차/차집합 연산을 단일 책임으로 묶어 테스트와 재사용이 용이합니다.

@@ -6,7 +6,7 @@ import asyncio
 from collections import defaultdict
 from typing import Dict, Iterable, List
 
-import pandas as pd
+import polars as pl
 
 from .auto_backfill import AutoBackfillStrategy, FetcherBackfillStrategy
 from .data_io import AutoBackfillRequest, DataFetcher, HistoryBackend, HistoryProvider
@@ -39,7 +39,7 @@ class AugmentedHistoryProvider(HistoryProvider):
     # ------------------------------------------------------------------
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         key = (node_id, interval)
         inclusive_end = end - interval
         lock = self._locks[key]

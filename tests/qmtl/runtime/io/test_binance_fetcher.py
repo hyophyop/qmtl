@@ -1,5 +1,6 @@
 import httpx
-import pandas as pd
+import polars as pl
+from polars.testing import assert_frame_equal
 import pytest
 
 from qmtl.runtime.io import BinanceFetcher
@@ -41,10 +42,10 @@ async def test_binance_fetcher(monkeypatch):
 
     fetcher = BinanceFetcher()
     df = await fetcher.fetch(1, 2, node_id="BTCUSDT", interval="1m")
-    expected = pd.DataFrame(
+    expected = pl.DataFrame(
         [{"ts": 2, "open": 1.0, "high": 2.0, "low": 0.5, "close": 3.0, "volume": 4.0}]
     )
-    pd.testing.assert_frame_equal(df, expected)
+    assert_frame_equal(df, expected)
 
 
 @pytest.mark.asyncio
@@ -73,10 +74,10 @@ async def test_binance_fetcher_defaults(monkeypatch):
 
     fetcher = BinanceFetcher(symbol="ETHUSDT", interval="5m")
     df = await fetcher.fetch(1, 2, node_id="BTCUSDT", interval="1m")
-    expected = pd.DataFrame(
+    expected = pl.DataFrame(
         [{"ts": 2, "open": 1.0, "high": 2.0, "low": 0.5, "close": 3.0, "volume": 4.0}]
     )
-    pd.testing.assert_frame_equal(df, expected)
+    assert_frame_equal(df, expected)
 
 
 @pytest.mark.asyncio

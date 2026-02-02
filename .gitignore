@@ -68,6 +68,11 @@ last_pytest_output.txt
 # VS Code
 .vscode/
 
+# IDE/assistant tooling
+.codex/
+.idea/
+.serena/
+
 # macOS
 .DS_Store
 

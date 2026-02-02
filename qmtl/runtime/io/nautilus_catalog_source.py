@@ -36,7 +36,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
-import pandas as pd
+import polars as pl
 import time
 import logging
 
@@ -236,7 +236,7 @@ class NautilusCatalogDataSource:
     
     async def fetch(
         self, start: int, end: int, *, node_id: str, interval: int
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Fetch data from Nautilus Catalog.
         
         Parameters
@@ -252,7 +252,7 @@ class NautilusCatalogDataSource:
         
         Returns
         -------
-        pd.DataFrame
+        pl.DataFrame
             Data in QMTL schema (ts column in Unix seconds).
         
         Raises
@@ -363,7 +363,7 @@ class NautilusCatalogDataSource:
     
     def _fetch_bars(
         self, identifier: NautilusIdentifier, start_ns: int, end_ns: int
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Fetch OHLCV bars from Nautilus catalog."""
         bars = self.catalog.read_bars(
             instrument=identifier.instrument,
@@ -373,19 +373,17 @@ class NautilusCatalogDataSource:
         )
         
         # Convert to DataFrame if needed
-        if not isinstance(bars, pd.DataFrame):
+        if not isinstance(bars, pl.DataFrame):
             if hasattr(bars, 'to_dict'):
-                # Single bar object
-                bars = pd.DataFrame([bars.to_dict()])
+                bars = pl.DataFrame([bars.to_dict()])
             else:
-                # List of bar objects
-                bars = pd.DataFrame([bar.to_dict() for bar in bars])
+                bars = pl.DataFrame([bar.to_dict() for bar in bars])
         
         return bars
     
     def _fetch_ticks(
         self, identifier: NautilusIdentifier, start_ns: int, end_ns: int
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Fetch trade ticks from Nautilus catalog."""
         ticks = self.catalog.read_ticks(
             instrument=identifier.instrument,
@@ -393,17 +391,17 @@ class NautilusCatalogDataSource:
             end=end_ns,
         )
         
-        if not isinstance(ticks, pd.DataFrame):
+        if not isinstance(ticks, pl.DataFrame):
             if hasattr(ticks, '__iter__'):
-                ticks = pd.DataFrame([tick.to_dict() for tick in ticks])
+                ticks = pl.DataFrame([tick.to_dict() for tick in ticks])
             else:
-                ticks = pd.DataFrame([ticks.to_dict()])
+                ticks = pl.DataFrame([ticks.to_dict()])
         
         return ticks
     
     def _fetch_quotes(
         self, identifier: NautilusIdentifier, start_ns: int, end_ns: int
-    ) -> pd.DataFrame:
+    ) -> pl.DataFrame:
         """Fetch quote ticks from Nautilus catalog."""
         quotes = self.catalog.read_quotes(
             instrument=identifier.instrument,
@@ -411,17 +409,17 @@ class NautilusCatalogDataSource:
             end=end_ns,
         )
         
-        if not isinstance(quotes, pd.DataFrame):
+        if not isinstance(quotes, pl.DataFrame):
             if hasattr(quotes, '__iter__'):
-                quotes = pd.DataFrame([quote.to_dict() for quote in quotes])
+                quotes = pl.DataFrame([quote.to_dict() for quote in quotes])
             else:
-                quotes = pd.DataFrame([quotes.to_dict()])
+                quotes = pl.DataFrame([quotes.to_dict()])
         
         return quotes
     
     def _normalize_to_qmtl(
-        self, df: pd.DataFrame, data_type: str
-    ) -> pd.DataFrame:
+        self, df: pl.DataFrame, data_type: str
+    ) -> pl.DataFrame:
         """Convert Nautilus schema to QMTL schema.
         
         Handles:
@@ -429,60 +427,63 @@ class NautilusCatalogDataSource:
         - Column renaming
         - Type conversion (Decimal → float64)
         """
-        if df.empty:
+        if df.is_empty():
             return df
-        
-        result = pd.DataFrame()
-        
-        # Convert timestamp from nanoseconds to seconds
-        self._normalize_timestamps(df, result, data_type)
-        
-        # Convert data_type-specific columns
+
+        result: dict[str, pl.Series] = {}
+
+        ts = self._normalize_timestamps(df, data_type)
+        if ts is not None:
+            result["ts"] = ts
+
         if data_type == 'bar':
-            self._normalize_bars(df, result)
+            result.update(self._normalize_bars(df))
         elif data_type == 'tick':
-            self._normalize_ticks(df, result)
+            result.update(self._normalize_ticks(df))
         elif data_type == 'quote':
-            self._normalize_quotes(df, result)
+            result.update(self._normalize_quotes(df))
         else:
             logger.warning(
                 "nautilus.normalize.unknown_type",
                 extra={"data_type": data_type},
             )
-        
-        return result
+
+        return pl.DataFrame(result)
 
     def _normalize_timestamps(
-        self, df: pd.DataFrame, result: pd.DataFrame, data_type: str
-    ) -> None:
+        self, df: pl.DataFrame, data_type: str
+    ) -> pl.Series | None:
         """Convert Nautilus timestamps (ns) to QMTL timestamps (s)."""
-        import numpy as np
         if 'ts_event' in df.columns:
-            result['ts'] = (np.asarray(df['ts_event'].values) // 1_000_000_000).astype('int64')
-        elif 'ts_init' in df.columns:
-            result['ts'] = (np.asarray(df['ts_init'].values) // 1_000_000_000).astype('int64')
-        else:
-            logger.warning(
-                "nautilus.normalize.missing_timestamp",
-                extra={"columns": list(df.columns), "data_type": data_type},
-            )
+            return df.get_column('ts_event').cast(pl.Int64, strict=False) // 1_000_000_000
+        if 'ts_init' in df.columns:
+            return df.get_column('ts_init').cast(pl.Int64, strict=False) // 1_000_000_000
+        logger.warning(
+            "nautilus.normalize.missing_timestamp",
+            extra={"columns": list(df.columns), "data_type": data_type},
+        )
+        return None
 
-    def _normalize_bars(self, df: pd.DataFrame, result: pd.DataFrame) -> None:
+    def _normalize_bars(self, df: pl.DataFrame) -> dict[str, pl.Series]:
         """Normalize OHLCV bar columns."""
+        result: dict[str, pl.Series] = {}
         for col in ['open', 'high', 'low', 'close', 'volume']:
             if col in df.columns:
-                result[col] = df[col].astype('float64')
+                result[col] = df.get_column(col).cast(pl.Float64, strict=False)
+        return result
 
-    def _normalize_ticks(self, df: pd.DataFrame, result: pd.DataFrame) -> None:
+    def _normalize_ticks(self, df: pl.DataFrame) -> dict[str, pl.Series]:
         """Normalize trade tick columns."""
+        result: dict[str, pl.Series] = {}
         if 'price' in df.columns:
-            result['price'] = df['price'].astype('float64')
+            result['price'] = df.get_column('price').cast(pl.Float64, strict=False)
         if 'size' in df.columns:
-            result['size'] = df['size'].astype('float64')
+            result['size'] = df.get_column('size').cast(pl.Float64, strict=False)
         if 'aggressor_side' in df.columns:
-            result['side'] = df['aggressor_side'].str.lower()
+            result['side'] = df.get_column('aggressor_side').cast(pl.Utf8, strict=False).str.to_lowercase()
+        return result
 
-    def _normalize_quotes(self, df: pd.DataFrame, result: pd.DataFrame) -> None:
+    def _normalize_quotes(self, df: pl.DataFrame) -> dict[str, pl.Series]:
         """Normalize quote tick columns."""
         mappings = {
             'bid_price': 'bid',
@@ -490,9 +491,11 @@ class NautilusCatalogDataSource:
             'bid_size': 'bid_size',
             'ask_size': 'ask_size',
         }
+        result: dict[str, pl.Series] = {}
         for src, dest in mappings.items():
             if src in df.columns:
-                result[dest] = df[src].astype('float64')
+                result[dest] = df.get_column(src).cast(pl.Float64, strict=False)
+        return result
     
     def _query_coverage(self, identifier: NautilusIdentifier) -> list[tuple[int, int]]:
         """Query coverage from Nautilus catalog metadata.

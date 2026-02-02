@@ -82,8 +82,8 @@ async def test_reconnect_backoff_schedule(monkeypatch):
 
     gen = feed.subscribe(node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
     ts, frame = await asyncio.wait_for(gen.__anext__(), timeout=0.1)
-    assert not frame.empty
-    assert ts == int(frame["ts"].iloc[-1])
+    assert not frame.is_empty()
+    assert ts == int(frame.get_column("ts")[-1])
 
     feed.unsubscribe(node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
     with pytest.raises(StopAsyncIteration):
@@ -106,12 +106,12 @@ async def test_dedupe_by_symbol():
 
     gen = feed.subscribe(node_id="trades:binance:BTC/USDT", interval=0)
     first_ts, first_df = await asyncio.wait_for(gen.__anext__(), timeout=0.1)
-    assert list(first_df["ts"]) == [1_700_000_000]
-    assert list(first_df["symbol"]) == ["BTC/USDT"]
+    assert first_df.get_column("ts").to_list() == [1_700_000_000]
+    assert first_df.get_column("symbol").to_list() == ["BTC/USDT"]
 
     second_ts, second_df = await asyncio.wait_for(gen.__anext__(), timeout=0.1)
-    assert list(second_df["ts"]) == [1_700_000_001]
-    assert list(second_df["symbol"]) == ["BTC/USDT"]
+    assert second_df.get_column("ts").to_list() == [1_700_000_001]
+    assert second_df.get_column("symbol").to_list() == ["BTC/USDT"]
     assert second_ts == 1_700_000_001
 
     feed.unsubscribe(node_id="trades:binance:BTC/USDT", interval=0)
@@ -135,11 +135,11 @@ async def test_ohlcv_dedupe_helper():
     gen = feed.subscribe(node_id="ohlcv:binance:BTC/USDT:1m", interval=60)
 
     first_ts, first_df = await asyncio.wait_for(gen.__anext__(), timeout=0.1)
-    assert list(first_df["ts"]) == [1_700_000_000, 1_700_000_060]
+    assert first_df.get_column("ts").to_list() == [1_700_000_000, 1_700_000_060]
     assert first_ts == 1_700_000_060
 
     second_ts, second_df = await asyncio.wait_for(gen.__anext__(), timeout=0.1)
-    assert list(second_df["ts"]) == [1_700_000_120]
+    assert second_df.get_column("ts").to_list() == [1_700_000_120]
     assert second_ts == 1_700_000_120
 
     feed.unsubscribe(node_id="ohlcv:binance:BTC/USDT:1m", interval=60)

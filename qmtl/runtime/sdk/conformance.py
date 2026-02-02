@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable, TYPE_CHECKING, Any, cast
+from typing import Iterable, Any, cast
 
 import numpy as np
-import pandas as pd
+import polars as pl
+from typing import Literal, cast
 from numpy.typing import NDArray
-
-if TYPE_CHECKING:
-    from pandas._typing import DtypeArg
 
 from .exceptions import NodeValidationError
 from .schema_validation import validate_schema
@@ -40,11 +38,11 @@ class ConformancePipeline:
 
     def normalize(
         self,
-        df: pd.DataFrame,
+        df: pl.DataFrame,
         *,
         schema: dict | None = None,
         interval: int | None = None,
-    ) -> tuple[pd.DataFrame, ConformanceReport]:
+    ) -> tuple[pl.DataFrame, ConformanceReport]:
         """Return a normalized copy of ``df`` and a report of applied fixes.
 
         Parameters
@@ -65,21 +63,21 @@ class ConformancePipeline:
             rows. When provided, gaps and duplicates are tracked.
         """
 
-        if not isinstance(df, pd.DataFrame):  # pragma: no cover - defensive
-            raise TypeError("ConformancePipeline only supports pandas DataFrames")
+        if not isinstance(df, pl.DataFrame):  # pragma: no cover - defensive
+            raise TypeError("ConformancePipeline only supports polars DataFrames")
 
-        working = df.copy(deep=True)
+        working = df.clone()
         warnings: list[str] = []
         flags: dict[str, int] = {}
 
         expected_schema = self._extract_schema_mapping(schema)
         if expected_schema:
-            self._enforce_schema(working, expected_schema, flags, warnings)
+            working = self._enforce_schema(working, expected_schema, flags, warnings)
 
-        self._normalize_non_finite_values(working, flags, warnings)
+        working = self._normalize_non_finite_values(working, flags, warnings)
 
         if self._TS_COLUMN in working.columns:
-            self._normalize_timestamps(working, interval, flags, warnings)
+            working = self._normalize_timestamps(working, interval, flags, warnings)
         else:
             warnings.append("missing ts column; skipping temporal normalization")
 
@@ -127,11 +125,11 @@ class ConformancePipeline:
 
     def _enforce_schema(
         self,
-        df: pd.DataFrame,
+        df: pl.DataFrame,
         expected_schema: dict[str, str],
         flags: dict[str, int],
         warnings: list[str],
-    ) -> None:
+    ) -> pl.DataFrame:
         missing_columns = [col for col in expected_schema if col not in df.columns]
         if missing_columns:
             flags[self._FLAG_MISSING_COLUMN] = (
@@ -151,12 +149,14 @@ class ConformancePipeline:
         for column, dtype in expected_schema.items():
             if column not in df.columns:
                 continue
-            current_dtype = str(df[column].dtype)
+            current_dtype = str(df.schema.get(column))
             if current_dtype == dtype:
                 continue
             try:
-                target_dtype = pd.api.types.pandas_dtype(dtype)
-                df[column] = df[column].astype(target_dtype)
+                target_dtype = _parse_polars_dtype(dtype)
+                if target_dtype is None:
+                    raise ValueError(f"unknown polars dtype: {dtype}")
+                df = df.with_columns(pl.col(column).cast(target_dtype, strict=False))
                 flags[self._FLAG_DTYPE_CAST] = (
                     flags.get(self._FLAG_DTYPE_CAST, 0) + 1
                 )
@@ -170,31 +170,35 @@ class ConformancePipeline:
                 warnings.append(
                     f"failed to normalize column '{column}' to {dtype}; observed {current_dtype}"
                 )
+        return df
 
     def _normalize_non_finite_values(
         self,
-        df: pd.DataFrame,
+        df: pl.DataFrame,
         flags: dict[str, int],
         warnings: list[str],
-    ) -> None:
+    ) -> pl.DataFrame:
         replacements = 0
         observed_nan = 0
-        for column in df.columns:
-            series = df[column]
-            if not pd.api.types.is_numeric_dtype(series):
+        for column, dtype in df.schema.items():
+            if not _is_numeric_dtype(dtype):
                 continue
-            if series.empty:
+            series = df.get_column(column)
+            if len(series) == 0:
                 continue
-            nan_count = int(pd.isna(series).sum())
-            values = series.to_numpy(copy=False)
-            mask_inf = np.isinf(values)
-            inf_count = int(mask_inf.sum())
+            is_float = _is_float_dtype(dtype)
+            nan_count = int(series.is_nan().sum()) if is_float else 0
+            null_count = int(series.is_null().sum())
+            inf_count = int(series.is_infinite().sum()) if is_float else 0
             if inf_count:
-                series = series.astype("float64")
-                series.iloc[np.where(mask_inf)[0]] = np.nan
-                df[column] = series
+                df = df.with_columns(
+                    pl.when(pl.col(column).is_infinite())
+                    .then(None)
+                    .otherwise(pl.col(column))
+                    .alias(column)
+                )
                 replacements += inf_count
-            observed_nan += nan_count
+            observed_nan += nan_count + null_count
         total = replacements + observed_nan
         if replacements:
             warnings.append(
@@ -202,21 +206,21 @@ class ConformancePipeline:
             )
         if total:
             flags[self._FLAG_NON_FINITE] = flags.get(self._FLAG_NON_FINITE, 0) + total
+        return df
 
     # ------------------------------------------------------------------
     # temporal normalization helpers
     # ------------------------------------------------------------------
     def _normalize_timestamps(
         self,
-        df: pd.DataFrame,
+        df: pl.DataFrame,
         interval: int | None,
         flags: dict[str, int],
         warnings: list[str],
-    ) -> None:
-        ts = df[self._TS_COLUMN]
-        dtype = ts.dtype
+    ) -> pl.DataFrame:
+        dtype = df.schema.get(self._TS_COLUMN)
 
-        cast_rows, timezone_adjusted = self._cast_timestamp_column(df, dtype, flags, warnings)
+        df, cast_rows, timezone_adjusted = self._cast_timestamp_column(df, dtype, flags, warnings)
 
         if cast_rows:
             flags[self._FLAG_TS_CAST] = flags.get(self._FLAG_TS_CAST, 0) + cast_rows
@@ -225,15 +229,15 @@ class ConformancePipeline:
                 flags.get(self._FLAG_TS_TIMEZONE, 0) + timezone_adjusted
             )
 
-        if df.empty:
-            return
+        if df.is_empty():
+            return df
 
-        self._sort_and_dedupe_timestamps(df, flags, warnings)
+        df = self._sort_and_dedupe_timestamps(df, flags, warnings)
 
-        if interval is None or interval <= 0 or len(df) < 2:
-            return
+        if interval is None or interval <= 0 or df.height < 2:
+            return df
 
-        arr = df[self._TS_COLUMN].to_numpy(copy=False)
+        arr = df.get_column(self._TS_COLUMN).to_numpy()
         gap_bars, misaligned = self._detect_interval_gaps(arr, interval)
 
         if gap_bars:
@@ -245,73 +249,91 @@ class ConformancePipeline:
             warnings.append(
                 f"detected {misaligned} gaps with misaligned boundaries for interval={interval}"
             )
+        return df
 
     def _cast_timestamp_column(
         self,
-        df: pd.DataFrame,
-        dtype: Any,
+        df: pl.DataFrame,
+        dtype: pl.DataType | None,
         flags: dict[str, int],
         warnings: list[str],
-    ) -> tuple[int, int]:
-        ts = df[self._TS_COLUMN]
-        if isinstance(dtype, pd.DatetimeTZDtype):
-            converted = ts.dt.tz_convert("UTC")
-            df[self._TS_COLUMN] = self._timestamps_to_seconds(converted)
-            return len(df), len(df)
-        if pd.api.types.is_datetime64_dtype(dtype):
-            df[self._TS_COLUMN] = self._timestamps_to_seconds(ts)
-            return len(df), 0
-        if pd.api.types.is_integer_dtype(dtype):
-            cast_rows = self._normalize_integer_epoch(df, flags, warnings)
-            return cast_rows, 0
+    ) -> tuple[pl.DataFrame, int, int]:
+        if dtype is None:
+            return self._cast_flexible_timestamps(df, flags, warnings)
+
+        if _is_datetime_dtype(dtype):
+            timezone_adjusted = 0
+            if getattr(dtype, "time_zone", None):
+                df = df.with_columns(
+                    pl.col(self._TS_COLUMN)
+                    .dt.convert_time_zone("UTC")
+                    .alias(self._TS_COLUMN)
+                )
+                timezone_adjusted = df.height
+            df = df.with_columns(
+                self._timestamps_to_seconds(pl.col(self._TS_COLUMN)).alias(self._TS_COLUMN)
+            )
+            return df, df.height, timezone_adjusted
+
+        if _is_integer_dtype(dtype):
+            cast_rows, df = self._normalize_integer_epoch(df, flags, warnings)
+            return df, cast_rows, 0
+
+        if _is_numeric_dtype(dtype):
+            df = df.with_columns(pl.col(self._TS_COLUMN).cast(pl.Int64, strict=False))
+            cast_rows, df = self._normalize_integer_epoch(df, flags, warnings)
+            return df, cast_rows, 0
+
         return self._cast_flexible_timestamps(df, flags, warnings)
 
     def _cast_flexible_timestamps(
         self,
-        df: pd.DataFrame,
+        df: pl.DataFrame,
         flags: dict[str, int],
         warnings: list[str],
-    ) -> tuple[int, int]:
-        ts = df[self._TS_COLUMN]
-        converted = pd.to_datetime(ts, utc=True, errors="coerce")
-        invalid_mask = converted.isna()
-        if invalid_mask.any():
-            invalid_count = int(invalid_mask.sum())
+    ) -> tuple[pl.DataFrame, int, int]:
+        converted = df.select(
+            pl.col(self._TS_COLUMN)
+            .cast(pl.Datetime(time_unit="ns", time_zone="UTC"), strict=False)
+            .alias(self._TS_COLUMN)
+        )
+        invalid_mask = converted.get_column(self._TS_COLUMN).is_null()
+        invalid_count = int(invalid_mask.sum())
+        if invalid_count:
             warnings.append(f"dropped {invalid_count} rows with invalid timestamps")
             flags[self._FLAG_INVALID_TS] = (
                 flags.get(self._FLAG_INVALID_TS, 0) + invalid_count
             )
-            df.drop(index=df.index[invalid_mask], inplace=True)
-            df.reset_index(drop=True, inplace=True)
-            if df.empty:
-                return 0, 0
-            converted = converted[~invalid_mask].reset_index(drop=True)
+            df = df.filter(~pl.col(self._TS_COLUMN).cast(pl.Datetime(time_unit="ns", time_zone="UTC"), strict=False).is_null())
+            if df.is_empty():
+                return df, 0, 0
 
-        df[self._TS_COLUMN] = self._timestamps_to_seconds(converted)
-        timezone_adjusted = 0
-        if isinstance(df[self._TS_COLUMN].dtype, pd.DatetimeTZDtype):
-            timezone_adjusted = len(df)
-        return len(df), timezone_adjusted
+        df = df.with_columns(
+            pl.col(self._TS_COLUMN)
+            .cast(pl.Datetime(time_unit="ns", time_zone="UTC"), strict=False)
+            .dt.timestamp("ms")
+            .floordiv(1000)
+            .cast(pl.Int64)
+            .alias(self._TS_COLUMN)
+        )
+        return df, df.height, 0
 
     def _sort_and_dedupe_timestamps(
         self,
-        df: pd.DataFrame,
+        df: pl.DataFrame,
         flags: dict[str, int],
         warnings: list[str],
-    ) -> None:
-        df.sort_values(self._TS_COLUMN, inplace=True)
-        df.reset_index(drop=True, inplace=True)
-
-        duplicates_mask = df.duplicated(subset=[self._TS_COLUMN], keep="last")
-        duplicates = int(duplicates_mask.sum())
+    ) -> pl.DataFrame:
+        df = df.sort(self._TS_COLUMN)
+        duplicates = int(df.get_column(self._TS_COLUMN).is_duplicated().sum())
         if not duplicates:
-            return
-        df.drop(index=df.index[duplicates_mask], inplace=True)
-        df.reset_index(drop=True, inplace=True)
+            return df
+        df = df.unique(subset=[self._TS_COLUMN], keep="last").sort(self._TS_COLUMN)
         flags[self._FLAG_DUPLICATE_TS] = (
             flags.get(self._FLAG_DUPLICATE_TS, 0) + duplicates
         )
         warnings.append(f"dropped {duplicates} duplicate bars")
+        return df
 
     def _detect_interval_gaps(self, arr: np.ndarray, interval: int) -> tuple[int, int]:
         if arr.size < 2:
@@ -328,40 +350,39 @@ class ConformancePipeline:
                     misaligned += 1
         return gap_bars, misaligned
 
-    def _timestamps_to_seconds(self, series: pd.Series) -> pd.Series:
-        as_int = series.astype("int64", copy=False)
-        return (as_int // self._NS_PER_SECOND).astype("int64", copy=False)
+    def _timestamps_to_seconds(self, series: pl.Expr | pl.Series) -> pl.Expr | pl.Series:
+        if isinstance(series, pl.Expr):
+            return series.dt.timestamp("ms").floordiv(1000).cast(pl.Int64)
+        return (series.dt.timestamp("ms") // 1000).cast(pl.Int64)
 
     def _normalize_integer_epoch(
         self,
-        df: pd.DataFrame,
+        df: pl.DataFrame,
         flags: dict[str, int],
         warnings: list[str],
-    ) -> int:
-        ts = df[self._TS_COLUMN]
-        invalid_mask = pd.isna(ts)
-        if invalid_mask.any():
-            invalid_count = int(invalid_mask.sum())
+    ) -> tuple[int, pl.DataFrame]:
+        ts = df.get_column(self._TS_COLUMN)
+        invalid_count = int(ts.is_null().sum())
+        if invalid_count:
             warnings.append(f"dropped {invalid_count} rows with invalid timestamps")
             flags[self._FLAG_INVALID_TS] = (
                 flags.get(self._FLAG_INVALID_TS, 0) + invalid_count
             )
-            df.drop(index=df.index[invalid_mask], inplace=True)
-            df.reset_index(drop=True, inplace=True)
-            if df.empty:
-                return 0
-            ts = df[self._TS_COLUMN]
+            df = df.filter(pl.col(self._TS_COLUMN).is_not_null())
+            if df.is_empty():
+                return 0, df
+            ts = df.get_column(self._TS_COLUMN)
 
-        normalized = ts.astype("int64", copy=False)
+        normalized = ts.cast(pl.Int64, strict=False)
         divisor = self._infer_epoch_divisor(normalized)
         cast_rows = 0
         if divisor != 1:
             normalized = normalized // divisor
-            cast_rows = len(df)
-        df[self._TS_COLUMN] = normalized
-        return cast_rows
+            cast_rows = df.height
+        df = df.with_columns(normalized.alias(self._TS_COLUMN))
+        return cast_rows, df
 
-    def _infer_epoch_divisor(self, series: pd.Series) -> int:
+    def _infer_epoch_divisor(self, series: pl.Series) -> int:
         values = self._non_zero_epoch_values(series)
         if not values.size:
             return 1
@@ -379,10 +400,10 @@ class ConformancePipeline:
 
         return self._divisor_from_magnitude(max_value)
 
-    def _non_zero_epoch_values(self, series: pd.Series) -> NDArray[np.int64]:
-        if series.empty:
+    def _non_zero_epoch_values(self, series: pl.Series) -> NDArray[np.int64]:
+        if len(series) == 0:
             return np.array([], dtype=np.int64)
-        raw_values = series.to_numpy(dtype=np.int64, copy=False)
+        raw_values = series.to_numpy()
         values = cast(NDArray[np.int64], np.abs(raw_values, dtype=np.int64))
         if not values.size:
             return values
@@ -425,7 +446,7 @@ class TickConformanceRule:
     Examples
     --------
     >>> rule = TickConformanceRule()
-    >>> df = pd.DataFrame({
+    >>> df = pl.DataFrame({
     ...     'ts': [1700000000, 1700000001],
     ...     'price': [100.0, 101.0],
     ...     'size': [1.0, 2.0],
@@ -438,7 +459,7 @@ class TickConformanceRule:
     REQUIRED_COLUMNS = frozenset({'ts', 'price', 'size'})
     OPTIONAL_COLUMNS = frozenset({'side', 'trade_id'})
     
-    def validate(self, df: pd.DataFrame) -> ConformanceReport:
+    def validate(self, df: pl.DataFrame) -> ConformanceReport:
         """Validate tick data and return conformance report.
         
         Parameters
@@ -470,39 +491,42 @@ class TickConformanceRule:
         
         return ConformanceReport(warnings=tuple(warnings), flags_counts=flags)
 
-    def _check_positive_values(self, df: pd.DataFrame, warnings: list[str], flags: dict[str, int]) -> None:
+    def _check_positive_values(self, df: pl.DataFrame, warnings: list[str], flags: dict[str, int]) -> None:
         """Check for non-positive prices and sizes."""
         for col, flag_key in [('price', 'invalid_price'), ('size', 'invalid_size')]:
-            if (df[col] <= 0).any():
-                invalid_count = (df[col] <= 0).sum()
+            series = df.get_column(col)
+            if (series <= 0).any():
+                invalid_count = int((series <= 0).sum())
                 warnings.append(f"Non-positive {col}s detected: {invalid_count} rows")
                 flags[flag_key] = int(invalid_count)
 
-    def _check_nans(self, df: pd.DataFrame, columns: list[str], warnings: list[str], flags: dict[str, int]) -> None:
+    def _check_nans(self, df: pl.DataFrame, columns: list[str], warnings: list[str], flags: dict[str, int]) -> None:
         """Check for NaN values in specified columns."""
         for col in columns:
-            nan_count = df[col].isna().sum()
-            if nan_count > 0:
+            series = df.get_column(col)
+            nan_count = int(series.is_null().sum() + series.is_nan().sum())
+            if nan_count:
                 warnings.append(f"NaN values in {col}: {nan_count} rows")
                 flags[f'nan_{col}'] = int(nan_count)
 
-    def _check_temporal_validity(self, df: pd.DataFrame, warnings: list[str], flags: dict[str, int]) -> None:
+    def _check_temporal_validity(self, df: pl.DataFrame, warnings: list[str], flags: dict[str, int]) -> None:
         """Validate timestamp ordering, duplicates, and range."""
         # Ordering
-        if not df['ts'].is_monotonic_increasing:
+        if not df.get_column("ts").is_sorted():
             warnings.append("Timestamps not sorted")
             flags['unsorted_ts'] = 1
         
         # Duplicates
-        duplicates = df['ts'].duplicated().sum()
+        duplicates = int(df.get_column("ts").is_duplicated().sum())
         if duplicates > 0:
             warnings.append(f"Duplicate timestamps: {duplicates} rows")
             flags['duplicate_ts'] = int(duplicates)
         
         # Range (Unix epoch)
-        invalid_ts_mask = (df['ts'] < 0) | (df['ts'] > 2**32 - 1)
+        ts_series = df.get_column("ts")
+        invalid_ts_mask = (ts_series < 0) | (ts_series > 2**32 - 1)
         if invalid_ts_mask.any():
-            invalid_count = invalid_ts_mask.sum()
+            invalid_count = int(invalid_ts_mask.sum())
             warnings.append(f"Invalid timestamp range: {invalid_count} rows")
             flags['invalid_timestamp'] = int(invalid_count)
 
@@ -520,7 +544,7 @@ class QuoteConformanceRule:
     Examples
     --------
     >>> rule = QuoteConformanceRule()
-    >>> df = pd.DataFrame({
+    >>> df = pl.DataFrame({
     ...     'ts': [1700000000],
     ...     'bid': [100.0],
     ...     'ask': [100.5],
@@ -535,7 +559,7 @@ class QuoteConformanceRule:
     REQUIRED_COLUMNS = frozenset({'ts', 'bid', 'ask', 'bid_size', 'ask_size'})
     OPTIONAL_COLUMNS = frozenset({'quote_id', 'venue_ts'})
     
-    def validate(self, df: pd.DataFrame) -> ConformanceReport:
+    def validate(self, df: pl.DataFrame) -> ConformanceReport:
         """Validate quote data and return conformance report.
         
         Parameters
@@ -567,50 +591,53 @@ class QuoteConformanceRule:
         
         return ConformanceReport(warnings=tuple(warnings), flags_counts=flags)
 
-    def _check_quote_values(self, df: pd.DataFrame, warnings: list[str], flags: dict[str, int]) -> None:
+    def _check_quote_values(self, df: pl.DataFrame, warnings: list[str], flags: dict[str, int]) -> None:
         """Check for crossed quotes, non-positive values, and wide spreads."""
         # Bid/Ask spread
-        crossed = (df['bid'] >= df['ask']).sum()
+        crossed = int((df.get_column('bid') >= df.get_column('ask')).sum())
         if crossed > 0:
             warnings.append(f"Crossed quotes detected (bid >= ask): {crossed} rows")
             flags['crossed_quotes'] = int(crossed)
         
         # Positive values
         for col in ['bid', 'ask', 'bid_size', 'ask_size']:
-            if (df[col] <= 0).any():
-                invalid_count = (df[col] <= 0).sum()
+            series = df.get_column(col)
+            if (series <= 0).any():
+                invalid_count = int((series <= 0).sum())
                 warnings.append(f"Non-positive {col} values: {invalid_count} rows")
                 flags[f'invalid_{col}'] = int(invalid_count)
         
         # Wide spreads
-        spread_pct = ((df['ask'] - df['bid']) / df['bid'] * 100)
-        wide_spreads = (spread_pct > 10.0).sum()
+        spread_pct = ((df.get_column('ask') - df.get_column('bid')) / df.get_column('bid') * 100)
+        wide_spreads = int((spread_pct > 10.0).sum())
         if wide_spreads > 0:
             warnings.append(f"Wide spreads (>10%): {wide_spreads} rows")
             flags['wide_spread'] = int(wide_spreads)
 
-    def _check_nans(self, df: pd.DataFrame, warnings: list[str], flags: dict[str, int]) -> None:
+    def _check_nans(self, df: pl.DataFrame, warnings: list[str], flags: dict[str, int]) -> None:
         """Check for NaN values in all expected columns."""
         for col in ['bid', 'ask', 'bid_size', 'ask_size']:
-            nan_count = df[col].isna().sum()
-            if nan_count > 0:
+            series = df.get_column(col)
+            nan_count = int(series.is_null().sum() + series.is_nan().sum())
+            if nan_count:
                 warnings.append(f"NaN values in {col}: {nan_count} rows")
                 flags[f'nan_{col}'] = int(nan_count)
 
-    def _check_temporal_validity(self, df: pd.DataFrame, warnings: list[str], flags: dict[str, int]) -> None:
+    def _check_temporal_validity(self, df: pl.DataFrame, warnings: list[str], flags: dict[str, int]) -> None:
         """Validate timestamp ordering, duplicates, and range."""
-        if not df['ts'].is_monotonic_increasing:
+        if not df.get_column("ts").is_sorted():
             warnings.append("Timestamps not sorted")
             flags['unsorted_ts'] = 1
         
-        duplicates = df['ts'].duplicated().sum()
+        duplicates = int(df.get_column("ts").is_duplicated().sum())
         if duplicates > 0:
             warnings.append(f"Duplicate timestamps: {duplicates} rows")
             flags['duplicate_ts'] = int(duplicates)
         
-        invalid_ts_mask = (df['ts'] < 0) | (df['ts'] > 2**32 - 1)
+        ts_series = df.get_column("ts")
+        invalid_ts_mask = (ts_series < 0) | (ts_series > 2**32 - 1)
         if invalid_ts_mask.any():
-            invalid_count = invalid_ts_mask.sum()
+            invalid_count = int(invalid_ts_mask.sum())
             warnings.append(f"Invalid timestamp range: {invalid_count} rows")
             flags['invalid_timestamp'] = int(invalid_count)
 
@@ -621,3 +648,64 @@ __all__ = [
     "TickConformanceRule",
     "QuoteConformanceRule",
 ]
+
+
+def _parse_polars_dtype(dtype: str) -> pl.DataType | None:
+    lower = dtype.lower()
+    if lower in {"float64", "float"}:
+        return cast(pl.DataType, pl.Float64)
+    if lower in {"float32"}:
+        return cast(pl.DataType, pl.Float32)
+    if lower in {"int64", "int"}:
+        return cast(pl.DataType, pl.Int64)
+    if lower in {"int32"}:
+        return cast(pl.DataType, pl.Int32)
+    if lower in {"int16"}:
+        return cast(pl.DataType, pl.Int16)
+    if lower in {"int8"}:
+        return cast(pl.DataType, pl.Int8)
+    if lower in {"uint64"}:
+        return cast(pl.DataType, pl.UInt64)
+    if lower in {"uint32"}:
+        return cast(pl.DataType, pl.UInt32)
+    if lower in {"uint16"}:
+        return cast(pl.DataType, pl.UInt16)
+    if lower in {"uint8"}:
+        return cast(pl.DataType, pl.UInt8)
+    if lower in {"utf8", "string", "str"}:
+        return cast(pl.DataType, pl.Utf8)
+    if dtype.startswith("Datetime("):
+        time_unit = "ns"
+        time_zone = None
+        if "time_unit=" in dtype:
+            time_unit = dtype.split("time_unit=")[1].split(",")[0].strip(" '\"")
+        if "time_zone=" in dtype:
+            time_zone = dtype.split("time_zone=")[1].split(")")[0].strip(" '\"")
+        normalized_unit = time_unit if time_unit in {"ns", "us", "ms"} else "ns"
+        return pl.Datetime(
+            time_unit=cast(Literal["ns", "us", "ms"], normalized_unit),
+            time_zone=time_zone,
+        )
+    if lower == "date":
+        return cast(pl.DataType, pl.Date)
+    return None
+
+
+def _dtype_name(dtype: pl.DataType) -> str:
+    return str(dtype)
+
+
+def _is_float_dtype(dtype: pl.DataType) -> bool:
+    return _dtype_name(dtype).startswith("Float")
+
+
+def _is_integer_dtype(dtype: pl.DataType) -> bool:
+    return _dtype_name(dtype).startswith("Int") or _dtype_name(dtype).startswith("UInt")
+
+
+def _is_numeric_dtype(dtype: pl.DataType) -> bool:
+    return _is_float_dtype(dtype) or _is_integer_dtype(dtype)
+
+
+def _is_datetime_dtype(dtype: pl.DataType) -> bool:
+    return _dtype_name(dtype).startswith("Datetime")
