@@ -722,8 +722,8 @@ QMTL은 **append-only commit log** 설계를 채택하여 모든 상태 변화�
 
 1. 각 ComputeNode의 출력은 고유 Kafka 토픽(큐)에 append되어, 과거 데이터를 필요 시 재생(replay)할 수 있다.
 2. DAG Manager는 큐 생성/갱신과 `QueueUpdated`, `sentinel_weight`와 같은 컨트롤 이벤트를 ControlBus 토픽에 발행한다.
-3. Gateway는 전략 제출 이벤트를 `gateway.commitlog_topic`(기본값: `gateway.ingest`)에 기록한 뒤 Diff 결과를 처리하고, 오프셋을 Redis에 저장해 최소 한 번(at-least-once) 처리 보장한다.
-4. WorldService 역시 활성/결정 이벤트를 동일한 커밋 로그에 남겨 감사(audit)와 롤백을 지원한다.
+3. Gateway는 전략 제출 이벤트를 `gateway.commitlog_topic`(기본값: `gateway.ingest`)에 기록한 뒤 Diff 결과를 처리하며, 처리 성공 후 Kafka consumer group 오프셋을 커밋해 최소 한 번(at-least-once) 처리 보장을 제공한다.
+4. WorldService의 활성/결정 이벤트는 ControlBus를 통해 발행되며, Gateway는 이를 구독해 SDK/클라이언트로 중계한다.
 
 이와 같은 로그 기반 설계는 서비스별 **소유권 경계**를 명확히 하며, 장애 발생 시 정확한 시점으로 상태를 복원할 수 있는 토대를 제공한다.
 

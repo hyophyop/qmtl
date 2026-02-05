@@ -133,9 +133,8 @@ claims match the payload. Out-of-scope requests are rejected.
 
 ### Replay Endpoint
 
-Operators can trigger re-delivery by calling `POST /fills/replay` with
-`from_ts` and `to_ts` fields plus optional `world_id`/`strategy_id` filters.
-Matching fills are published to `trade.fills`, enabling idempotent consumer
-rebuilds.
+The current Gateway implementation exposes only a placeholder
+`GET /fills/replay` endpoint; replay delivery is not implemented yet. The route
+returns `202 Accepted` with the message `"replay not implemented in this build"`.
 
 {{ nav_links() }}
