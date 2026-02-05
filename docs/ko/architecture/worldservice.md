@@ -134,7 +134,7 @@ CRUD
 - GET /worlds/{world_id}/decide?as_of=... → DecisionEnvelope
 - POST /worlds/{world_id}/decisions       (replace world strategy set via DecisionsRequest)
 - GET /worlds/{world_id}/activation?strategy_id=...&side=... → ActivationEnvelope
-- PUT /worlds/{world_id}/activation          (manual override; optional TTL)
+- PUT /worlds/{world_id}/activation          (manual override; 요청 본문에 TTL 필드 없음)
 - POST /worlds/{world_id}/evaluate           (plan only)
 - POST /worlds/{world_id}/apply              (2‑Phase apply; requires run_id)
 - GET /worlds/{world_id}/audit               (paginated stream)
