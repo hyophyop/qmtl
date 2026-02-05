@@ -598,10 +598,10 @@ replayable:
 2. DAG Manager records queue creation/updates and publishes `QueueUpdated` and
    `sentinel_weight` events to the ControlBus topic.
 3. Gateway appends strategy submissions to `gateway.commitlog_topic` (default:
-   `gateway.ingest`) before diffing, storing offsets in Redis for at-least-once
-   processing.
-4. WorldService records activation/decision events to the same log for audit and
-   rollback support.
+   `gateway.ingest`) before diffing, and provides at-least-once processing by
+   committing Kafka consumer-group offsets only after successful handling.
+4. WorldService emits activation/decision events on the ControlBus, and Gateway
+   subscribes and relays those updates to SDK/clients.
 
 The commit-log boundary enforces ownership, simplifies recovery to precise
 points-in-time, and provides a durable audit trail.

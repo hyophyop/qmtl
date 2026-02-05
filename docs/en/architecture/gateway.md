@@ -168,9 +168,9 @@ omitted, Gateway defaults to ``any`` for backward compatibility.
 !!! note "Additional endpoints (current implementation)"
     The OpenAPI excerpt below includes only the core paths. The current implementation also exposes the following routes; whether each is public or internal depends on the deployment profile and auth/ACL policy (evidence: `qmtl/services/gateway/routes/**`).
 
-    - Strategies: ``POST /strategies/dry-run``, ``GET /strategies/{strategy_id}/history``
+    - Strategies: ``POST /strategies/dry-run``, ``POST /strategies/{strategy_id}/history``
     - Events/schemas: ``GET /events/jwks``, ``GET /events/schema`` (WebSocket subscriptions are separate)
-    - Ingest/replay: ``POST /fills``, ``POST /fills/replay``
+    - Ingest/replay: ``POST /fills``, ``GET /fills/replay`` *(placeholder response in the current build)*
     - Observability: ``GET /metrics``
     - Rebalancing: ``POST /rebalancing/execute`` (and the WorldService-proxied ``/rebalancing/plan``)
 
