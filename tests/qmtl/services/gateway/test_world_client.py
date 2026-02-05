@@ -183,6 +183,60 @@ async def test_get_decide_as_of_forwards_query_and_scopes_cache() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_activation_returns_inactive_failsafe_on_stale_backend_error() -> None:
+    metrics.reset_metrics()
+    calls = {"count": 0}
+    activation_payload = {
+        "world_id": "w1",
+        "strategy_id": "s1",
+        "side": "long",
+        "active": True,
+        "weight": 1.0,
+        "etag": "abc",
+        "ts": "2025-01-01T00:00:00Z",
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/activation"):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                assert request.headers.get("If-None-Match") is None
+                return httpx.Response(
+                    200,
+                    json=activation_payload,
+                    headers={"ETag": "abc"},
+                )
+            assert request.headers.get("If-None-Match") == "abc"
+            return httpx.Response(500)
+        raise AssertionError("unexpected path")
+
+    transport = httpx.MockTransport(handler)
+    client = WorldServiceClient(
+        "http://world",
+        client=httpx.AsyncClient(transport=transport),
+    )
+
+    try:
+        first, stale_first = await client.get_activation("w1", "s1", "long")
+        second, stale_second = await client.get_activation("w1", "s1", "long")
+    finally:
+        await client._client.aclose()
+
+    assert first == activation_payload
+    assert stale_first is False
+    assert second["world_id"] == "w1"
+    assert second["strategy_id"] == "s1"
+    assert second["side"] == "long"
+    assert second["active"] is False
+    assert second["weight"] == 0.0
+    assert second["effective_mode"] == "compute-only"
+    assert second["execution_domain"] == "backtest"
+    assert stale_second is True
+    assert first["active"] is True
+    assert metrics.worlds_stale_responses_total._value.get() == 1
+
+
+@pytest.mark.asyncio
 async def test_post_rebalance_plan_includes_schema_version() -> None:
     observed: list[dict] = []
 

@@ -37,6 +37,15 @@ async def test_activation_stale_on_backend_error(
     gateway_app_factory, reset_gateway_metrics
 ) -> None:
     calls = {"n": 0}
+    activation_payload = {
+        "world_id": "abc",
+        "strategy_id": "s",
+        "side": "long",
+        "active": True,
+        "weight": 1.0,
+        "etag": "abc",
+        "ts": "2025-01-01T00:00:00Z",
+    }
 
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/activation"):
@@ -44,7 +53,7 @@ async def test_activation_stale_on_backend_error(
             if calls["n"] == 1:
                 return httpx.Response(
                     200,
-                    json={"a": 1},
+                    json=activation_payload,
                     headers={"ETag": "abc"},
                 )
             return httpx.Response(500)
@@ -55,8 +64,15 @@ async def test_activation_stale_on_backend_error(
         r1 = await ctx.client.get("/worlds/abc/activation", params=params)
         r2 = await ctx.client.get("/worlds/abc/activation", params=params)
 
-    assert r1.json() == {"a": 1}
-    assert r2.json() == {"a": 1}
+    assert r1.json() == activation_payload
+    payload = r2.json()
+    assert payload["world_id"] == "abc"
+    assert payload["strategy_id"] == "s"
+    assert payload["side"] == "long"
+    assert payload["active"] is False
+    assert payload["weight"] == 0.0
+    assert payload["effective_mode"] == "compute-only"
+    assert payload["execution_domain"] == "backtest"
     assert r2.headers["X-Stale"] == "true"
     assert r2.headers["Warning"] == "110 - Response is stale"
     assert metrics.worlds_stale_responses_total._value.get() == 1

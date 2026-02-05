@@ -2944,6 +2944,7 @@ async def test_decide_effective_mode_canonicalised():
             assert resp.status_code == 200
             body = resp.json()
             assert body["effective_mode"] == "validate"
+            assert body["ttl"] == "300s"
 
             await client.post(
                 "/worlds/mode-test/bindings", json={"strategies": ["s-live"]}
@@ -2996,7 +2997,7 @@ async def test_decide_blocks_live_without_allow_flag():
             body = resp.json()
             assert body["effective_mode"] == "compute-only"
             assert "allow_live_disabled" in body["reason"]
-            assert body["ttl"] == "60s"
+            assert body["ttl"] == "300s"
 
 
 @pytest.mark.asyncio

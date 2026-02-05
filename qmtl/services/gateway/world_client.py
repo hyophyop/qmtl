@@ -10,7 +10,7 @@ from qmtl.foundation.common import AsyncCircuitBreaker
 from qmtl.foundation.common.compute_context import ComputeContext
 
 from . import metrics as gw_metrics
-from .caches import ActivationCache, TTLCache, TTLCacheResult
+from .caches import ActivationCache, ActivationCacheEntry, TTLCache, TTLCacheResult
 from .transport import BreakerRetryTransport
 from .world_payloads import augment_activation_payload, augment_decision_payload
 
@@ -226,20 +226,60 @@ class WorldServiceClient:
         except Exception:
             if cached_entry is not None:
                 gw_metrics.record_worlds_stale_response()
-                return cached_payload, True
+                return (
+                    self._build_stale_activation_failsafe(
+                        world_id=world_id,
+                        strategy_id=strategy_id,
+                        side=side,
+                        cached_entry=cached_entry,
+                    ),
+                    True,
+                )
             raise
         if resp.status_code == 304 and cached_entry is not None:
             gw_metrics.record_worlds_cache_hit()
             return cached_payload, False
         if resp.status_code >= 500 and cached_entry is not None:
             gw_metrics.record_worlds_stale_response()
-            return cached_payload, True
+            return (
+                self._build_stale_activation_failsafe(
+                    world_id=world_id,
+                    strategy_id=strategy_id,
+                    side=side,
+                    cached_entry=cached_entry,
+                ),
+                True,
+            )
         resp.raise_for_status()
         data = augment_activation_payload(resp.json())
         new_etag = resp.headers.get("ETag")
         if new_etag:
             self._activation_cache.set(key, new_etag, data)
         return data, False
+
+    def _build_stale_activation_failsafe(
+        self,
+        *,
+        world_id: str,
+        strategy_id: str,
+        side: str,
+        cached_entry: ActivationCacheEntry[Any],
+    ) -> dict[str, Any]:
+        cached_payload = cached_entry.payload
+        payload = dict(cached_payload) if isinstance(cached_payload, dict) else {}
+        payload.setdefault("world_id", world_id)
+        payload.setdefault("strategy_id", strategy_id)
+        payload.setdefault("side", side)
+        payload.setdefault("etag", cached_entry.etag)
+        payload["effective_mode"] = "compute-only"
+        payload["active"] = False
+        payload["weight"] = 0.0
+        payload.pop("execution_domain", None)
+        payload.pop("compute_context", None)
+        augmented = augment_activation_payload(payload)
+        if isinstance(augmented, dict):
+            return augmented
+        return payload
 
     async def _fetch_decide_response(
         self,

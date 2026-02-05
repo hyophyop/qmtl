@@ -164,7 +164,7 @@ omitted, Gateway defaults to ``any`` for backward compatibility.
 
     - 전략: ``POST /strategies/dry-run`` , ``POST /strategies/{strategy_id}/history``
     - 이벤트/스키마: ``GET /events/jwks`` , ``GET /events/schema`` (WebSocket 구독은 별도)
-    - 인제스트/리플레이: ``POST /fills`` , ``GET /fills/replay`` *(현재 빌드에서는 placeholder 응답만 제공)*
+    - 인제스트/리플레이: ``POST /fills`` (인제스트 엔드포인트 구현됨), ``GET /fills/replay`` *(현재 빌드에서는 placeholder 응답만 제공)*
     - 관측성: ``GET /metrics``
     - 리밸런싱: ``POST /rebalancing/execute`` (및 WorldService 프록시 ``/rebalancing/plan``)
 

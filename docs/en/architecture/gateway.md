@@ -170,7 +170,7 @@ omitted, Gateway defaults to ``any`` for backward compatibility.
 
     - Strategies: ``POST /strategies/dry-run``, ``POST /strategies/{strategy_id}/history``
     - Events/schemas: ``GET /events/jwks``, ``GET /events/schema`` (WebSocket subscriptions are separate)
-    - Ingest/replay: ``POST /fills``, ``GET /fills/replay`` *(placeholder response in the current build)*
+    - Ingest/replay: ``POST /fills`` (implemented ingest endpoint), ``GET /fills/replay`` *(placeholder response in the current build)*
     - Observability: ``GET /metrics``
     - Rebalancing: ``POST /rebalancing/execute`` (and the WorldService-proxied ``/rebalancing/plan``)
 
