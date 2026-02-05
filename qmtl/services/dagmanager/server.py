@@ -45,7 +45,7 @@ def _log_config_source(
 
 
 from .api import create_app
-from .garbage_collector import GarbageCollector, MetricsProvider, QueueStore
+from .garbage_collector import GarbageCollector, MetricsProvider, QueueStore, S3ArchiveClient
 from .diff_service import StreamSender
 from .monitor import AckStatus
 from .controlbus_producer import ControlBusProducer
@@ -413,7 +413,18 @@ async def _run(
         getattr(cfg, "kafka_metrics_url", None)
     )
     store: QueueStore = KafkaQueueStore(kafka_admin, repo)
-    gc = GarbageCollector(store, metrics_provider)
+    archive_client = None
+    archive_bucket = getattr(cfg, "gc_archive_bucket", None)
+    if archive_bucket:
+        try:
+            archive_client = S3ArchiveClient(str(archive_bucket))
+        except Exception as exc:  # pragma: no cover - optional dependency/env
+            logging.warning(
+                "Failed to initialize DAG Manager archive client for bucket %s: %s",
+                archive_bucket,
+                exc,
+            )
+    gc = GarbageCollector(store, metrics_provider, archive=archive_client)
     scheduler = GCScheduler(gc, interval=float(getattr(cfg, "gc_interval_seconds", 60.0)))
 
     bus = None

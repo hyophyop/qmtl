@@ -3075,6 +3075,77 @@ async def test_decide_uses_hysteresis_when_metrics_missing():
             assert "hysteresis_hold" in body["reason"]
             assert body["ttl"] == "120s"
 
+
+@pytest.mark.asyncio
+async def test_decide_as_of_query_avoids_lookahead_history_metadata():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "asof-world"})
+            older = await client.post(
+                "/worlds/asof-world/history",
+                json={
+                    "strategy_id": "s-old",
+                    "node_id": "n-old",
+                    "interval": 60,
+                    "dataset_fingerprint": "fp-old",
+                    "rows": 11,
+                    "as_of": "2025-03-15T00:00:00Z",
+                },
+            )
+            assert older.status_code == 204
+            newer = await client.post(
+                "/worlds/asof-world/history",
+                json={
+                    "strategy_id": "s-new",
+                    "node_id": "n-new",
+                    "interval": 60,
+                    "dataset_fingerprint": "fp-new",
+                    "rows": 22,
+                    "as_of": "2025-03-17T00:00:00Z",
+                },
+            )
+            assert newer.status_code == 204
+
+            latest = await client.get("/worlds/asof-world/decide")
+            assert latest.status_code == 200
+            assert latest.json()["dataset_fingerprint"] == "fp-new"
+
+            past = await client.get(
+                "/worlds/asof-world/decide",
+                params={"as_of": "2025-03-16T00:00:00Z"},
+            )
+            assert past.status_code == 200
+            past_body = past.json()
+            assert past_body["dataset_fingerprint"] == "fp-old"
+            assert past_body["rows"] == 11
+            assert past_body["as_of"] == "2025-03-15T00:00:00Z"
+
+            before_history = await client.get(
+                "/worlds/asof-world/decide",
+                params={"as_of": "2025-03-01T00:00:00Z"},
+            )
+            assert before_history.status_code == 200
+            before_body = before_history.json()
+            assert before_body["dataset_fingerprint"] is None
+            assert before_body["as_of"] == "2025-03-01T00:00:00Z"
+
+
+@pytest.mark.asyncio
+async def test_decide_rejects_invalid_as_of_query():
+    app = create_app(storage=Storage())
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            await client.post("/worlds", json={"id": "asof-invalid"})
+            resp = await client.get(
+                "/worlds/asof-invalid/decide",
+                params={"as_of": "not-a-timestamp"},
+            )
+
+    assert resp.status_code == 422
+    assert "invalid as_of" in resp.json()["detail"]
+
+
 @pytest.mark.asyncio
 async def test_post_decisions_normalizes_payload_and_validates():
     bus = DummyBus()

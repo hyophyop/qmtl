@@ -32,8 +32,12 @@ def create_bindings_router(service: WorldService) -> APIRouter:
         return BindingsResponse(strategies=strategies)
 
     @router.get('/worlds/{world_id}/decide', response_model=DecisionEnvelope)
-    async def get_decide(world_id: str, response: Response) -> DecisionEnvelope:
-        decision = await service.decide(world_id)
+    async def get_decide(
+        world_id: str,
+        response: Response,
+        as_of: str | None = None,
+    ) -> DecisionEnvelope:
+        decision = await service.decide(world_id, as_of=as_of)
         response.headers['Cache-Control'] = 'max-age=300'
         return decision
 

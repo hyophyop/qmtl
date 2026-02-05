@@ -144,6 +144,45 @@ async def test_get_decide_returns_cached_payload_on_backend_error() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_decide_as_of_forwards_query_and_scopes_cache() -> None:
+    seen_params: list[dict[str, str]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/decide"):
+            seen_params.append(dict(request.url.params))
+            return httpx.Response(
+                200,
+                json={"decision": f"ok-{len(seen_params)}"},
+                headers={"Cache-Control": "max-age=60"},
+            )
+        raise AssertionError("unexpected path")
+
+    transport = httpx.MockTransport(handler)
+    client = WorldServiceClient(
+        "http://world",
+        client=httpx.AsyncClient(transport=transport),
+    )
+
+    try:
+        first, stale_first = await client.get_decide("w1", as_of="2025-01-01T00:00:00Z")
+        second, stale_second = await client.get_decide("w1", as_of="2025-01-01T00:00:00Z")
+        third, stale_third = await client.get_decide("w1", as_of="2025-01-02T00:00:00Z")
+    finally:
+        await client._client.aclose()
+
+    assert first == {"decision": "ok-1"}
+    assert stale_first is False
+    assert second == {"decision": "ok-1"}
+    assert stale_second is False
+    assert third == {"decision": "ok-2"}
+    assert stale_third is False
+    assert seen_params == [
+        {"as_of": "2025-01-01T00:00:00Z"},
+        {"as_of": "2025-01-02T00:00:00Z"},
+    ]
+
+
+@pytest.mark.asyncio
 async def test_post_rebalance_plan_includes_schema_version() -> None:
     observed: list[dict] = []
 

@@ -136,7 +136,7 @@ class GarbageCollector:
             if rule.action == "drop":
                 self.store.drop_queue(queue.name)
             elif rule.action == "archive":
-                if self.archive is not None and queue.tag == "sentinel":
+                if self.archive is not None:
                     self.archive.archive(queue.name)
                 self.store.drop_queue(queue.name)
             processed.append(queue)

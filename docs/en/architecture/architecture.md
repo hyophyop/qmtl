@@ -4,7 +4,7 @@ tags:
   - architecture
   - design
 author: "QMTL Team"
-last_modified: 2025-12-06
+last_modified: 2026-02-05
 ---
 
 {{ nav_links() }}
@@ -24,6 +24,7 @@ last_modified: 2025-12-06
 - [ControlBus](controlbus.md)
 - [Exchange Node Sets](exchange_node_sets.md)
 - Risk Signal Hub: [Risk Signal Hub Architecture](risk_signal_hub.md)
+- Core Loop contract tests: `tests/e2e/core_loop/README.md`
 
 ---
 
@@ -580,7 +581,8 @@ if __name__ == "__main__":
 | WorldService | World policy/decision/activation SSOT                  | FastAPI, Redis, PostgreSQL                  |
 | Infra        | Message bus, storage, observability                    | Redpanda, Prometheus, Grafana, MinIO        |
 
-Ownership boundaries recap:
+## Ownership Model
+
 - **SDK** executes DAGs locally but does not own global state.
 - **Gateway** manages submission lifecycle but not graph/world/queue state.
 - **DAG Manager** owns ComputeNode and Queue metadata plus topic lifecycle.
@@ -655,6 +657,6 @@ The golden-signal To-Be is materialised in the dashboards/SLOs documented in `..
 - Policy bundles should declare `share_policy`, edge overrides, and risk limits
   explicitly so promotion pipelines remain auditable.
 - Keep layer templates loosely coupled and document changes in
-  `docs/en/architecture/layered_template_system.md`.
+  [layered_template_system.md](layered_template_system.md).
 
 {{ nav_links() }}

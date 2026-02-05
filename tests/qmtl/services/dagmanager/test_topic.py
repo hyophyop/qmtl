@@ -91,7 +91,12 @@ def test_topic_config_values():
     config = get_config("raw")
     assert config == TopicConfig(partitions=3, replication_factor=3, retention_ms=7 * 24 * 60 * 60 * 1000)
     ind = get_config("indicator")
-    assert ind == TopicConfig(partitions=1, replication_factor=2, retention_ms=30 * 24 * 60 * 60 * 1000)
+    assert ind == TopicConfig(
+        partitions=1,
+        replication_factor=2,
+        retention_ms=30 * 24 * 60 * 60 * 1000,
+        cleanup_policy="delete",
+    )
     exec_config = get_config("trade_exec")
     assert exec_config == TopicConfig(partitions=1, replication_factor=3, retention_ms=90 * 24 * 60 * 60 * 1000)
 
@@ -110,3 +115,15 @@ def test_idempotent_topic_creation():
     assert parts == 1
     assert repl == 1
     assert conf["retention.ms"] == "1000"
+
+
+def test_topic_creation_with_compact_cleanup_policy():
+    admin = FakeAdmin({})
+    wrapper = KafkaAdmin(admin, wait_initial=0.0, wait_max=0.0)
+
+    config = TopicConfig(1, 1, 1000, cleanup_policy="compact")
+    wrapper.create_topic_if_needed("state", config)
+
+    assert len(admin.created) == 1
+    _, _, _, conf = admin.created[0]
+    assert conf["cleanup.policy"] == "compact"

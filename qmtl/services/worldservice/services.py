@@ -1531,8 +1531,9 @@ class WorldService:
             return None
         return f"/worlds/{world_id}/strategies/{strategy_id}/runs/{run_id}"
 
-    async def decide(self, world_id: str) -> DecisionEnvelope:
+    async def decide(self, world_id: str, as_of: str | None = None) -> DecisionEnvelope:
         now = datetime.now(timezone.utc)
+        requested_as_of = self._normalize_decide_as_of(as_of)
         world = await self.store.get_world(world_id)
         if world is None:
             raise HTTPException(status_code=404, detail="world not found")
@@ -1540,7 +1541,7 @@ class WorldService:
         version = await self.store.default_policy_version(world_id)
         bindings = await self.store.list_bindings(world_id)
         decisions = await self.store.get_decisions(world_id)
-        metadata = await self.store.latest_history_metadata(world_id)
+        metadata = await self._resolve_decision_metadata(world_id, requested_as_of)
 
         normalized_metadata = self._normalize_metadata(metadata)
         allow_live = bool(world.get("allow_live", False))
@@ -1553,11 +1554,16 @@ class WorldService:
             world_id=world_id,
         )
 
+        resolved_as_of = normalized_metadata.get(
+            "as_of",
+            requested_as_of or evaluation["as_of_fallback"],
+        )
+
         etag = self._build_decision_etag(
             world_id,
             version,
             normalized_metadata.get("dataset_fingerprint"),
-            normalized_metadata.get("as_of"),
+            resolved_as_of,
             normalized_metadata.get("history_updated_at"),
             now,
         )
@@ -1567,7 +1573,7 @@ class WorldService:
             policy_version=version,
             effective_mode=evaluation["effective_mode"],
             reason=evaluation["reason"],
-            as_of=normalized_metadata.get("as_of", evaluation["as_of_fallback"]),
+            as_of=resolved_as_of,
             ttl=evaluation["ttl"],
             etag=etag,
             dataset_fingerprint=normalized_metadata.get("dataset_fingerprint"),
@@ -1673,6 +1679,47 @@ class WorldService:
                 normalized["rows"] = int(normalized["artifact"].rows)  # type: ignore[arg-type]
 
         return normalized
+
+    def _normalize_decide_as_of(self, as_of: str | None) -> str | None:
+        normalized = str(as_of or "").strip()
+        if not normalized:
+            return None
+        parsed = parse_timestamp(normalized)
+        if parsed is None:
+            raise HTTPException(
+                status_code=422,
+                detail="invalid as_of; expected ISO-8601 timestamp",
+            )
+        return parsed.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+    async def _resolve_decision_metadata(
+        self,
+        world_id: str,
+        as_of: str | None,
+    ) -> Optional[Dict[str, Any]]:
+        if not as_of:
+            return await self.store.latest_history_metadata(world_id)
+
+        target = parse_timestamp(as_of)
+        if target is None:
+            return None
+
+        entries = await self.store.list_history_metadata(world_id)
+        best_entry: Dict[str, Any] | None = None
+        best_rank: tuple[datetime, datetime] | None = None
+        floor = datetime.min.replace(tzinfo=timezone.utc)
+
+        for entry in entries:
+            entry_as_of = parse_timestamp(entry.get("as_of"))
+            if entry_as_of is not None and entry_as_of > target:
+                continue
+            entry_updated = parse_timestamp(entry.get("updated_at"))
+            rank = (entry_as_of or floor, entry_updated or floor)
+            if best_rank is None or rank > best_rank:
+                best_rank = rank
+                best_entry = entry
+
+        return dict(best_entry) if best_entry else None
 
     def _evaluate_policy(
         self,

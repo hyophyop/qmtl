@@ -13,6 +13,13 @@ from . import metrics
 from .topic import TopicConfig
 
 
+def _normalize_cleanup_policy(value: object) -> tuple[str, ...] | None:
+    if not isinstance(value, str):
+        return None
+    tokens = sorted({token.strip().lower() for token in value.split(",") if token.strip()})
+    return tuple(tokens) or None
+
+
 def compute_key(
     node_id: str,
     *,
@@ -202,6 +209,24 @@ class TopicVerificationPolicy:
                     TopicExistsError(f"retention mismatch for topic '{name}'"),
                     diagnostics={"retention.ms": retention},
                 )
+        else:
+            meta_config = {}
+
+        expected_cleanup_policy = _normalize_cleanup_policy(config.cleanup_policy)
+        if expected_cleanup_policy is not None:
+            observed_cleanup_policy = _normalize_cleanup_policy(
+                meta_config.get("cleanup.policy")
+            )
+            # Missing broker value implies the default Kafka "delete" policy.
+            if observed_cleanup_policy is None and expected_cleanup_policy == ("delete",):
+                observed_cleanup_policy = ("delete",)
+            if observed_cleanup_policy != expected_cleanup_policy:
+                return TopicEnsureResult.failure(
+                    TopicExistsError(f"cleanup policy mismatch for topic '{name}'"),
+                    diagnostics={
+                        "cleanup.policy": meta_config.get("cleanup.policy"),
+                    },
+                )
         return None
 
 
@@ -270,11 +295,16 @@ class KafkaAdmin:
         )
 
     def _create_topic(self, name: str, config: TopicConfig) -> None:
+        topic_config = {"retention.ms": str(config.retention_ms)}
+        cleanup_policy = _normalize_cleanup_policy(config.cleanup_policy)
+        if cleanup_policy is not None:
+            topic_config["cleanup.policy"] = ",".join(cleanup_policy)
+
         self.client.create_topic(
             name,
             num_partitions=config.partitions,
             replication_factor=config.replication_factor,
-            config={"retention.ms": str(config.retention_ms)},
+            config=topic_config,
         )
 
     def create_topic_if_needed(self, name: str, config: TopicConfig) -> None:

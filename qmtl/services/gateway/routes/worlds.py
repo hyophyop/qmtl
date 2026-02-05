@@ -365,6 +365,7 @@ WORLD_ROUTES: tuple[WorldRoute, ...] = (
         "/worlds/{world_id}/decide",
         "get_decide",
         path_params=("world_id",),
+        query_params=("as_of",),
         stale_response=True,
     ),
     WorldRoute(

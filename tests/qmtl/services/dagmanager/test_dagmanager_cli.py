@@ -47,13 +47,15 @@ def test_cli_diff_dry_run(tmp_path, capsys):
     assert "n1" in out
 
 def test_cli_queue_stats(monkeypatch, capsys):
+    captured = {}
+
     class Stub:
         def __init__(self, channel):
             pass
         async def GetQueueStats(self, request):
+            captured["filter"] = request.filter
             return dagmanager_pb2.QueueStats(sizes={"q": 1})
 
-    captured = {}
     def fake_channel(target):
         captured["target"] = target
         return DummyChannel()
@@ -65,17 +67,19 @@ def test_cli_queue_stats(monkeypatch, capsys):
     data = json.loads(out)
     assert data == {"q": 1}
     assert captured["target"] == "localhost:50051"
+    assert captured["filter"] == "tag=;interval=3600"
 
 
 def test_cli_queue_stats_custom_target(monkeypatch, capsys):
+    captured = {}
+
     class Stub:
         def __init__(self, channel):
             pass
 
         async def GetQueueStats(self, request):
+            captured["filter"] = request.filter
             return dagmanager_pb2.QueueStats(sizes={"q": 1})
-
-    captured = {}
 
     def fake_channel(target):
         captured["target"] = target
@@ -88,6 +92,28 @@ def test_cli_queue_stats_custom_target(monkeypatch, capsys):
     data = json.loads(out)
     assert data == {"q": 1}
     assert captured["target"] == "remote:1234"
+    assert captured["filter"] == "tag=;interval=3600"
+
+
+def test_cli_queue_stats_parses_text_interval(monkeypatch, capsys):
+    captured = {}
+
+    class Stub:
+        def __init__(self, channel):
+            pass
+
+        async def GetQueueStats(self, request):
+            captured["filter"] = request.filter
+            return dagmanager_pb2.QueueStats(sizes={"q": 1})
+
+    monkeypatch.setattr(dagmanager_pb2_grpc, "AdminServiceStub", Stub)
+    monkeypatch.setattr(grpc.aio, "insecure_channel", lambda target: DummyChannel())
+    main(["queue-stats", "--interval", "5m"])
+
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert data == {"q": 1}
+    assert captured["filter"] == "tag=;interval=300"
 
 
 def test_cli_gc(monkeypatch, capsys):

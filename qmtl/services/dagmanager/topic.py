@@ -100,11 +100,17 @@ class TopicConfig:
     partitions: int
     replication_factor: int
     retention_ms: int
+    cleanup_policy: str | None = None
 
 
 _TOPIC_CONFIG = {
     "raw": TopicConfig(partitions=3, replication_factor=3, retention_ms=7 * 24 * 60 * 60 * 1000),
-    "indicator": TopicConfig(partitions=1, replication_factor=2, retention_ms=30 * 24 * 60 * 60 * 1000),
+    "indicator": TopicConfig(
+        partitions=1,
+        replication_factor=2,
+        retention_ms=30 * 24 * 60 * 60 * 1000,
+        cleanup_policy="delete",
+    ),
     "trade_exec": TopicConfig(partitions=1, replication_factor=3, retention_ms=90 * 24 * 60 * 60 * 1000),
 }
 

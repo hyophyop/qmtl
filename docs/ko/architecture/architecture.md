@@ -4,7 +4,7 @@ tags:
   - architecture
   - design
 author: "QMTL Team"
-last_modified: 2025-12-06
+last_modified: 2026-02-05
 ---
 
 {{ nav_links() }}
@@ -702,6 +702,7 @@ Runner.submit(CrossMarketLagStrategy, world="cross_market_lag")
 | SDK         | DAG 생성, 전략 코드 실행, 로컬 연산 병렬 처리        | Python 3.11, Ray, Pydantic            |
 | Gateway     | 상태 FSM, 전략 전이 로직, DAG diff 수행, 콜백 전송 | FastAPI, Redis, PostgreSQL, xstate-py |
 | DAG Manager | Neo4j 기반 전역 DAG 저장 및 증분 쿼리, 큐 생성 판단  | Neo4j 5.x, APOC, Kafka Admin Client   |
+| WorldService | 월드 정책/결정/활성 SSOT                         | FastAPI, Redis, PostgreSQL            |
 | Infra       | 메시지 중개 및 운영 관측 지표 수집                 | Redpanda, Prometheus, Grafana, MinIO  |
 
 ---
@@ -716,7 +717,7 @@ Runner.submit(CrossMarketLagStrategy, world="cross_market_lag")
 
 ---
 
-## Commit-Log Design
+## 6. Commit-Log 경계
 
 QMTL은 **append-only commit log** 설계를 채택하여 모든 상태 변화를 재생 가능한 이벤트로 남긴다.
 
@@ -729,7 +730,7 @@ QMTL은 **append-only commit log** 설계를 채택하여 모든 상태 변화�
 
 ---
 
-## 6. Deterministic Checklist (v0.9)
+## 7. Deterministic Checklist (v0.9)
 
 아래 항목들은 전역 DAG 일관성 및 고신뢰 큐 오케스트레이션을 보장하기 위해 실무에서
 검증해야 하는 세부 사항이다.
@@ -767,6 +768,15 @@ QMTL은 **append-only commit log** 설계를 채택하여 모든 상태 변화�
 ### 관측 · 런북 연결
 - Gateway 메트릭: `nodeid_checksum_mismatch_total{source="dag"}`, `nodeid_missing_fields_total{field,node_type}`, `nodeid_mismatch_total{node_type}`, `tagquery_nodeid_mismatch_total`.
 - Runbook: `docs/ko/operations/determinism.md`를 따라 NodeID 재계산/CRC·TagQuery 불일치 시 대응한다. 메트릭이 상승하면 DAG 재생성(해시 재계산) 후 Core Loop 계약 테스트(`tests/e2e/core_loop`)로 복구를 확인한다.
+
+---
+
+## 8. Additional Guidance
+
+- 프로모션 정책과 EvalKey에는 반드시 `dataset_fingerprint`를 고정해야 하며, 누락 시 apply는 강등 또는 거부되어야 한다.
+- `observability.slo.cross_context_cache_hit`는 항상 0을 유지해야 한다. 위반 시 원인 제거 전까지 실행을 중단한다.
+- 정책 번들은 `share_policy`, edge override, 리스크 한도를 명시해 프로모션 파이프라인의 감사 가능성을 유지한다.
+- 레이어 템플릿은 느슨한 결합을 유지하고 변경 사항은 [layered_template_system.md](layered_template_system.md)에 문서화한다.
 
 
 {{ nav_links() }}

@@ -1,6 +1,11 @@
 from datetime import datetime, timedelta, UTC
 
-from qmtl.services.dagmanager.garbage_collector import GarbageCollector, QueueInfo, S3ArchiveClient
+from qmtl.services.dagmanager.garbage_collector import (
+    GarbageCollector,
+    GcRule,
+    QueueInfo,
+    S3ArchiveClient,
+)
 
 
 class FakeStore:
@@ -90,6 +95,41 @@ def test_gc_archives_with_client():
     assert [q.name for q in processed] == ["s"]
     assert store.dropped == ["s"]
     assert archive.archived == ["s"]
+
+
+def test_gc_archive_action_is_safe_without_archive_client():
+    now = datetime.now(UTC)
+    queues = [QueueInfo("s", "sentinel", now - timedelta(days=400))]
+    store = FakeStore(queues)
+    metrics = FakeMetrics(0)
+    gc = GarbageCollector(store, metrics, archive=None, batch_size=1)
+
+    processed = gc.collect(now)
+
+    assert [q.name for q in processed] == ["s"]
+    assert store.dropped == ["s"]
+
+
+def test_gc_archive_action_uses_policy_for_non_sentinel_tags():
+    now = datetime.now(UTC)
+    queues = [QueueInfo("indicator_q", "indicator", now - timedelta(days=40))]
+    store = FakeStore(queues)
+    metrics = FakeMetrics(0)
+    archive = FakeArchive()
+    policy = {
+        "indicator": GcRule(
+            ttl=timedelta(days=1),
+            grace=timedelta(days=0),
+            action="archive",
+        )
+    }
+    gc = GarbageCollector(store, metrics, policy=policy, archive=archive, batch_size=1)
+
+    processed = gc.collect(now)
+
+    assert [q.name for q in processed] == ["indicator_q"]
+    assert store.dropped == ["indicator_q"]
+    assert archive.archived == ["indicator_q"]
 
 
 class DummyS3:
