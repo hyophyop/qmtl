@@ -80,6 +80,49 @@ def test_verification_policy_reports_parameter_mismatch(metadata):
     assert isinstance(result.error, TopicExistsError)
 
 
+def test_verification_policy_accepts_missing_cleanup_policy_for_delete() -> None:
+    policy = TopicVerificationPolicy()
+    config = TopicConfig(
+        partitions=1,
+        replication_factor=1,
+        retention_ms=100,
+        cleanup_policy="delete",
+    )
+    metadata = {
+        "topic": {
+            "num_partitions": 1,
+            "replication_factor": 1,
+            "config": {"retention.ms": "100"},
+        }
+    }
+
+    result = policy.evaluate("topic", metadata, config)
+
+    assert result.ok
+
+
+def test_verification_policy_detects_cleanup_policy_mismatch() -> None:
+    policy = TopicVerificationPolicy()
+    config = TopicConfig(
+        partitions=1,
+        replication_factor=1,
+        retention_ms=100,
+        cleanup_policy="compact",
+    )
+    metadata = {
+        "topic": {
+            "num_partitions": 1,
+            "replication_factor": 1,
+            "config": {"retention.ms": "100", "cleanup.policy": "delete"},
+        }
+    }
+
+    result = policy.evaluate("topic", metadata, config)
+
+    assert not result.ok
+    assert isinstance(result.error, TopicExistsError)
+
+
 @pytest.mark.asyncio
 async def test_create_topic_retries_and_raises_last_error():
     client = _RecordingAdmin(fail_creates=2)

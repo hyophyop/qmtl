@@ -25,6 +25,7 @@ from .neo4j_export import export_schema, connect
 from .neo4j_init import init_schema, rollback as neo4j_rollback
 from ..gateway.dagmanager_client import DagManagerClient
 from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
+from qmtl.runtime.sdk.util import parse_interval
 from qmtl.utils.i18n import _, set_language
 from qmtl.foundation.common import AsyncCircuitBreaker
 
@@ -187,11 +188,24 @@ async def _cmd_queue_stats(args: argparse.Namespace) -> None:
     channel = grpc.aio.insecure_channel(args.target)
     try:
         stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
-        req = dagmanager_pb2.QueueStatsRequest(filter=f"tag={args.tag};interval={args.interval}")
+        interval = _normalize_queue_stats_interval(args.interval)
+        req = dagmanager_pb2.QueueStatsRequest(filter=f"tag={args.tag};interval={interval}")
         resp = await _grpc_call(stub.GetQueueStats(req))
         print(json.dumps(dict(resp.sizes)))
     finally:
         await channel.close()
+
+
+def _normalize_queue_stats_interval(value: object) -> str:
+    text = str(value).strip()
+    if not text:
+        return "0"
+    if text.isdigit():
+        return str(int(text))
+    try:
+        return str(parse_interval(text))
+    except Exception:
+        return text
 
 
 async def _cmd_gc(args: argparse.Namespace) -> None:

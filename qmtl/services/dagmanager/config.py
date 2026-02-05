@@ -23,6 +23,7 @@ class DagManagerConfig:
     enable_topic_namespace: bool = True
     kafka_metrics_url: Optional[str] = None
     gc_interval_seconds: float = 60.0
+    gc_archive_bucket: Optional[str] = None
 
 
 def load_dagmanager_config(path: str) -> DagManagerConfig:

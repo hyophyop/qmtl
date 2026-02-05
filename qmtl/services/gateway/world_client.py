@@ -174,13 +174,23 @@ class WorldServiceClient:
         return self._breaker
 
     async def get_decide(
-        self, world_id: str, headers: Optional[Dict[str, str]] = None
+        self,
+        world_id: str,
+        as_of: str | None = None,
+        headers: Optional[Dict[str, str]] = None,
     ) -> tuple[Any, bool]:
-        cached: TTLCacheResult[Any] = self._decision_cache.lookup(world_id)
+        normalized_as_of = self._normalize_as_of(as_of)
+        cache_key = self._decision_cache_key(world_id, normalized_as_of)
+        cached: TTLCacheResult[Any] = self._decision_cache.lookup(cache_key)
         if cached.fresh:
             gw_metrics.record_worlds_cache_hit()
             return cached.value, False
-        result = await self._fetch_decide_response(world_id, headers, cached)
+        result = await self._fetch_decide_response(
+            world_id,
+            normalized_as_of,
+            headers,
+            cached,
+        )
         if not isinstance(result, httpx.Response):
             payload, stale = result
             return payload, stale
@@ -192,7 +202,7 @@ class WorldServiceClient:
         augmented = augment_decision_payload(world_id, data)
         ttl = self._compute_decide_ttl(data, cache_control)
         if ttl > 0:
-            self._decision_cache.set(world_id, augmented, ttl)
+            self._decision_cache.set(cache_key, augmented, ttl)
         return augmented, False
 
     async def get_activation(
@@ -234,14 +244,17 @@ class WorldServiceClient:
     async def _fetch_decide_response(
         self,
         world_id: str,
+        as_of: str | None,
         headers: Optional[Dict[str, str]],
         cached: TTLCacheResult[Any],
     ) -> httpx.Response | tuple[Any, bool]:
+        params = {"as_of": as_of} if as_of else None
         try:
             resp = await self._request(
                 "GET",
                 self._build_url(f"/worlds/{world_id}/decide"),
                 headers=headers,
+                params=params,
             )
         except Exception:
             if cached.present:
@@ -252,6 +265,16 @@ class WorldServiceClient:
             gw_metrics.record_worlds_stale_response()
             return cached.value, True
         return resp
+
+    @staticmethod
+    def _normalize_as_of(value: str | None) -> str | None:
+        normalized = str(value or "").strip()
+        return normalized or None
+
+    def _decision_cache_key(self, world_id: str, as_of: str | None) -> str:
+        if as_of is None:
+            return world_id
+        return f"{world_id}:as_of:{as_of}"
 
     def _compute_decide_ttl(self, data: Any, cache_control: str) -> int:
         ttl = self._ttl_from_cache_control(cache_control)

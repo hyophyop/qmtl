@@ -26,6 +26,7 @@ from .garbage_collector import GarbageCollector
 from .controlbus_producer import ControlBusProducer
 from .queue_updates import publish_queue_updates
 from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
+from qmtl.runtime.sdk.util import parse_interval
 from .dagmanager_health import get_health
 from qmtl.services.observability import add_span_attributes, build_observability_fields
 
@@ -354,11 +355,24 @@ def _parse_queue_filter(value: str) -> tuple[list[str], int]:
         kv = dict(p.split("=", 1) for p in parts if "=" in p)
         tags = kv.get("tag", "")
         interval_str = kv.get("interval")
-        tag_list = tags.split(",") if tags else []
-        interval = int(interval_str) if interval_str is not None else 0
+        tag_list = [tag.strip() for tag in tags.split(",") if tag.strip()] if tags else []
+        interval = _parse_filter_interval(interval_str)
         return tag_list, interval
     except Exception:
         return [], 0
+
+
+def _parse_filter_interval(value: str | None) -> int:
+    if value is None:
+        return 0
+    text = value.strip()
+    if not text:
+        return 0
+    if text.isdigit():
+        parsed = int(text)
+    else:
+        parsed = parse_interval(text)
+    return parsed if parsed > 0 else 0
 
 
 def serve(

@@ -2,7 +2,7 @@
 title: "주문 및 체결 이벤트 스키마"
 tags: [api, events]
 author: "QMTL Team"
-last_modified: 2025-09-08
+last_modified: 2026-02-05
 ---
 
 {{ nav_links() }}
@@ -105,9 +105,9 @@ PortfolioSnapshot (compacted)
 - `client_order_id` 는 선택이지만 멱등성과 조정을 위해 권장됩니다.
 - 프로바이더는 `metadata` 또는 `raw` 에 필드를 추가할 수 있으며, 다운스트림 컨슈머는 알 수 없는 키를 무시해야 합니다.
 
-### CloudEvents 엔벌로프(선택)
+### CloudEvents 엔벌로프
 
-Webhook 및 내부 이벤트 전송은 CloudEvents 1.0으로 페이로드를 감쌀 수 있습니다.
+Gateway `/fills` Webhook 요청 본문은 CloudEvents 1.0 엔벌로프여야 합니다. 최소 `specversion` 과 객체 형태의 `data` 필드가 필요합니다.
 
 ```json
 {
@@ -121,11 +121,18 @@ Webhook 및 내부 이벤트 전송은 CloudEvents 1.0으로 페이로드를 감
 }
 ```
 
-소비자는 순수 JSON과 CloudEvents 래핑된 형태 모두를 허용해야 합니다.
+`data` 객체는 `ExecutionFillEvent` 스키마를 따라야 하며, 순수 `ExecutionFillEvent` JSON 본문은 허용되지 않습니다. 엔벌로프가 없거나 `data` 가 객체가 아니면 `400 E_CE_REQUIRED` 를 반환합니다.
+
+CloudEvents 최상위 필드 중 `id`, `type`, `source`, `time` 이 문자열이면 Kafka 헤더(`ce_id`, `ce_type`, `ce_source`, `ce_time`)로 전달됩니다.
 
 ## Gateway `/fills` Webhook
 
-Gateway는 브로커 콜백을 위한 `/fills` 엔드포인트를 제공합니다. 페이로드는 순수 `ExecutionFillEvent` 또는 CloudEvents 1.0 엔벌로프 형태로 전송할 수 있습니다. 요청에는 HMAC 서명된 JWT가 포함되어야 하며 `world_id`, `strategy_id` 클레임이 페이로드와 일치해야 합니다. 범위를 벗어난 요청은 거절됩니다.
+Gateway는 브로커 콜백을 위한 `/fills` 엔드포인트를 제공합니다. 인증과 스코프 식별은 다음 규칙을 따릅니다.
+
+- `Authorization: Bearer <jwt>` 헤더가 있으면 JWT 경로를 사용합니다. 토큰은 공유 이벤트 키로 서명되어야 하며 `aud="fills"` 와 `world_id`, `strategy_id` 클레임이 필요합니다.
+- Bearer 헤더가 없을 때만 `X-Signature` 대체 경로를 사용합니다. `X-Signature` 는 원본 요청 본문(raw bytes)의 HMAC-SHA256 hex digest 여야 하며 `QMTL_FILL_SECRET` 설정이 필요합니다.
+- HMAC 경로에서 `world_id`, `strategy_id` 는 `X-World-ID`, `X-Strategy-ID` 헤더를 우선 사용하고, 헤더가 없으면 CloudEvents 최상위 확장 필드(`world_id`, `strategy_id`)를 사용합니다.
+- 인증 정보가 없거나 검증에 실패하면 `401 E_AUTH`, 스코프 식별자(`world_id`, `strategy_id`)를 결정할 수 없으면 `400 E_MISSING_IDS` 를 반환합니다.
 
 ### 재전송 엔드포인트
 

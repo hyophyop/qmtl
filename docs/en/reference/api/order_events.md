@@ -2,7 +2,7 @@
 title: "Order & Fill Event Schemas"
 tags: [api, events]
 author: "QMTL Team"
-last_modified: 2025-09-08
+last_modified: 2026-02-05
 ---
 
 {{ nav_links() }}
@@ -106,9 +106,9 @@ PortfolioSnapshot (compacted)
 - `client_order_id` is optional but recommended for idempotency and reconciliation.
 - Providers may add fields in `metadata` or `raw`; downstream consumers should ignore unknown keys.
 
-### CloudEvents Envelope (Optional)
+### CloudEvents Envelope
 
-Webhook and internal event transport MAY wrap payloads in CloudEvents 1.0:
+Gateway `/fills` webhook request bodies MUST use a CloudEvents 1.0 envelope. At minimum, `specversion` and an object-valued `data` field are required:
 
 ```json
 {
@@ -122,14 +122,18 @@ Webhook and internal event transport MAY wrap payloads in CloudEvents 1.0:
 }
 ```
 
-Consumers MUST accept both bare and CloudEvents-wrapped forms.
+The `data` object must follow the `ExecutionFillEvent` schema. Bare `ExecutionFillEvent` JSON bodies are not accepted. Missing envelope fields or a non-object `data` value return `400 E_CE_REQUIRED`.
+
+When present as strings, CloudEvents top-level fields `id`, `type`, `source`, and `time` are forwarded as Kafka headers (`ce_id`, `ce_type`, `ce_source`, `ce_time`).
 
 ## Gateway `/fills` Webhook
 
-The Gateway exposes a `/fills` endpoint for broker callbacks. Payloads may be
-sent as a raw `ExecutionFillEvent` or wrapped in a CloudEvents 1.0 envelope.
-Requests must include a HMAC-signed JWT whose `world_id` and `strategy_id`
-claims match the payload. Out-of-scope requests are rejected.
+The Gateway exposes a `/fills` endpoint for broker callbacks. Authentication and scope identification follow these rules:
+
+- If `Authorization: Bearer <jwt>` is present, the JWT path is used. The token must be signed with shared event keys and include `aud="fills"` plus `world_id` and `strategy_id` claims.
+- The `X-Signature` fallback path is used only when no Bearer header is present. `X-Signature` must be an HMAC-SHA256 hex digest of the raw request body, and `QMTL_FILL_SECRET` must be configured.
+- On the HMAC path, `world_id` and `strategy_id` are resolved from `X-World-ID` and `X-Strategy-ID` first, then from CloudEvents top-level extension fields (`world_id`, `strategy_id`) if headers are absent.
+- Missing/invalid authentication returns `401 E_AUTH`. Missing scope identifiers (`world_id`, `strategy_id`) returns `400 E_MISSING_IDS`.
 
 ### Replay Endpoint
 

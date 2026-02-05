@@ -531,6 +531,22 @@ async def test_grpc_queue_stats():
     assert dict(resp.sizes) == {"topic1": 3}
 
 
+@pytest.mark.asyncio
+async def test_grpc_queue_stats_parses_text_interval_filter():
+    driver = FakeDriver()
+    driver.session_obj = FakeSession([{"topic": "topic1"}])
+    admin = FakeAdmin({"topic1": {"size": 3}, "topic2": {"size": 5}})
+    stream = FakeStream()
+    server, port = serve(driver, admin, stream, host="127.0.0.1", port=0)
+    await server.start()
+    async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+        stub = dagmanager_pb2_grpc.AdminServiceStub(channel)
+        req = dagmanager_pb2.QueueStatsRequest(filter="tag=t;interval=1h")
+        resp = await stub.GetQueueStats(req)
+    await server.stop(None)
+    assert dict(resp.sizes) == {"topic1": 3}
+
+
 class DummyProducer:
     def __init__(self) -> None:
         self.sent: list[tuple[str, bytes, bytes | None]] = []

@@ -123,6 +123,28 @@ async def test_world_activation_injects_query_defaults(
 
 
 @pytest.mark.asyncio
+async def test_world_decide_forwards_as_of_query(
+    gateway_app_factory,
+) -> None:
+    captured: dict[str, dict[str, str]] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/decide"):
+            captured["params"] = dict(request.url.params)
+            return httpx.Response(200, json={"ok": True})
+        raise AssertionError("unexpected path")
+
+    async with gateway_app_factory(handler) as ctx:
+        resp = await ctx.client.get(
+            "/worlds/abc/decide",
+            params={"as_of": "2025-01-01T00:00:00Z"},
+        )
+
+    assert resp.status_code == 200
+    assert captured.get("params") == {"as_of": "2025-01-01T00:00:00Z"}
+
+
+@pytest.mark.asyncio
 async def test_live_guard(gateway_app_factory) -> None:
     call_count = {"n": 0}
 
