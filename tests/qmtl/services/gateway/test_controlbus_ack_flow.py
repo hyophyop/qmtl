@@ -366,6 +366,51 @@ async def test_activation_relay_derives_execution_domain_metadata() -> None:
 
 
 @pytest.mark.asyncio
+async def test_activation_relay_missing_effective_mode_is_fail_closed() -> None:
+    hub = FakeHub()
+    consumer = ControlBusConsumer(
+        brokers=[],
+        topics=["activation"],
+        group="gateway",
+        ws_hub=hub,
+    )
+    await consumer.start()
+
+    msg = ControlBusMessage(
+        topic="activation",
+        key="w-missing",
+        etag="etag-missing",
+        run_id="r-missing",
+        data={
+            "version": 1,
+            "world_id": "w-missing",
+            "strategy_id": "s-missing",
+            "side": "long",
+            "active": True,
+            "weight": 1.0,
+            "etag": "etag-missing",
+            "run_id": "r-missing",
+            "ts": "2025-01-01T00:00:00Z",
+        },
+        timestamp_ms=time.time() * 1000,
+    )
+
+    await consumer.publish(msg)
+    await consumer._queue.join()
+    await consumer.stop()
+
+    assert len(hub.activations) == 1
+    activation = hub.activations[0]
+    assert activation["execution_domain"] == "backtest"
+    compute_context = activation["compute_context"]
+    assert compute_context["world_id"] == "w-missing"
+    assert compute_context["execution_domain"] == "backtest"
+    assert compute_context["downgraded"] is True
+    assert compute_context["downgrade_reason"] == "decision_unavailable"
+    assert compute_context["safe_mode"] is True
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("drop_sequence", "sequence_value"),
     [

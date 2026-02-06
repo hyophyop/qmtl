@@ -179,3 +179,33 @@ def test_augment_activation_payload_attaches_compute_context(reset_gateway_metri
         )._value.get()
     )
     assert metric_value == 1
+
+
+def test_augment_activation_payload_missing_effective_mode_fails_closed(
+    reset_gateway_metrics,
+) -> None:
+    payload = {
+        "world_id": "world-xyz",
+        "strategy_id": "s1",
+        "side": "long",
+        "active": True,
+        "weight": 0.1,
+        "etag": "e1",
+        "ts": "now",
+    }
+    augmented = augment_activation_payload(payload)
+
+    assert augmented["execution_domain"] == "backtest"
+    context = augmented["compute_context"]
+    assert context["world_id"] == "world-xyz"
+    assert context["execution_domain"] == "backtest"
+    assert context["downgraded"] is True
+    assert context["downgrade_reason"] == DowngradeReason.DECISION_UNAVAILABLE
+    assert context["safe_mode"] is True
+
+    metric_value = (
+        reset_gateway_metrics.worlds_compute_context_downgrade_total.labels(
+            reason=DowngradeReason.DECISION_UNAVAILABLE.value
+        )._value.get()
+    )
+    assert metric_value == 1

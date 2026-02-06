@@ -103,7 +103,8 @@ backwards-compatible (`validate|compute-only|paper|live|shadow`). The
 Activation relay and augmentation contract (runtime):
 - Gateway adds derived `execution_domain` and `compute_context` when it materializes activation payloads via `GET /worlds/{id}/activation`, activation bootstrap frames emitted by `/events/subscribe`, and ControlBus `activation_updated` relays before WebSocket fan-out.
 - Mapping used in that augmentation path is `validate → backtest`, `compute-only → backtest`, `paper → dryrun`, `live → live`, `shadow → shadow`.
-- Activation envelopes do not include `as_of`, so safe-mode evaluation downgrades `paper` to `backtest` (`downgraded=true`, `downgrade_reason=missing_as_of`, `safe_mode=true`). `shadow` is not downgraded by this missing-`as_of` guard.
+- Activation envelopes do not include `as_of`, so safe-mode evaluation can downgrade modes that map to `backtest/dryrun` (`validate|compute-only|paper`) to `execution_domain=backtest` (`downgraded=true`, `downgrade_reason=missing_as_of`, `safe_mode=true`). This metadata is not limited to `paper`. `shadow` is not downgraded by the missing-`as_of` guard.
+- If the activation payload lacks `effective_mode`, Gateway fail-closes to `execution_domain=backtest` and sets `safe_mode=true`, `downgraded=true`, `downgrade_reason=decision_unavailable`.
 - For ControlBus `activation_updated`, Gateway recomputes augmentation from `effective_mode`; upstream-provided `execution_domain`/`compute_context` fields are overwritten by canonical augmentation output.
 - For queue/tag relays, `queue_update` forwards `world_id`/`execution_domain` when present, while `tagquery.upsert` payloads do not carry these fields (Gateway only uses `execution_domain` in the dedupe key `(tags, interval, execution_domain)`).
 - SDKs treat `effective_mode`/`execution_domain` as read-only annotations for local state/metrics; clients MUST NOT override backend decisions or mutate execution behavior from those fields.

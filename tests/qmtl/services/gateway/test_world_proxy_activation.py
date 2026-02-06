@@ -63,6 +63,25 @@ def _assert_stale_activation_response(response: httpx.Response) -> None:
     }
 
 
+def _assert_initial_activation_response(
+    response: httpx.Response, activation_payload: dict[str, object]
+) -> None:
+    payload = response.json()
+    assert {key: payload[key] for key in activation_payload} == activation_payload
+    assert payload["execution_domain"] == "backtest"
+    assert {
+        "execution_domain": payload["compute_context"]["execution_domain"],
+        "downgraded": payload["compute_context"]["downgraded"],
+        "downgrade_reason": payload["compute_context"]["downgrade_reason"],
+        "safe_mode": payload["compute_context"]["safe_mode"],
+    } == {
+        "execution_domain": "backtest",
+        "downgraded": True,
+        "downgrade_reason": "decision_unavailable",
+        "safe_mode": True,
+    }
+
+
 @pytest.mark.asyncio
 async def test_activation_etag_cache(gateway_app_factory) -> None:
     call_count = {"n": 0}
@@ -111,7 +130,7 @@ async def test_activation_stale_on_backend_error(
         r1 = await ctx.client.get("/worlds/abc/activation", params=params)
         r2 = await ctx.client.get("/worlds/abc/activation", params=params)
 
-    assert r1.json() == activation_payload
+    _assert_initial_activation_response(r1, activation_payload)
     _assert_stale_activation_response(r2)
     assert metrics.worlds_stale_responses_total._value.get() == 1
 
