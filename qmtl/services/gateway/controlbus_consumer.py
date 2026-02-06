@@ -356,6 +356,14 @@ class ControlBusConsumer:
             await self.ws_hub.send_sentinel_weight(sentinel_id, weight)
 
     async def _process_generic_message(self, msg: ControlBusMessage) -> None:
+        if self._should_drop_invalid_ack_sequence(msg):
+            logger.warning(
+                "dropping activation message with requires_ack=true due to missing or invalid sequence: %r",
+                msg.data.get("sequence"),
+            )
+            gw_metrics.record_event_dropped(msg.topic)
+            return
+
         sequenced_activation = self._sequenced_activation_context(msg)
         if sequenced_activation is not None:
             sequence_key, sequence = sequenced_activation
@@ -363,6 +371,12 @@ class ControlBusConsumer:
             return
 
         await self._process_generic_message_now(msg)
+
+    def _should_drop_invalid_ack_sequence(self, msg: ControlBusMessage) -> bool:
+        if msg.topic != "activation" or not msg.data.get("requires_ack"):
+            return False
+        sequence = msg.data.get("sequence")
+        return isinstance(sequence, bool) or not isinstance(sequence, int)
 
     def _sequenced_activation_context(
         self, msg: ControlBusMessage

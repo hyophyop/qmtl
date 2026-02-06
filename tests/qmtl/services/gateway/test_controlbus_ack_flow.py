@@ -253,3 +253,56 @@ async def test_activation_sequence_resets_for_new_run_id() -> None:
         ("r-old", 9),
         ("r-new", 1),
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("drop_sequence", "sequence_value"),
+    [
+        (True, None),
+        (False, "not-an-int"),
+    ],
+)
+async def test_activation_requires_ack_with_missing_or_invalid_sequence_drops_without_ws_or_ack(
+    drop_sequence: bool,
+    sequence_value: Any,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    hub = FakeHub()
+    ack_dummy = DummyProducer()
+    ack_producer = ActivationAckProducer(
+        brokers=["kafka:9092"],
+        topic="control.activation.ack",
+    )
+    ack_producer._producer = ack_dummy
+
+    consumer = ControlBusConsumer(
+        brokers=[],
+        topics=["activation"],
+        group="gateway",
+        ws_hub=hub,
+        ack_producer=ack_producer,
+    )
+    await consumer.start()
+
+    msg = _activation_message(world_id="w4", run_id="r-invalid", sequence=1)
+    if drop_sequence:
+        msg.data.pop("sequence", None)
+    else:
+        msg.data["sequence"] = sequence_value
+
+    with caplog.at_level("WARNING"):
+        await consumer.publish(msg)
+        await consumer._queue.join()
+        await asyncio.sleep(0)
+    await consumer.stop()
+
+    assert hub.activations == []
+    assert ack_dummy.sent == []
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(ack_dummy.sent_event.wait(), timeout=0.05)
+    assert any(
+        "dropping activation message with requires_ack=true due to missing or invalid sequence"
+        in record.message
+        for record in caplog.records
+    )
