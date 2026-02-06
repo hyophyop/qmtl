@@ -323,6 +323,49 @@ async def test_activation_sequence_resets_for_new_run_id() -> None:
 
 
 @pytest.mark.asyncio
+async def test_activation_relay_derives_execution_domain_metadata() -> None:
+    hub = FakeHub()
+    consumer = ControlBusConsumer(
+        brokers=[],
+        topics=["activation"],
+        group="gateway",
+        ws_hub=hub,
+    )
+    await consumer.start()
+
+    msg = ControlBusMessage(
+        topic="activation",
+        key="w-shadow",
+        etag="etag-shadow",
+        run_id="r-shadow",
+        data={
+            "version": 1,
+            "world_id": "w-shadow",
+            "strategy_id": "s-shadow",
+            "side": "long",
+            "active": True,
+            "weight": 1.0,
+            "effective_mode": "shadow",
+            "etag": "etag-shadow",
+            "run_id": "r-shadow",
+            "ts": "2025-01-01T00:00:00Z",
+        },
+        timestamp_ms=time.time() * 1000,
+    )
+
+    await consumer.publish(msg)
+    await consumer._queue.join()
+    await consumer.stop()
+
+    assert len(hub.activations) == 1
+    activation = hub.activations[0]
+    assert activation["execution_domain"] == "shadow"
+    compute_context = activation["compute_context"]
+    assert compute_context["world_id"] == "w-shadow"
+    assert compute_context["execution_domain"] == "shadow"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("drop_sequence", "sequence_value"),
     [
@@ -385,11 +428,17 @@ def test_activation_updated_schema_accepts_phase_ack_sequence() -> None:
             "side": "long",
             "active": True,
             "weight": 0.5,
+            "effective_mode": "shadow",
+            "execution_domain": "shadow",
+            "compute_context": {"execution_domain": "shadow"},
             "phase": "unfreeze",
             "requires_ack": True,
             "sequence": 17,
         }
     )
+    assert payload.effective_mode == "shadow"
+    assert payload.execution_domain == "shadow"
+    assert payload.compute_context == {"execution_domain": "shadow"}
     assert payload.phase == "unfreeze"
     assert payload.requires_ack is True
     assert payload.sequence == 17

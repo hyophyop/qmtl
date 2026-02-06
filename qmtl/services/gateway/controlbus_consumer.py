@@ -18,6 +18,7 @@ from . import metrics as gw_metrics
 from .controlbus_codec import decode as decode_cb, PROTO_CONTENT_TYPE
 from .event_models import RebalancingPlannedData, SentinelWeightData
 from .controlbus_ack import ActivationAckProducer
+from .world_payloads import augment_activation_payload
 
 logger = logging.getLogger(__name__)
 
@@ -601,7 +602,8 @@ class ControlBusConsumer:
             return
 
         if msg.topic == "activation":
-            await ws_hub.send_activation_updated(msg.data)
+            payload = augment_activation_payload(dict(msg.data))
+            await ws_hub.send_activation_updated(payload)
             return
         if msg.topic == "policy":
             await ws_hub.send_policy_updated(msg.data)

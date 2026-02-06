@@ -268,6 +268,51 @@ async def test_get_decide_stale_response_downgrades_live_mode_to_compute_only() 
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("status_code", [408, 429])
+async def test_get_decide_uses_stale_cache_for_retryable_4xx(
+    status_code: int,
+) -> None:
+    metrics.reset_metrics()
+    decision_payload = {
+        "world_id": "w-live",
+        "policy_version": 7,
+        "effective_mode": "live",
+        "as_of": "2025-01-01T00:00:00Z",
+        "ttl": "300s",
+        "etag": "w-live:v7",
+    }
+    transport = _sequenced_transport(
+        expected_path_suffix="/decide",
+        responses=[
+            httpx.Response(
+                200,
+                json=decision_payload,
+                headers={"Cache-Control": "max-age=60"},
+            ),
+            httpx.Response(status_code),
+        ],
+        request_checks=[_noop_request_check, _noop_request_check],
+    )
+    client = WorldServiceClient(
+        "http://world",
+        client=httpx.AsyncClient(transport=transport),
+    )
+
+    try:
+        first, stale_first = await client.get_decide("w-live")
+        _assert_live_decision_payload(first, stale_first)
+
+        client._decision_cache.expire("w-live")
+
+        second, stale_second = await client.get_decide("w-live")
+    finally:
+        await client._client.aclose()
+
+    _assert_stale_decision_downgrade(second, stale_second)
+    assert metrics.worlds_stale_responses_total._value.get() == 1
+
+
+@pytest.mark.asyncio
 async def test_get_decide_as_of_forwards_query_and_scopes_cache() -> None:
     seen_params: list[dict[str, str]] = []
 
@@ -327,6 +372,52 @@ async def test_get_activation_returns_inactive_failsafe_on_stale_backend_error()
                 headers={"ETag": "abc"},
             ),
             httpx.Response(500),
+        ],
+        request_checks=[
+            _header_is_absent("If-None-Match"),
+            _header_equals("If-None-Match", "abc"),
+        ],
+    )
+    client = WorldServiceClient(
+        "http://world",
+        client=httpx.AsyncClient(transport=transport),
+    )
+
+    try:
+        first, stale_first = await client.get_activation("w1", "s1", "long")
+        second, stale_second = await client.get_activation("w1", "s1", "long")
+    finally:
+        await client._client.aclose()
+
+    _assert_initial_activation(first, stale_first, activation_payload)
+    _assert_stale_activation_downgrade(second, stale_second)
+    assert metrics.worlds_stale_responses_total._value.get() == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status_code", [408, 429])
+async def test_get_activation_uses_stale_cache_for_retryable_4xx(
+    status_code: int,
+) -> None:
+    metrics.reset_metrics()
+    activation_payload = {
+        "world_id": "w1",
+        "strategy_id": "s1",
+        "side": "long",
+        "active": True,
+        "weight": 1.0,
+        "etag": "abc",
+        "ts": "2025-01-01T00:00:00Z",
+    }
+    transport = _sequenced_transport(
+        expected_path_suffix="/activation",
+        responses=[
+            httpx.Response(
+                200,
+                json=activation_payload,
+                headers={"ETag": "abc"},
+            ),
+            httpx.Response(status_code),
         ],
         request_checks=[
             _header_is_absent("If-None-Match"),

@@ -63,37 +63,38 @@ def _parse_i18n_languages(
     return locales, default_locale
 
 
-def _load_i18n_locales(root: Path) -> tuple[set[str], str]:
-    """Return (configured_locales, default_locale) from mkdocs i18n config."""
+def _load_i18n_locales(root: Path) -> tuple[set[str], str, str | None]:
+    """Return (configured_locales, default_locale, parse_error)."""
     mkdocs_path = root / "mkdocs.yml"
-    fallback: tuple[set[str], str] = (set(), "ko")
+    fallback: tuple[set[str], str, str | None] = (set(), "ko", None)
     try:
         import yaml  # type: ignore
 
         data = yaml.safe_load(mkdocs_path.read_text(encoding="utf-8")) or {}
-    except Exception:
-        return fallback
+    except Exception as exc:
+        return set(), "ko", f"Failed to parse mkdocs.yml i18n configuration: {exc}"
 
     if not isinstance(data, dict):
         return fallback
     i18n_cfg = _find_i18n_config(data.get("plugins", []) or [])
     if i18n_cfg is None:
         return fallback
-    return _parse_i18n_languages(
+    locales, default_locale = _parse_i18n_languages(
         i18n_cfg.get("languages", []) or [], fallback_default="ko"
     )
+    return locales, default_locale, None
 
 
-def _required_arch_locales(root: Path) -> tuple[tuple[str, ...], bool]:
-    """Return required locales and whether mkdocs i18n mode is active."""
-    locales, default_locale = _load_i18n_locales(root)
+def _required_arch_locales(root: Path) -> tuple[tuple[str, ...], bool, str | None]:
+    """Return required locales, i18n flag, and optional parse error."""
+    locales, default_locale, parse_error = _load_i18n_locales(root)
     if locales:
         required: list[str] = [default_locale]
         if "en" not in required:
             required.append("en")
         # Preserve insertion order and remove duplicates.
-        return tuple(dict.fromkeys(required)), True
-    return ("legacy",), False
+        return tuple(dict.fromkeys(required)), True, parse_error
+    return ("legacy",), False, parse_error
 
 
 def _architecture_dir(root: Path, locale: str, *, i18n_enabled: bool) -> Path:
@@ -146,12 +147,33 @@ def _collect_locale_docs(
     for locale in required_locales:
         arch_dir = _architecture_dir(root, locale, i18n_enabled=i18n_enabled)
         if arch_dir.exists():
-            locale_docs[locale] = {md.stem: md for md in sorted(arch_dir.glob("*.md"))}
+            docs = sorted(arch_dir.rglob("*.md"))
+            nested = [doc for doc in docs if doc.parent != arch_dir]
+            if nested:
+                nested_list = ", ".join(str(path) for path in nested)
+                errors.append(
+                    f"[{locale}] Nested architecture docs are not supported by design drift check: {nested_list}"
+                )
+            locale_docs[locale] = {
+                md.stem: md for md in docs if md.parent == arch_dir
+            }
             continue
         if not i18n_enabled:
             return {}, errors, "No architecture docs; skipping design drift check"
         errors.append(f"[{locale}] Missing architecture docs directory: {arch_dir}")
     return locale_docs, errors, None
+
+
+def _has_localized_architecture_dirs(root: Path) -> bool:
+    docs_root = root / "docs"
+    if not docs_root.exists():
+        return False
+    for locale_dir in docs_root.iterdir():
+        if not locale_dir.is_dir():
+            continue
+        if (locale_dir / "architecture").exists():
+            return True
+    return False
 
 
 def _doc_version_issues(
@@ -240,7 +262,14 @@ def check_design_drift(root: Path = ROOT) -> tuple[int, str]:
     except Exception as exc:  # pragma: no cover - defensive
         return 2, f"Failed to load foundation spec: {exc}"
 
-    required_locales, i18n_enabled = _required_arch_locales(root)
+    required_locales, i18n_enabled, parse_error = _required_arch_locales(root)
+    if parse_error and _has_localized_architecture_dirs(root):
+        return (
+            2,
+            "Design drift check failed:\n"
+            f"{parse_error}\n"
+            "Fix mkdocs.yml parsing to avoid skipping locale-scoped architecture checks.",
+        )
     locale_docs, errors, skip_message = _collect_locale_docs(
         root, required_locales, i18n_enabled=i18n_enabled
     )

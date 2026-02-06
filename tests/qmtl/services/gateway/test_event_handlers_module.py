@@ -50,6 +50,41 @@ async def test_event_subscription_endpoints():
             assert data["topics"] == ["queues"]
 
 
+@pytest.mark.asyncio
+async def test_events_schema_exposes_activation_shadow_and_derived_fields() -> None:
+    hub = WebSocketHub()
+    cfg = EventDescriptorConfig(
+        keys={"k": "secret"},
+        active_kid="k",
+        ttl=60,
+        stream_url="ws://test/ws",
+        fallback_url=None,
+    )
+    app = FastAPI()
+    app.include_router(create_event_router(hub, cfg))
+    async with httpx.ASGITransport(app=app) as transport:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/events/schema")
+    assert resp.status_code == 200
+
+    activation_schema = resp.json()["activation_updated"]
+    data_ref = activation_schema["properties"]["data"]["$ref"]
+    data_ref_name = data_ref.rsplit("/", 1)[-1]
+    defs = activation_schema.get("$defs", {})
+    data_schema = defs[data_ref_name]
+    properties = data_schema["properties"]
+
+    effective_mode_options = properties["effective_mode"]["anyOf"]
+    effective_mode_enums = [
+        option.get("enum", [])
+        for option in effective_mode_options
+        if isinstance(option, dict)
+    ]
+    assert any("shadow" in enum_values for enum_values in effective_mode_enums)
+    assert "execution_domain" in properties
+    assert "compute_context" in properties
+
+
 def test_ws_fallback_endpoint_connects():
     hub = NoServerHub()
     app = create_app(ws_hub=hub, enable_background=False)

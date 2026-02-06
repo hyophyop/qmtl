@@ -100,22 +100,13 @@ Response (ActivationEnvelope)
 ```
 `effective_mode` carries the WorldService policy string and remains
 backwards-compatible (`validate|compute-only|paper|live|shadow`). The
-shared compute-context canonical mode->domain mapping is
-`validate → backtest`, `compute-only → backtest`, `paper → dryrun`,
-`live → live`, `shadow → shadow`. However, `/worlds/{id}/activation`
-envelopes do not include `as_of`, so Gateway safe-mode evaluation
-downgrades `paper` to `backtest` when it materializes `compute_context`
-(`downgraded=true`, `downgrade_reason=missing_as_of`, `safe_mode=true`).
-As a result, the current activation response contract exposes
-`effective_mode=paper` with `execution_domain=backtest`. SDKs treat this
-field as read-only annotation for local state/metrics; it MUST NOT
-override backend decisions or change execution behavior client-side.
-When `execution_domain=shadow` is active, Gateway preserves the value
-end-to-end (ControlBus/WebSocket relays, queue maps/tag queries) while
-enforcing that order publishing paths are disabled. Shadow runs mirror
-live inputs in an isolated namespace; operator gates such as
-`X-Allow-Live` (for HTTP) and policy-based `allow_live` checks still
-apply to connections and subscriptions.
+Activation relay and augmentation contract (runtime):
+- Gateway adds derived `execution_domain` and `compute_context` when it materializes activation payloads via `GET /worlds/{id}/activation`, activation bootstrap frames emitted by `/events/subscribe`, and ControlBus `activation_updated` relays before WebSocket fan-out.
+- Mapping used in that augmentation path is `validate → backtest`, `compute-only → backtest`, `paper → dryrun`, `live → live`, `shadow → shadow`.
+- Activation envelopes do not include `as_of`, so safe-mode evaluation downgrades `paper` to `backtest` (`downgraded=true`, `downgrade_reason=missing_as_of`, `safe_mode=true`). `shadow` is not downgraded by this missing-`as_of` guard.
+- For ControlBus `activation_updated`, Gateway recomputes augmentation from `effective_mode`; upstream-provided `execution_domain`/`compute_context` fields are overwritten by canonical augmentation output.
+- For queue/tag relays, `queue_update` forwards `world_id`/`execution_domain` when present, while `tagquery.upsert` payloads do not carry these fields (Gateway only uses `execution_domain` in the dedupe key `(tags, interval, execution_domain)`).
+- SDKs treat `effective_mode`/`execution_domain` as read-only annotations for local state/metrics; clients MUST NOT override backend decisions or mutate execution behavior from those fields.
 Stale activation fail-safe invariants (cache response path):
 - When Gateway serves a stale activation (`X-Stale: true`, `Warning: 110 - Response is stale`), it enforces fail-closed values: `active=false`, `weight=0.0`, `effective_mode=compute-only`, `execution_domain=backtest`.
 - Rationale: stale cache state cannot prove current activation safety, so order-enable paths must stay closed and converge to compute-only behavior.

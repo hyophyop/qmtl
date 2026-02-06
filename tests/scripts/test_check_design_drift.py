@@ -107,3 +107,37 @@ def test_legacy_mode_skips_when_arch_docs_directory_missing(tmp_path: Path) -> N
 
     assert code == 0
     assert "No architecture docs; skipping design drift check" in msg
+
+
+def test_parse_failure_with_localized_architecture_dirs_is_error(tmp_path: Path) -> None:
+    module = load_module()
+    _seed_spec(tmp_path, "{'gateway': 'v1.2'}")
+    _write(tmp_path / "mkdocs.yml", "plugins: [\n")
+    _seed_arch_doc(tmp_path, "ko", "gateway", spec_version="v1.2")
+    _seed_arch_doc(tmp_path, "en", "gateway", spec_version="v1.2")
+
+    code, msg = module.check_design_drift(tmp_path)
+
+    assert code == 2
+    assert "Failed to parse mkdocs.yml i18n configuration" in msg
+
+
+def test_nested_architecture_docs_are_reported(tmp_path: Path) -> None:
+    module = load_module()
+    _seed_mkdocs_i18n(tmp_path)
+    _seed_spec(tmp_path, "{'gateway': 'v1.2'}")
+    _seed_arch_doc(tmp_path, "ko", "gateway", spec_version="v1.2")
+    _seed_arch_doc(tmp_path, "en", "gateway", spec_version="v1.2")
+    _write(
+        tmp_path / "docs" / "ko" / "architecture" / "nested" / "future.md",
+        "---\nspec_version: v1.0\n---\n\n# future\n",
+    )
+    _write(
+        tmp_path / "docs" / "en" / "architecture" / "nested" / "future.md",
+        "---\nspec_version: v1.0\n---\n\n# future\n",
+    )
+
+    code, msg = module.check_design_drift(tmp_path)
+
+    assert code == 2
+    assert "Nested architecture docs are not supported by design drift check" in msg
