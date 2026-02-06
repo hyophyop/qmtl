@@ -68,14 +68,22 @@ def _assert_initial_activation(payload: dict, stale: bool, expected: dict) -> No
     assert stale is False
     assert payload["active"] is True
     assert {key: payload[key] for key in expected} == expected
-    if "effective_mode" not in expected:
-        assert payload["execution_domain"] == "backtest"
-        compute_context = payload["compute_context"]
-        assert compute_context["world_id"] == expected["world_id"]
-        assert compute_context["execution_domain"] == "backtest"
-        assert compute_context["downgraded"] is True
-        assert compute_context["downgrade_reason"] == "decision_unavailable"
-        assert compute_context["safe_mode"] is True
+    _assert_initial_activation_missing_mode_fallback(payload, expected)
+
+
+def _assert_initial_activation_missing_mode_fallback(
+    payload: dict,
+    expected: dict,
+) -> None:
+    if "effective_mode" in expected:
+        return
+    assert payload["execution_domain"] == "backtest"
+    compute_context = payload["compute_context"]
+    assert compute_context["world_id"] == expected["world_id"]
+    assert compute_context["execution_domain"] == "backtest"
+    assert compute_context["downgraded"] is True
+    assert compute_context["downgrade_reason"] == "decision_unavailable"
+    assert compute_context["safe_mode"] is True
 
 
 def _assert_stale_activation_downgrade(payload: dict, stale: bool) -> None:
