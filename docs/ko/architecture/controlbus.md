@@ -2,12 +2,16 @@
 title: "ControlBus — 내부 제어 버스 (SDK에 비공개)"
 tags: [architecture, events, control]
 author: "QMTL Team"
-last_modified: 2025-11-12
+last_modified: 2026-02-06
+spec_version: v1.0
 ---
 
 {{ nav_links() }}
 
 # ControlBus — 내부 제어 버스
+
+관련: [WorldService](worldservice.md)  
+관련: [ACK/Gap Resync RFC (초안)](ack_resync_rfc.md)
 
 ControlBus는 핵심 서비스에서 Gateway로 제어 플레인 업데이트(데이터가 아닌)를 배포합니다. 내부 전용 컴포넌트이며 공개 API가 아닙니다. 기본 배포에서는 SDK가 직접 연결하지 않습니다. 모든 제어 이벤트는 버전이 명시된 봉투 형태이며 `type`, `version` 필드를 포함합니다.
 
@@ -70,7 +74,7 @@ ActivationUpdated (버전 관리됨)
 ```
 
 - `phase`는 [`freeze`, `unfreeze`] 중 하나이며 WorldService의 [`ActivationEventPublisher.update_activation_state`]({{ code_url('qmtl/services/worldservice/activation.py#L58') }})에서 설정된다.
-- `requires_ack=true` 이벤트는 Gateway가 동일 run의 Freeze/Unfreeze 상태를 수신했음을 ControlBus 응답 채널을 통해 확인(ack)해야 함을 의미한다(SHALL). ACK가 도착하기 전까지 Gateway/SDK는 주문 게이트를 해제할 수 없다.
+- `requires_ack=true` 이벤트는 Gateway가 해당 시퀀스를 선형 순서로 적용하고 `control.activation.ack`로 ACK를 게시해야 함을 의미한다(SHALL). 이는 Gateway 수신/적용 확인이며, 모든 하위 SDK/WebSocket 소비자까지의 종단 ACK를 뜻하지 않는다.
 - `sequence`는 [`ApplyRunState.next_sequence()`]({{ code_url('qmtl/services/worldservice/run_state.py#L47') }})에서 생성되는 run별 단조 증가 값이다. 컨슈머는 증가 순서를 강제하고 누락된 시퀀스가 감지되면 재동기화를 시도해야 한다(SHOULD).
 
 ActivationAck (버전 관리됨)
@@ -152,8 +156,9 @@ PolicyUpdated (버전 관리됨)
 ## 3-A. Activation ACK 응답 경로
 
 - Freeze/Unfreeze 이벤트(특히 `requires_ack=true`)마다 Gateway는 최신 `sequence`와 연관된 `ActivationAck` 메시지를 ControlBus 응답 채널(예: `control.activation.ack`)로 게시해야 한다(SHALL). 메시지에는 최소한 `world_id`, `run_id`, `sequence`가 포함되어야 하며, 운영팀이 재동기화 상태를 판단할 수 있어야 한다.
-- WorldService 및 운영 도구는 ACK 스트림을 모니터링하여 누락된 시퀀스나 타임아웃을 감지하고 필요 시 Apply를 중단·롤백한다(SHOULD).
+- WorldService 및 운영 도구는 ACK 스트림을 모니터링하여 누락된 시퀀스나 타임아웃을 감지하고 경고/중단/롤백 여부를 판단한다(SHOULD). 현재 구현의 apply 완료는 ACK 스트림을 하드 게이트로 차단하지 않는다.
 - 현재 구현에서 Gateway는 ControlBus `activation` 이벤트를 수신하면 ACK를 즉시 게시한다(`qmtl/services/gateway/controlbus_consumer.py`, `qmtl/services/gateway/controlbus_ack.py`). SDK/WebSocket 하위 ACK를 대기하는 “2단 ACK”는 선택적 확장으로 취급한다.
+- gap 감지 시 timeout, 자동 재시도, 강제 resync(HTTP snapshot) 절차의 기본값은 [ACK/Gap Resync RFC (초안)](ack_resync_rfc.md)에서 관리한다.
 
 ---
 

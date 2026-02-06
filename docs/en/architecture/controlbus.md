@@ -2,12 +2,16 @@
 title: "ControlBus — Internal Control Bus (Opaque to SDK)"
 tags: [architecture, events, control]
 author: "QMTL Team"
-last_modified: 2025-11-12
+last_modified: 2026-02-06
+spec_version: v1.0
 ---
 
 {{ nav_links() }}
 
 # ControlBus — Internal Control Bus
+
+Related: [WorldService](worldservice.md)  
+Related: [ACK/Gap Resync RFC (Draft)](ack_resync_rfc.md)
 
 ControlBus distributes control‑plane updates (not data) from core services to Gateways. It is an internal component and not a public API; SDKs never connect directly in the default deployment. All control events are versioned envelopes and include `type` and `version` fields.
 
@@ -70,7 +74,7 @@ ActivationUpdated (versioned)
 ```
 
 - `phase` is either `freeze` or `unfreeze` and is populated by [`ActivationEventPublisher.update_activation_state`]({{ code_url('qmtl/services/worldservice/activation.py#L58') }}).
-- `requires_ack=true` indicates Gateway MUST confirm receipt via the ControlBus acknowledgement channel before reopening order flow. Until that acknowledgement lands, Gateway/SDK keep order gates closed.
+- `requires_ack=true` indicates Gateway MUST apply that sequence in-order and publish an acknowledgement via the ControlBus response channel before reopening order flow. This is Gateway transport/apply acknowledgement, not an end-to-end acknowledgement from every downstream SDK/WebSocket client.
 - `sequence` is the per-run monotonic counter produced by [`ApplyRunState.next_sequence()`]({{ code_url('qmtl/services/worldservice/run_state.py#L47') }}). Consumers enforce increasing order and trigger resync when gaps are detected.
 
 ActivationAck (versioned)
@@ -152,8 +156,9 @@ PolicyUpdated (versioned)
 ## 3-A. Activation acknowledgement channel
 
 - For every Freeze/Unfreeze event (especially when `requires_ack=true`), Gateway publishes an `ActivationAck` message containing the latest `sequence` to the ControlBus response channel (e.g., `control.activation.ack`) (SHALL). The payload MUST include `world_id`, `run_id`, and `sequence` so operators can reconcile state.
-- WorldService and operational tooling SHOULD monitor the acknowledgement stream for missing sequences or timeouts and pause/rollback apply runs when anomalies surface.
+- WorldService and operational tooling SHOULD monitor the acknowledgement stream for missing sequences or timeouts and decide whether to alert/pause/rollback. In the current implementation, apply completion is not hard-blocked on ACK stream convergence.
 - In the current implementation, Gateway publishes ACKs immediately after receiving ControlBus `activation` events (`qmtl/services/gateway/controlbus_consumer.py`, `qmtl/services/gateway/controlbus_ack.py`). A “two-stage ack” that waits for downstream SDK/WebSocket acknowledgements is treated as an optional extension.
+- Default timeout/retry/forced-resync policy for sequence gaps is tracked in [ACK/Gap Resync RFC (Draft)](ack_resync_rfc.md).
 
 ---
 

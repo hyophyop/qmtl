@@ -4,7 +4,8 @@ tags:
   - architecture
   - design
 author: "QMTL Team"
-last_modified: 2026-02-05
+last_modified: 2026-02-06
+spec_version: v1.0
 ---
 
 {{ nav_links() }}
@@ -22,6 +23,7 @@ last_modified: 2026-02-05
 - [WorldService](worldservice.md)
 - [Core Loop 자동화](core_loop_world_automation.md)
 - [ControlBus](controlbus.md)
+- [ACK/Gap Resync RFC (초안)](ack_resync_rfc.md)
 - [Exchange Node Sets](exchange_node_sets.md)
 - Risk Signal Hub: [Risk Signal Hub 아키텍처](risk_signal_hub.md)
 - Core Loop 계약 테스트: `tests/e2e/core_loop/README.md`
@@ -47,6 +49,7 @@ last_modified: 2026-02-05
 - WS SSOT: SubmitResult는 WorldService 결정/활성(envelope)을 SSOT로 노출하고, precheck는 보조 정보로 분리된다. (`qmtl/services/worldservice/shared_schemas.py`, Core Loop 계약 테스트)
 - Default-safe: WorldService 결정이 없거나 stale이면 강등·safe_mode 플래그로 백테스트/compute-only로 수렴한다. (`qmtl/runtime/sdk/execution_context.py`, `tests/e2e/core_loop/test_compute_context_contract.py`)
 - 데이터 온램프: world preset 기반 Seamless auto-wiring이 기본 경로이며 Core Loop 계약 테스트로 검증한다. (`qmtl/runtime/sdk/world_data.py`, `tests/e2e/core_loop/`)
+- ACK/재동기화 기본선: `requires_ack`는 현재 Gateway의 ControlBus 수신 확인(단일 ACK)을 기준으로 하며, 시퀀스 공백/분기는 `state_hash` + HTTP reconcile 경로로 수렴한다. 세부 타임아웃·자동 복구 정책은 [ACK/Gap Resync RFC (초안)](ack_resync_rfc.md)에서 관리한다.
 
 ## 0. 개요: 이론적 동기와 시스템화의 목적
 

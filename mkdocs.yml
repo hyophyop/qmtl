@@ -21,6 +21,7 @@ nav:
           - DAG Manager: architecture/dag-manager.md
           - WorldService: architecture/worldservice.md
           - ControlBus: architecture/controlbus.md
+          - ACK/Gap Resync RFC: architecture/ack_resync_rfc.md
       - Data Plane:
           - Seamless Data Provider v2: architecture/seamless_data_provider_v2.md
           - CCXT × Seamless Integrated (High + Codex): architecture/ccxt-seamless-integrated.md
@@ -223,6 +224,7 @@ plugins:
             "World Validation Governance": "World Validation 거버넌스"
             "Validation Report": "Validation Report"
             "Core Loop Automation": "Core Loop 자동화"
+            "ACK/Gap Resync RFC": "ACK/Gap Resync RFC"
             "Release 0.1 Definition of Done": "Release 0.1 완료 기준(DoD)"
             "Rebalancing Schema Coordination": "리밸런싱 스키마 조율"
             Design: 설계
