@@ -7,6 +7,7 @@ from qmtl.foundation.common.compute_context import (
     ComputeContext,
     DowngradeReason,
     build_worldservice_compute_context,
+    canonicalize_world_mode_alias,
 )
 
 from .compute_context import resolve_execution_domain
@@ -46,6 +47,17 @@ def _assemble_missing_mode_fallback_context(
     return context
 
 
+def _normalize_effective_mode(payload: dict[str, Any]) -> str | None:
+    mode = payload.get("effective_mode")
+    if not isinstance(mode, str):
+        return None
+    canonical = canonicalize_world_mode_alias(mode)
+    if canonical is None:
+        return mode
+    payload["effective_mode"] = canonical
+    return canonical
+
+
 def augment_decision_payload(world_id: str, payload: Any) -> Any:
     """Attach compute-context metadata to decision envelopes when available."""
 
@@ -53,6 +65,7 @@ def augment_decision_payload(world_id: str, payload: Any) -> Any:
         return payload
     if "effective_mode" not in payload:
         return payload
+    _normalize_effective_mode(payload)
 
     context = assemble_compute_context(world_id, payload)
     payload["execution_domain"] = context.execution_domain or None
@@ -66,7 +79,7 @@ def augment_activation_payload(payload: Any) -> Any:
     if not isinstance(payload, dict):
         return payload
     world_id = payload.get("world_id")
-    effective_mode = payload.get("effective_mode")
+    effective_mode = _normalize_effective_mode(payload)
     derived_domain = resolve_execution_domain(effective_mode)
     if derived_domain is not None:
         payload["execution_domain"] = derived_domain

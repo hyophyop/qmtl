@@ -33,20 +33,20 @@ async def test_decide_ttl_cache(gateway_app_factory, reset_gateway_metrics) -> N
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "mode, expected",
+    "mode, expected, expected_mode",
     [
-        ("validate", "backtest"),
-        ("compute-only", "backtest"),
-        ("paper", "dryrun"),
-        ("sim", "dryrun"),
-        ("live", "live"),
-        ("shadow", "shadow"),
-        ("ACTIVE", "live"),
-        ("unknown", "backtest"),
+        ("validate", "backtest", "validate"),
+        ("compute-only", "backtest", "compute-only"),
+        ("paper", "dryrun", "paper"),
+        ("sim", "dryrun", "paper"),
+        ("live", "live", "live"),
+        ("shadow", "shadow", "shadow"),
+        ("ACTIVE", "live", "live"),
+        ("unknown", "backtest", "unknown"),
     ],
 )
 async def test_decide_compute_context_mapping(
-    gateway_app_factory, reset_gateway_metrics, mode, expected
+    gateway_app_factory, reset_gateway_metrics, mode, expected, expected_mode
 ) -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/decide"):
@@ -67,6 +67,7 @@ async def test_decide_compute_context_mapping(
         resp = await ctx.client.get("/worlds/world-alpha/decide")
 
     data = resp.json()
+    assert data["effective_mode"] == expected_mode
     assert data["execution_domain"] == expected
     context = data["compute_context"]
     assert context["world_id"] == "world-alpha"
