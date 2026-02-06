@@ -193,6 +193,11 @@ class WorldServiceClient:
         )
         if not isinstance(result, httpx.Response):
             payload, stale = result
+            if stale:
+                payload = self._build_stale_decision_failsafe(
+                    world_id=world_id,
+                    cached_payload=payload,
+                )
             return payload, stale
 
         resp: httpx.Response = result
@@ -277,6 +282,32 @@ class WorldServiceClient:
         payload.pop("execution_domain", None)
         payload.pop("compute_context", None)
         augmented = augment_activation_payload(payload)
+        if isinstance(augmented, dict):
+            return augmented
+        return payload
+
+    def _build_stale_decision_failsafe(
+        self,
+        *,
+        world_id: str,
+        cached_payload: Any,
+    ) -> Any:
+        if not isinstance(cached_payload, dict):
+            return cached_payload
+
+        payload = dict(cached_payload)
+        has_compute_contract = any(
+            field in payload
+            for field in ("effective_mode", "execution_domain", "compute_context")
+        )
+        if not has_compute_contract:
+            return payload
+
+        payload.setdefault("world_id", world_id)
+        payload["effective_mode"] = "compute-only"
+        payload.pop("execution_domain", None)
+        payload.pop("compute_context", None)
+        augmented = augment_decision_payload(world_id, payload)
         if isinstance(augmented, dict):
             return augmented
         return payload

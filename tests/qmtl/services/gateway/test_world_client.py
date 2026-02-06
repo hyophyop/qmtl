@@ -144,6 +144,58 @@ async def test_get_decide_returns_cached_payload_on_backend_error() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_decide_stale_response_downgrades_live_mode_to_compute_only() -> None:
+    metrics.reset_metrics()
+    calls = {"count": 0}
+    decision_payload = {
+        "world_id": "w-live",
+        "policy_version": 7,
+        "effective_mode": "live",
+        "as_of": "2025-01-01T00:00:00Z",
+        "ttl": "300s",
+        "etag": "w-live:v7",
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/decide"):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                return httpx.Response(
+                    200,
+                    json=decision_payload,
+                    headers={"Cache-Control": "max-age=60"},
+                )
+            return httpx.Response(500)
+        raise AssertionError("unexpected path")
+
+    transport = httpx.MockTransport(handler)
+    client = WorldServiceClient(
+        "http://world",
+        client=httpx.AsyncClient(transport=transport),
+    )
+
+    try:
+        first, stale_first = await client.get_decide("w-live")
+        assert stale_first is False
+        assert first["effective_mode"] == "live"
+        assert first["execution_domain"] == "live"
+
+        client._decision_cache.expire("w-live")
+
+        second, stale_second = await client.get_decide("w-live")
+    finally:
+        await client._client.aclose()
+
+    assert stale_second is True
+    assert second["world_id"] == "w-live"
+    assert second["effective_mode"] == "compute-only"
+    assert second["execution_domain"] == "backtest"
+    assert second["compute_context"]["execution_domain"] == "backtest"
+    assert "safe_mode" not in second["compute_context"]
+    assert metrics.worlds_stale_responses_total._value.get() == 1
+
+
+@pytest.mark.asyncio
 async def test_get_decide_as_of_forwards_query_and_scopes_cache() -> None:
     seen_params: list[dict[str, str]] = []
 
@@ -231,6 +283,10 @@ async def test_get_activation_returns_inactive_failsafe_on_stale_backend_error()
     assert second["weight"] == 0.0
     assert second["effective_mode"] == "compute-only"
     assert second["execution_domain"] == "backtest"
+    assert second["compute_context"]["execution_domain"] == "backtest"
+    assert second["compute_context"]["downgraded"] is True
+    assert second["compute_context"]["downgrade_reason"] == "missing_as_of"
+    assert second["compute_context"]["safe_mode"] is True
     assert stale_second is True
     assert first["active"] is True
     assert metrics.worlds_stale_responses_total._value.get() == 1

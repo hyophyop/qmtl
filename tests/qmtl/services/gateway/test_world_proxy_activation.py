@@ -73,6 +73,10 @@ async def test_activation_stale_on_backend_error(
     assert payload["weight"] == 0.0
     assert payload["effective_mode"] == "compute-only"
     assert payload["execution_domain"] == "backtest"
+    assert payload["compute_context"]["execution_domain"] == "backtest"
+    assert payload["compute_context"]["downgraded"] is True
+    assert payload["compute_context"]["downgrade_reason"] == "missing_as_of"
+    assert payload["compute_context"]["safe_mode"] is True
     assert r2.headers["X-Stale"] == "true"
     assert r2.headers["Warning"] == "110 - Response is stale"
     assert metrics.worlds_stale_responses_total._value.get() == 1
