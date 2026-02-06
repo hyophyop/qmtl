@@ -62,7 +62,7 @@ QMTL 전체의 핵심 가치인 **“전략 로직에만 집중하면 시스템�
 - 계약 (정렬 상태)
   - `/worlds/{world_id}/evaluate` → `DecisionEnvelope`/`ActivationEnvelope` 값이 `SubmitResult.ws.decision/activation`에 그대로 매핑됩니다. CLI `--output json`은 WS/Precheck가 분리된 동일 JSON을 출력합니다.
   - 로컬 `ValidationPipeline` 출력은 `SubmitResult.precheck`에만 담기며, `status/weight/rank/contribution`의 SSOT는 WS입니다.
-  - `ActivationEnvelope`(`GET/PUT /worlds/{world_id}/activation`) 필드와 `SubmitResult.ws.activation` 필드가 동일 스키마를 사용해 활성/weight/etag/run_id/state_hash를 노출합니다.
+  - `ActivationEnvelope`(`GET/PUT /worlds/{world_id}/activation`) 필드와 `SubmitResult.ws.activation` 필드가 동일 스키마를 사용해 활성/weight/etag/run_id를 노출합니다. `state_hash`는 `/worlds/{world_id}/activation/state_hash`와 ActivationUpdated 이벤트로 제공합니다.
 
 #### ExecutionDomain / effective_mode
 
@@ -88,8 +88,8 @@ WorldPolicies (DB)
 - created_by, created_at, valid_from (optional)
 
 WorldActivation (Redis)
-- Key: world:<id>:active → { strategy_id|side : { active, weight, etag, run_id, ts } }
-- 스냅샷은 주기적으로 DB에 영속화되어 감사에 사용됩니다.
+- Key: world:<id>:activation → { strategy_id|side : { active, weight, etag, run_id, ts } }
+- 활성화 상태의 SSOT는 Redis이며, 변경 이력은 감사/복구를 위해 `WorldAuditLog` 엔트리로 기록됩니다.
 
 WorldAuditLog (DB)
 - id, world_id, actor, event (create/update/apply/evaluate/activate/override)
@@ -134,6 +134,7 @@ CRUD
 - GET /worlds/{world_id}/decide?as_of=... → DecisionEnvelope
 - POST /worlds/{world_id}/decisions       (replace world strategy set via DecisionsRequest)
 - GET /worlds/{world_id}/activation?strategy_id=...&side=... → ActivationEnvelope
+- GET /worlds/{world_id}/activation/state_hash → activation state hash metadata
 - PUT /worlds/{world_id}/activation          (manual override; 요청 본문에 TTL 필드 없음)
 - POST /worlds/{world_id}/evaluate           (plan only)
 - POST /worlds/{world_id}/apply              (2‑Phase apply; requires run_id)
@@ -199,7 +200,8 @@ Field semantics and precedence
 
 TTL 및 신선도(Staleness)
 - DecisionEnvelope에는 TTL이 포함됩니다(미지정 시 기본 300초). TTL 경과 후 Gateway는 결정을 오래된 상태로 간주하고, 새 결정을 받을 때까지 안전 기본값인 compute‑only(주문 게이트 OFF)를 강제해야 합니다.
-- Activation에는 TTL이 없지만 `etag`(선택적으로 `state_hash`)가 포함됩니다. 알 수 없거나 만료된 활성화 → 주문 게이트 OFF.
+- Activation에는 TTL이 없고 `etag`를 포함합니다. 알 수 없거나 만료된 활성화 → 주문 게이트 OFF.
+- `state_hash`는 `GET /worlds/{world_id}/activation/state_hash`와 ActivationUpdated 이벤트로 제공되며 divergence 확인에 사용됩니다.
 
 ---
 
@@ -362,7 +364,7 @@ WorldService는 월드 비중과 전략 슬리브를 조정하기 위한 두 가
 ## 8. 장애 모드 & 복구
 
 - WS 다운: Gateway는 캐시된 DecisionEnvelope이 신선할 경우 이를 반환, 아니면 안전 기본값(compute‑only/inactive). Activation은 기본 비활성.
-- Redis 손실: 최신 스냅샷에서 Activation을 재구성; 일관성 회복 전까지 주문 게이트 유지.
+- Redis 손실: `WorldAuditLog`의 activation/apply 엔트리를 재생해 Activation을 재구성하고, 일관성 회복 전까지 주문 게이트를 유지.
 - 정책 파싱 오류: 해당 버전 거부, 이전 기본값 유지.
 
 ---
