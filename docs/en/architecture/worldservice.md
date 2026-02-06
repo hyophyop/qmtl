@@ -62,7 +62,7 @@ Related: [Core Loop × WorldService — Campaign Automation and Promotion Govern
 - Contract (aligned)
   - `/worlds/{world_id}/evaluate` produces `DecisionEnvelope`/`ActivationEnvelope` that map directly to `SubmitResult.ws.decision/activation`; CLI `--output json` emits the same WS/Precheck-separated structure.
   - Local `ValidationPipeline` output lives only in `SubmitResult.precheck`; `status/weight/rank/contribution` SSOT is always WS.
-  - `ActivationEnvelope` (`GET/PUT /worlds/{world_id}/activation`) shares the same schema as `SubmitResult.ws.activation`, exposing `active/weight/etag/run_id/state_hash`.
+  - `ActivationEnvelope` (`GET/PUT /worlds/{world_id}/activation`) shares the same schema as `SubmitResult.ws.activation`, exposing `active/weight/etag/run_id`. `state_hash` is exposed via `/worlds/{world_id}/activation/state_hash` and ActivationUpdated events.
 
 #### ExecutionDomain / effective_mode
 
@@ -88,8 +88,8 @@ WorldPolicies (DB)
 - created_by, created_at, valid_from (optional)
 
 WorldActivation (Redis)
-- Key: world:<id>:active -> { strategy_id|side : { active, weight, etag, run_id, ts } }
-- Snapshots periodically persisted to DB for audit
+- Key: world:<id>:activation -> { strategy_id|side : { active, weight, etag, run_id, ts } }
+- Activation state is stored in Redis; activation mutations are recorded in `WorldAuditLog` entries for audit/recovery.
 
 WorldAuditLog (DB)
 - id, world_id, actor, event (create/update/apply/evaluate/activate/override)
@@ -138,6 +138,7 @@ Decisions & Control
 - GET /worlds/{world_id}/decide?as_of=... -> DecisionEnvelope
 - POST /worlds/{world_id}/decisions       (replace world strategy set via DecisionsRequest)
 - GET /worlds/{world_id}/activation?strategy_id=...&side=... -> ActivationEnvelope
+- GET /worlds/{world_id}/activation/state_hash -> activation state hash metadata
 - PUT /worlds/{world_id}/activation          (manual override; no TTL field in request)
 - POST /worlds/{world_id}/evaluate           (plan only)
 - POST /worlds/{world_id}/apply              (2-Phase apply; requires run_id)
@@ -203,7 +204,8 @@ Idempotency: consumers must treat older etag/run_id as no-ops. Unknown or expire
 
 TTL & Staleness
 - DecisionEnvelope includes a TTL (default 300s if unspecified). After TTL, Gateway must treat the decision as stale and enforce a safe default: compute-only (orders gated OFF) until a fresh decision is obtained.
-- Activation has no TTL but carries `etag` (and optional `state_hash`). Unknown/expired activation -> orders gated OFF.
+- Activation has no TTL but carries `etag`. Unknown/expired activation -> orders gated OFF.
+- `state_hash` is exposed via `GET /worlds/{world_id}/activation/state_hash` and ActivationUpdated events for divergence checks.
 
 ---
 
@@ -365,7 +367,7 @@ Alerts
 ## 8. Failure Modes & Recovery
 
 - WS down: Gateway returns cached DecisionEnvelope if fresh; else safe default (compute-only/inactive). Activation defaults to inactive.
-- Redis loss: reconstruct activation from latest snapshot; orders remain gated until consistency restored.
+- Redis loss: reconstruct activation by replaying activation/apply `WorldAuditLog` entries; orders remain gated until consistency is restored.
 - Policy parse errors: reject version; keep prior default.
 
 ---

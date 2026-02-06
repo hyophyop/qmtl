@@ -269,7 +269,7 @@ consults DAG Manager for queues matching `(tags, interval)` and returns the list
 so that TagQueryNode instances remain network‑agnostic and only nodes lacking
 upstream queues execute locally.
 
-Gateway also listens (via ControlBus) for `sentinel_weight` CloudEvents emitted by DAG Manager. Upon receiving an update, Gateway updates local metrics and broadcasts the new weight to SDK clients via WebSocket. The effective ratio per version is exported as the Prometheus gauge `gateway_sentinel_traffic_ratio{version="<id>"}`.
+Gateway also listens (via ControlBus) for `sentinel_weight` CloudEvents emitted by DAG Manager. Upon receiving an update, Gateway updates local metrics and broadcasts the new weight to SDK clients via WebSocket. The effective ratio per sentinel is exported as the Prometheus gauge `gateway_sentinel_traffic_ratio{sentinel_id="<id>"}`.
 
 WorldService에서 발행하는 `rebalancing_planned` ControlBus 이벤트 역시 Gateway가 중복을 제거한 뒤 WebSocket `rebalancing` 토픽(CloudEvent 타입 `rebalancing.planned`)으로 중계하며, 계획 건수와 자동 실행 시도를 나타내는 지표(`rebalance_plans_observed_total`, `rebalance_plan_last_delta_count`, `rebalance_plan_execution_attempts_total`, `rebalance_plan_execution_failures_total`)를 기록한다.
 
@@ -332,10 +332,11 @@ Gateway remains the single public boundary for SDKs. It proxies WorldService end
 - Proxied endpoints → WorldService:
   - ``GET /worlds/{id}/decide`` → DecisionEnvelope (cached with TTL/etag)
   - ``GET /worlds/{id}/activation`` → ActivationEnvelope (fail‑safe: inactive on stale)
+  - ``GET /worlds/{id}/activation/state_hash`` → activation state hash metadata
   - ``POST /worlds/{id}/evaluate`` / ``POST /worlds/{id}/apply`` (operator‑only)
 - Caching & TTLs:
   - Per‑world decision cache honors envelope TTL (default 300s if unspecified); stale decisions → safe fallback (compute‑only, orders gated OFF)
-  - Activation cache: stale/unknown → orders gated OFF; ActivationEnvelope MAY include `state_hash` for quick divergence checks
+  - Activation cache: stale/unknown → orders gated OFF; divergence 확인은 ``GET /worlds/{id}/activation/state_hash``와 activation 이벤트를 사용합니다(ActivationEnvelope 필드가 아님)
 - Circuit breakers & budgets: Gateway periodically polls WorldService and DAG Manager status to drive circuit breakers.
 - `/status` exposes circuit breaker states for dependencies, including WorldService.
 
@@ -358,7 +359,7 @@ POST /events/subscribe
 ```
 
 - Gateway는 내부 ControlBus를 구독하고 디스크립터 URL을 통해 SDK로 이벤트를 중계합니다.
-- 순서는 키(월드 또는 태그+인터벌) 단위로 보장됩니다. 컨슈머는 ``etag``/``run_id``로 중복 제거합니다. 각 토픽의 첫 메시지는 전체 스냅샷이거나 `state_hash`를 포함하는 것이 바람직합니다.
+- 순서는 키(월드 또는 태그+인터벌) 단위로 보장됩니다. 컨슈머는 ``etag``/``run_id``로 중복 제거합니다. 각 토픽의 첫 메시지는 전체 스냅샷이어야 하며, activation 토픽은 divergence 확인을 위해 activation 이벤트에 `state_hash`를 포함하는 것이 바람직합니다.
 - **공개 범위:** 이 디스크립터는 현재 ActivationManager, TagQueryManager 등 SDK 내부용입니다. 사용자 대상의 범용
   CLI/SDK 구독 헬퍼는 아직 없으므로, 안정화된 표면이 제공될 때까지 `qmtl status`, `GET /worlds/{id}` 같은
   Gateway/WorldService 엔드포인트를 폴링하세요.

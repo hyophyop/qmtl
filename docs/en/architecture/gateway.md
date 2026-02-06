@@ -276,7 +276,7 @@ consults DAG Manager for queues matching `(tags, interval)` and returns the list
 so that TagQueryNode instances remain network-agnostic and only nodes lacking
 upstream queues execute locally.
 
-Gateway also listens (via ControlBus) for `sentinel_weight` CloudEvents emitted by DAG Manager. Upon receiving an update, Gateway updates local metrics and broadcasts the new weight to SDK clients via WebSocket. The effective ratio per version is exported as the Prometheus gauge `gateway_sentinel_traffic_ratio{version="<id>"}`.
+Gateway also listens (via ControlBus) for `sentinel_weight` CloudEvents emitted by DAG Manager. Upon receiving an update, Gateway updates local metrics and broadcasts the new weight to SDK clients via WebSocket. The effective ratio per sentinel is exported as the Prometheus gauge `gateway_sentinel_traffic_ratio{sentinel_id="<id>"}`.
 
 Rebalancing plans from WorldService are delivered on the `rebalancing_planned` ControlBus topic. Gateway deduplicates the events, broadcasts them over the WebSocket `rebalancing` topic (CloudEvent type `rebalancing.planned`), and records metrics capturing plan volume and automatic execution (`rebalance_plans_observed_total`, `rebalance_plan_last_delta_count`, `rebalance_plan_execution_attempts_total`, `rebalance_plan_execution_failures_total`).
 
@@ -341,10 +341,11 @@ Gateway remains the single public boundary for SDKs. It proxies WorldService end
 - Proxied endpoints -> WorldService:
   - ``GET /worlds/{id}/decide`` -> DecisionEnvelope (cached with TTL/etag)
   - ``GET /worlds/{id}/activation`` -> ActivationEnvelope (fail-safe: inactive on stale)
+  - ``GET /worlds/{id}/activation/state_hash`` -> activation state hash metadata
   - ``POST /worlds/{id}/evaluate`` / ``POST /worlds/{id}/apply`` (operator-only)
 - Caching & TTLs:
   - Per-world decision cache honors envelope TTL (default 300s if unspecified); stale decisions -> safe fallback (compute-only, orders gated OFF)
-  - Activation cache: stale/unknown -> orders gated OFF; ActivationEnvelope MAY include `state_hash` for quick divergence checks
+  - Activation cache: stale/unknown -> orders gated OFF; use ``GET /worlds/{id}/activation/state_hash`` and activation events for divergence checks (not ActivationEnvelope fields)
 - Circuit breakers & budgets: Gateway periodically polls WorldService and DAG Manager status to drive circuit breakers.
 - `/status` exposes circuit breaker states for dependencies, including WorldService.
 
@@ -367,7 +368,7 @@ POST /events/subscribe
 ```
 
 - Gateway subscribes to internal ControlBus and relays events to SDK over the descriptor URL.
-- Ordering is guaranteed per key (world_id or tags+interval). Consumers deduplicate via ``etag``/``run_id``. First message per topic SHOULD be a full snapshot or carry a `state_hash`.
+- Ordering is guaranteed per key (world_id or tags+interval). Consumers deduplicate via ``etag``/``run_id``. First message per topic SHOULD be a full snapshot; activation topics SHOULD include `state_hash` in activation events for divergence checks.
 - **Public availability:** The descriptor currently serves SDK internals (ActivationManager, TagQueryManager). There is no
   general-purpose CLI/SDK helper for user-facing subscriptions yet; external observers should poll Gateway/WorldService
   endpoints (e.g., `qmtl status`, `GET /worlds/{id}`) until a stable surface is released.
