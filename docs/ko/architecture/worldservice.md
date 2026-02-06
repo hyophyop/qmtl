@@ -2,7 +2,8 @@
 title: "WorldService — 월드 정책, 결정, 활성화"
 tags: [architecture, world, policy]
 author: "QMTL Team"
-last_modified: 2025-11-12
+last_modified: 2026-02-06
+spec_version: v1.0
 ---
 
 {{ nav_links() }}
@@ -20,7 +21,8 @@ WorldService는 월드의 단일 진실 소스(SSOT)입니다. 다음을 소유�
 - 감사 및 RBAC: 각 정책/업데이트/결정/적용 이벤트를 로깅하고 권한을 검사
 - 이벤트: 내부 ControlBus로 활성화/정책 업데이트 발행
 
-관련: [Core Loop × WorldService — 캠페인 자동화와 승격 거버넌스](core_loop_world_automation.md)
+관련: [Core Loop × WorldService — 캠페인 자동화와 승격 거버넌스](core_loop_world_automation.md)  
+관련: [ACK/Gap Resync RFC (초안)](ack_resync_rfc.md)
 
 !!! note "배포 프로필"
     `profile: dev`에서는 활성화 캐시 Redis가 비어 있으면 인메모리 저장소를 사용합니다. `profile: prod`에서는 `worldservice.server.redis`가 비어 있으면 프로세스가 기동 전에 실패하며, 인메모리 모드는 지원하지 않습니다.
@@ -194,7 +196,8 @@ Field semantics and precedence
 - `effective_mode` communicates the policy string from WorldService (`validate|compute-only|paper|live`).
 - Gateway derives an `execution_domain` when relaying the envelope downstream (ControlBus → SDK) by mapping `effective_mode` as `validate → backtest (orders gated OFF by default)`, `compute-only → backtest`, `paper/sim → dryrun`, `live → live`. `shadow` remains reserved for operator-led validation streams. The canonical ActivationEnvelope schema emitted by WorldService omits this derived field; Gateway adds it for clients so the mapping stays centralized.
 - ControlBus 팬아웃 시 [`ActivationEventPublisher.update_activation_state`]({{ code_url('qmtl/services/worldservice/activation.py#L58') }})가 `phase`(`freeze|unfreeze`), `requires_ack`, `sequence`를 주입한다. `sequence`는 [`ApplyRunState.next_sequence()`]({{ code_url('qmtl/services/worldservice/run_state.py#L47') }})에서 run별 단조 증가 값으로 생성된다.
-- `requires_ack=true`는 Gateway/SDK가 해당 `sequence`까지의 상태 변화를 수신하고 order gate를 계속 잠근 채 ACK를 반환해야 함을 뜻한다(SHALL). Freeze 단계 ACK가 도착하기 전에는 동일 run의 Unfreeze 이벤트를 적용하거나 주문 게이트를 열어서는 안 된다.
+- `requires_ack=true`의 기본 의미는 Gateway가 해당 `sequence`를 선형 순서로 적용하고 `control.activation.ack`로 `ActivationAck`를 게시하는 것이다(SHALL). 이 ACK는 버스 수신 확인(transport/apply)이며, 개별 SDK/WebSocket 소비자까지의 종단 확인을 뜻하지 않는다.
+- Gateway는 선행 `sequence`가 수렴하기 전에는 후속 이벤트(특히 Unfreeze)를 적용하거나 주문 게이트를 열어서는 안 된다(SHALL). 시퀀스 gap 타임아웃·자동 복구 정책은 [ACK/Gap Resync RFC (초안)](ack_resync_rfc.md)에서 정의한다.
 
 아이템포턴시(Idempotency): 컨슈머는 오래된 `etag`/`run_id` 이벤트를 무시해야 합니다(no‑op). 알 수 없거나 만료된 결정/활성화는 “비활성/안전” 상태로 간주합니다.
 
@@ -214,12 +217,12 @@ TTL 및 신선도(Staleness)
   - Domain switch is atomic from the perspective of order gating: `Freeze/Drain → Switch(domain) → Unfreeze`.
   - ActivationUpdated ACK 수렴 절차:
     - Freeze/Drain 및 Unfreeze 단계 이벤트는 `requires_ack=true`, `phase`, `sequence` 메타데이터가 포함된 ControlBus 메시지로 게시된다.
-    - Gateway는 `sequence` 기준으로 선형 재생을 보장하고, Freeze 이벤트에 대한 ACK가 도착하기 전에는 동일 run의 후속 이벤트(특히 Unfreeze)를 SDK로 전파하거나 주문 게이트를 해제해서는 안 된다(SHALL).
-    - ACK는 ControlBus 또는 동일하게 구성된 응답 채널을 통해 보고되며, payload에는 `world_id`, `run_id`, 마지막으로 적용한 `sequence`와 같은 재동기화 정보를 포함해야 한다. run별로 단조 증가 값을 유지하고, 역순 ACK는 무시하거나 오류로 처리해야 한다(SHOULD).
+    - Gateway는 `sequence` 기준으로 선형 재생을 보장하고, 선행 `sequence`가 처리되기 전에는 동일 run의 후속 이벤트(특히 Unfreeze)를 전파하거나 주문 게이트를 해제해서는 안 된다(SHALL).
+    - ACK는 ControlBus 응답 채널로 보고되며, payload에 `world_id`, `run_id`, `sequence`, `phase`를 포함해야 한다. run별 단조 증가를 유지하고 역순 ACK는 무시하거나 경고해야 한다(SHOULD). 현재 WS apply 완료 조건은 ACK 스트림을 하드 게이트로 사용하지 않는다.
 - 2‑Phase Apply protocol (SHALL):
   1. **Freeze/Drain** — Activation entries set `active=false, freeze=true`; Gateway/SDK gate all order publications; EdgeOverride keeps live queues disconnected.
   2. **Switch** — ExecutionDomain updated (예: backtest→live), queue/topic bindings refreshed, Feature Artifact snapshot pinned via `dataset_fingerprint`.
-  3. **Unfreeze** — Activation resumes (`freeze=false`) only after the new domain’s ActivationUpdated event is acknowledged by Gateway/SDK.
+  3. **Unfreeze** — WS는 Switch 이후 `freeze=false` 이벤트를 게시한다. Gateway/SDK는 해당 unfreeze `sequence`를 적용하고 ACK를 게시하기 전까지 주문 게이트를 유지한다(SHALL).
   - Single-flight guard: world 당 동시에 하나의 apply만 실행할 수 있다(SHALL). 중복 요청은 409를 반환하거나 큐에 보류한다.
   - Failure policy: Switch 단계에서 오류가 발생하면 즉시 직전 Activation snapshot으로 롤백하고 freeze 상태를 유지한다(SHALL).
   - Audit: WorldAuditLog에 `requested → freeze → switch → unfreeze → completed/rolled_back` 타임라인을 기록한다(SHOULD).

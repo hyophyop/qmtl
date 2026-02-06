@@ -6,6 +6,63 @@ import pytest
 from qmtl.services.gateway import metrics
 
 
+def _make_activation_stale_handler(
+    calls: dict[str, int], activation_payload: dict[str, object]
+):
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/activation"):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return httpx.Response(
+                    200,
+                    json=activation_payload,
+                    headers={"ETag": "abc"},
+                )
+            return httpx.Response(500)
+        raise AssertionError("unexpected path")
+
+    return handler
+
+
+def _assert_stale_activation_response(response: httpx.Response) -> None:
+    payload = response.json()
+    assert {
+        "world_id": payload["world_id"],
+        "strategy_id": payload["strategy_id"],
+        "side": payload["side"],
+        "active": payload["active"],
+        "weight": payload["weight"],
+        "effective_mode": payload["effective_mode"],
+        "execution_domain": payload["execution_domain"],
+    } == {
+        "world_id": "abc",
+        "strategy_id": "s",
+        "side": "long",
+        "active": False,
+        "weight": 0.0,
+        "effective_mode": "compute-only",
+        "execution_domain": "backtest",
+    }
+    assert {
+        "execution_domain": payload["compute_context"]["execution_domain"],
+        "downgraded": payload["compute_context"]["downgraded"],
+        "downgrade_reason": payload["compute_context"]["downgrade_reason"],
+        "safe_mode": payload["compute_context"]["safe_mode"],
+    } == {
+        "execution_domain": "backtest",
+        "downgraded": True,
+        "downgrade_reason": "missing_as_of",
+        "safe_mode": True,
+    }
+    assert {
+        "X-Stale": response.headers["X-Stale"],
+        "Warning": response.headers["Warning"],
+    } == {
+        "X-Stale": "true",
+        "Warning": "110 - Response is stale",
+    }
+
+
 @pytest.mark.asyncio
 async def test_activation_etag_cache(gateway_app_factory) -> None:
     call_count = {"n": 0}
@@ -47,34 +104,15 @@ async def test_activation_stale_on_backend_error(
         "ts": "2025-01-01T00:00:00Z",
     }
 
-    async def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path.endswith("/activation"):
-            calls["n"] += 1
-            if calls["n"] == 1:
-                return httpx.Response(
-                    200,
-                    json=activation_payload,
-                    headers={"ETag": "abc"},
-                )
-            return httpx.Response(500)
-        raise AssertionError("unexpected path")
-
-    async with gateway_app_factory(handler) as ctx:
+    async with gateway_app_factory(
+        _make_activation_stale_handler(calls, activation_payload)
+    ) as ctx:
         params = {"strategy_id": "s", "side": "long"}
         r1 = await ctx.client.get("/worlds/abc/activation", params=params)
         r2 = await ctx.client.get("/worlds/abc/activation", params=params)
 
     assert r1.json() == activation_payload
-    payload = r2.json()
-    assert payload["world_id"] == "abc"
-    assert payload["strategy_id"] == "s"
-    assert payload["side"] == "long"
-    assert payload["active"] is False
-    assert payload["weight"] == 0.0
-    assert payload["effective_mode"] == "compute-only"
-    assert payload["execution_domain"] == "backtest"
-    assert r2.headers["X-Stale"] == "true"
-    assert r2.headers["Warning"] == "110 - Response is stale"
+    _assert_stale_activation_response(r2)
     assert metrics.worlds_stale_responses_total._value.get() == 1
 
 

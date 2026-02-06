@@ -90,6 +90,7 @@ run_step "Radon diff (CC/MI)" bash -lc '
 run_step "Type check (mypy)" uv run --with mypy -m mypy
 run_step "Build docs (mkdocs --strict)" uv run mkdocs build --strict
 run_step "Check design drift (docs ↔ code)" uv run python scripts/check_design_drift.py
+run_step "Check i18n core-loop parity (KO ↔ EN)" uv run python scripts/check_i18n_core_parity.py
 run_step "Lint DSN keys (canonical *_dsn)" uv run python scripts/lint_dsn_keys.py
 run_step "Check import cycles (grimp baseline)" uv run --with grimp python scripts/check_import_cycles.py --baseline scripts/import_cycles_baseline.json
 run_step "Check SDK layer guard (core -> nodes)" uv run --with grimp python scripts/check_sdk_layers.py

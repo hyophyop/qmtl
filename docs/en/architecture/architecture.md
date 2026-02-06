@@ -4,7 +4,8 @@ tags:
   - architecture
   - design
 author: "QMTL Team"
-last_modified: 2026-02-05
+last_modified: 2026-02-06
+spec_version: v1.0
 ---
 
 {{ nav_links() }}
@@ -22,6 +23,7 @@ last_modified: 2026-02-05
 - [WorldService](worldservice.md)
 - [Core Loop Automation](core_loop_world_automation.md)
 - [ControlBus](controlbus.md)
+- [ACK/Gap Resync RFC (Draft)](ack_resync_rfc.md)
 - [Exchange Node Sets](exchange_node_sets.md)
 - Risk Signal Hub: [Risk Signal Hub Architecture](risk_signal_hub.md)
 - Core Loop contract tests: `tests/e2e/core_loop/README.md`
@@ -47,6 +49,7 @@ Bootstrap workflows and operational validation steps live in
 - WS as SSOT: SubmitResult exposes WorldService decision/activation envelopes as the source of truth, with local precheck kept separate. (`qmtl/services/worldservice/shared_schemas.py`, Core Loop contract tests)
 - Default-safe: when WS decisions are missing or stale, executions downgrade to backtest/compute-only and mark safe_mode. (`qmtl/runtime/sdk/execution_context.py`, `tests/e2e/core_loop/test_compute_context_contract.py`)
 - Data on-ramp: world presets drive Seamless auto-wiring by default, verified by the Core Loop contract suite. (`qmtl/runtime/sdk/world_data.py`, `tests/e2e/core_loop/`)
+- ACK/resync baseline: `requires_ack` currently means Gateway ControlBus receipt acknowledgement (single-stage ACK). Sequence gaps/divergence converge through `state_hash` + HTTP reconcile paths. Timeout and auto-recovery policy details are tracked in the [ACK/Gap Resync RFC (Draft)](ack_resync_rfc.md).
 
 ### Default-Safe Principle
 

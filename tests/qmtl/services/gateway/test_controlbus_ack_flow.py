@@ -261,6 +261,7 @@ async def test_activation_sequence_resets_for_new_run_id() -> None:
     [
         (True, None),
         (False, "not-an-int"),
+        (False, True),
     ],
 )
 async def test_activation_requires_ack_with_missing_or_invalid_sequence_drops_without_ws_or_ack(

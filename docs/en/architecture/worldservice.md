@@ -2,12 +2,16 @@
 title: "WorldService - World Policy, Decisions, and Activation"
 tags: [architecture, world, policy]
 author: "QMTL Team"
-last_modified: 2025-11-12
+last_modified: 2026-02-06
+spec_version: v1.0
 ---
 
 {{ nav_links() }}
 
 # WorldService - World Policy, Decisions, and Activation
+
+Related: [Core Loop × WorldService — Campaign Automation and Promotion Governance](core_loop_world_automation.md)  
+Related: [ACK/Gap Resync RFC (Draft)](ack_resync_rfc.md)
 
 ## 0. Role & Scope
 
@@ -198,7 +202,8 @@ Field semantics and precedence
 - `effective_mode` communicates the policy string from WorldService (`validate|compute-only|paper|live`).
 - Gateway derives an `execution_domain` when relaying the envelope downstream (ControlBus -> SDK) by mapping `effective_mode` as `validate -> backtest (orders gated OFF by default)`, `compute-only -> backtest`, `paper/sim -> dryrun`, `live -> live`. `shadow` remains reserved for operator-led validation streams. The canonical ActivationEnvelope schema emitted by WorldService omits this derived field; Gateway adds it for clients so the mapping stays centralized.
 - ControlBus fan-out injects `phase` (`freeze|unfreeze`), `requires_ack`, and `sequence` via [`ActivationEventPublisher.update_activation_state`]({{ code_url('qmtl/services/worldservice/activation.py#L58') }}). `sequence` is produced per run by [`ApplyRunState.next_sequence()`]({{ code_url('qmtl/services/worldservice/run_state.py#L47') }}).
-- `requires_ack=true` signals that Gateway/SDK MUST keep order gates closed and emit an acknowledgement for that `sequence` through the ControlBus response channel before propagating subsequent events. Freeze-phase acks must arrive before the corresponding Unfreeze event is applied.
+- `requires_ack=true` currently means Gateway MUST apply the event in-order and publish `ActivationAck` on `control.activation.ack` for that `sequence` (SHALL). This is transport/apply acknowledgement at Gateway, not an end-to-end confirmation from every downstream SDK/WebSocket client.
+- Gateway MUST NOT apply later events (especially Unfreeze) or reopen order gates before prior required sequences converge (SHALL). Gap timeout/auto-recovery policy is tracked in [ACK/Gap Resync RFC (Draft)](ack_resync_rfc.md).
 
 Idempotency: consumers must treat older etag/run_id as no-ops. Unknown or expired decisions/activations should default to "inactive/safe".
 
@@ -218,12 +223,12 @@ TTL & Staleness
   - Domain switch is atomic from the perspective of order gating: `Freeze/Drain -> Switch(domain) -> Unfreeze`.
   - ActivationUpdated acknowledgement flow:
     - Freeze/Drain and Unfreeze phases are emitted with `requires_ack=true`, `phase`, and `sequence` metadata on ControlBus events.
-    - Gateway MUST enforce linear replay by `sequence` and MUST NOT relay later events (especially Unfreeze) or reopen gates until the corresponding acknowledgements arrive from downstream subscribers (SHALL).
-    - Acknowledgements are reported via ControlBus or an equivalent response channel and include `world_id`, `run_id`, and the highest applied `sequence`. They MUST advance monotonically per run and discard or flag acknowledgements that arrive out of order (SHOULD).
+    - Gateway MUST enforce linear replay by `sequence` and MUST NOT relay later events (especially Unfreeze) or reopen gates until prior required sequences are acknowledged (SHALL).
+    - Acknowledgements are reported via ControlBus response channels and include `world_id`, `run_id`, `sequence`, and `phase`. They SHOULD advance monotonically per run; out-of-order acknowledgements should be discarded or flagged. Current WorldService apply completion is not hard-blocked on observing the ACK stream.
 - 2-Phase Apply protocol (SHALL):
   1. **Freeze/Drain** - Activation entries set `active=false, freeze=true`; Gateway/SDK gate all order publications; EdgeOverride keeps live queues disconnected.
   2. **Switch** - ExecutionDomain updated (e.g., `backtest -> live`), queue/topic bindings refreshed, Feature Artifact snapshot pinned via `dataset_fingerprint`.
-  3. **Unfreeze** - Activation resumes (`freeze=false`) only after Gateway/SDK acknowledge the ActivationUpdated event for the new domain.
+  3. **Unfreeze** - WorldService publishes `freeze=false` after Switch. Gateway/SDK keep order gates closed until they apply and acknowledge that unfreeze sequence (SHALL).
   - Single-flight guard: Only one apply may execute per world at a time (SHALL). Additional requests return 409 or are queued.
   - Failure policy: If the Switch step fails, immediately roll back to the previous Activation snapshot and remain frozen (SHALL).
   - Audit: Record the timeline `requested -> freeze -> switch -> unfreeze -> completed/rolled_back` in WorldAuditLog (SHOULD).

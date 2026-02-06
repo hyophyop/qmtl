@@ -1,10 +1,92 @@
 import json
+from collections.abc import Callable
 
 import httpx
 import pytest
 
 from qmtl.services.gateway import metrics
 from qmtl.services.gateway.world_client import WorldServiceClient
+
+
+RequestCheck = Callable[[httpx.Request], None]
+
+
+def _sequenced_transport(
+    *,
+    expected_path_suffix: str,
+    responses: list[httpx.Response],
+    request_checks: list[RequestCheck],
+) -> httpx.MockTransport:
+    assert len(responses) == len(request_checks)
+    state = {"index": 0}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith(expected_path_suffix)
+        idx = state["index"]
+        state["index"] += 1
+        assert idx < len(responses), "unexpected request count"
+        request_checks[idx](request)
+        return responses[idx]
+
+    return httpx.MockTransport(handler)
+
+
+def _noop_request_check(_: httpx.Request) -> None:
+    return None
+
+
+def _header_is_absent(name: str) -> RequestCheck:
+    def check(request: httpx.Request) -> None:
+        assert request.headers.get(name) is None
+
+    return check
+
+
+def _header_equals(name: str, expected_value: str) -> RequestCheck:
+    def check(request: httpx.Request) -> None:
+        assert request.headers.get(name) == expected_value
+
+    return check
+
+
+def _assert_live_decision_payload(payload: dict, stale: bool) -> None:
+    assert stale is False
+    assert payload["effective_mode"] == "live"
+    assert payload["execution_domain"] == "live"
+
+
+def _assert_stale_decision_downgrade(payload: dict, stale: bool) -> None:
+    assert stale is True
+    assert payload["world_id"] == "w-live"
+    assert payload["effective_mode"] == "compute-only"
+    assert payload["execution_domain"] == "backtest"
+    assert payload["compute_context"]["execution_domain"] == "backtest"
+    assert "safe_mode" not in payload["compute_context"]
+
+
+def _assert_initial_activation(payload: dict, stale: bool, expected: dict) -> None:
+    assert payload == expected
+    assert stale is False
+    assert payload["active"] is True
+
+
+def _assert_stale_activation_downgrade(payload: dict, stale: bool) -> None:
+    assert stale is True
+    expected = {
+        "world_id": "w1",
+        "strategy_id": "s1",
+        "side": "long",
+        "active": False,
+        "weight": 0.0,
+        "effective_mode": "compute-only",
+        "execution_domain": "backtest",
+    }
+    assert {key: payload[key] for key in expected} == expected
+    compute_context = payload["compute_context"]
+    assert compute_context["execution_domain"] == "backtest"
+    assert compute_context["downgraded"] is True
+    assert compute_context["downgrade_reason"] == "missing_as_of"
+    assert compute_context["safe_mode"] is True
 
 
 @pytest.mark.asyncio
@@ -144,6 +226,48 @@ async def test_get_decide_returns_cached_payload_on_backend_error() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_decide_stale_response_downgrades_live_mode_to_compute_only() -> None:
+    metrics.reset_metrics()
+    decision_payload = {
+        "world_id": "w-live",
+        "policy_version": 7,
+        "effective_mode": "live",
+        "as_of": "2025-01-01T00:00:00Z",
+        "ttl": "300s",
+        "etag": "w-live:v7",
+    }
+    transport = _sequenced_transport(
+        expected_path_suffix="/decide",
+        responses=[
+            httpx.Response(
+                200,
+                json=decision_payload,
+                headers={"Cache-Control": "max-age=60"},
+            ),
+            httpx.Response(500),
+        ],
+        request_checks=[_noop_request_check, _noop_request_check],
+    )
+    client = WorldServiceClient(
+        "http://world",
+        client=httpx.AsyncClient(transport=transport),
+    )
+
+    try:
+        first, stale_first = await client.get_decide("w-live")
+        _assert_live_decision_payload(first, stale_first)
+
+        client._decision_cache.expire("w-live")
+
+        second, stale_second = await client.get_decide("w-live")
+    finally:
+        await client._client.aclose()
+
+    _assert_stale_decision_downgrade(second, stale_second)
+    assert metrics.worlds_stale_responses_total._value.get() == 1
+
+
+@pytest.mark.asyncio
 async def test_get_decide_as_of_forwards_query_and_scopes_cache() -> None:
     seen_params: list[dict[str, str]] = []
 
@@ -185,7 +309,6 @@ async def test_get_decide_as_of_forwards_query_and_scopes_cache() -> None:
 @pytest.mark.asyncio
 async def test_get_activation_returns_inactive_failsafe_on_stale_backend_error() -> None:
     metrics.reset_metrics()
-    calls = {"count": 0}
     activation_payload = {
         "world_id": "w1",
         "strategy_id": "s1",
@@ -195,22 +318,21 @@ async def test_get_activation_returns_inactive_failsafe_on_stale_backend_error()
         "etag": "abc",
         "ts": "2025-01-01T00:00:00Z",
     }
-
-    async def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path.endswith("/activation"):
-            calls["count"] += 1
-            if calls["count"] == 1:
-                assert request.headers.get("If-None-Match") is None
-                return httpx.Response(
-                    200,
-                    json=activation_payload,
-                    headers={"ETag": "abc"},
-                )
-            assert request.headers.get("If-None-Match") == "abc"
-            return httpx.Response(500)
-        raise AssertionError("unexpected path")
-
-    transport = httpx.MockTransport(handler)
+    transport = _sequenced_transport(
+        expected_path_suffix="/activation",
+        responses=[
+            httpx.Response(
+                200,
+                json=activation_payload,
+                headers={"ETag": "abc"},
+            ),
+            httpx.Response(500),
+        ],
+        request_checks=[
+            _header_is_absent("If-None-Match"),
+            _header_equals("If-None-Match", "abc"),
+        ],
+    )
     client = WorldServiceClient(
         "http://world",
         client=httpx.AsyncClient(transport=transport),
@@ -222,17 +344,8 @@ async def test_get_activation_returns_inactive_failsafe_on_stale_backend_error()
     finally:
         await client._client.aclose()
 
-    assert first == activation_payload
-    assert stale_first is False
-    assert second["world_id"] == "w1"
-    assert second["strategy_id"] == "s1"
-    assert second["side"] == "long"
-    assert second["active"] is False
-    assert second["weight"] == 0.0
-    assert second["effective_mode"] == "compute-only"
-    assert second["execution_domain"] == "backtest"
-    assert stale_second is True
-    assert first["active"] is True
+    _assert_initial_activation(first, stale_first, activation_payload)
+    _assert_stale_activation_downgrade(second, stale_second)
     assert metrics.worlds_stale_responses_total._value.get() == 1
 
 
