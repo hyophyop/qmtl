@@ -518,6 +518,12 @@ class GeneralStrategy(Strategy):
 
         self.add_nodes([price_stream, signal_node])
 
+## Seamless Data Provider (SDK)
+
+Runner submit calls resolve the world-configured Seamless preset by default and
+inject the provider into StreamInput resolution paths. Strategy code remains
+focused on node logic, while data on-ramp details stay in world/preset config.
+
 # World-driven execution entry point
 if __name__ == "__main__":
     Runner.submit(GeneralStrategy, world="general_demo")
@@ -571,6 +577,16 @@ class CorrelationStrategy(Strategy):
 if __name__ == "__main__":
     Runner.submit(CorrelationStrategy, world="corr_demo")
 ```
+
+## Appendix: Cross-market strategy example (Cross-Market Lag Strategy)
+
+Cross-market lag variants follow the same world-driven submit pattern and use
+the same activation/decision envelopes; only upstream market selection and lag
+window parameters differ.
+
+In live runs, Gateway/SDK consume world decisions and activation envelopes as
+read-only SSOT signals. Order publication stays gated until world policy and
+activation state explicitly allow it.
 
 ---
 

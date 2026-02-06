@@ -103,6 +103,54 @@ def test_normative_marker_presence_mismatch_fails(tmp_path: Path) -> None:
     assert warnings == []
 
 
+def test_korean_normative_markers_are_counted(tmp_path: Path) -> None:
+    module = load_module()
+    stable = "# Title\n\n## Section\n\n### Subsection\n\nMUST SHALL SHOULD MUST SHALL\n"
+    _seed_docs(tmp_path, module, stable, stable)
+    _write(
+        tmp_path / "docs" / "ko" / "architecture" / "controlbus.md",
+        (
+            "# 제목\n\n## 섹션\n\n### 소절\n\n"
+            "반드시 해야 한다.\n"
+            "필수입니다.\n"
+            "권고한다.\n"
+            "권장합니다.\n"
+            "하면 안 된다.\n"
+        ),
+    )
+    _write(
+        tmp_path / "docs" / "en" / "architecture" / "controlbus.md",
+        "# Title\n\n## Section\n\n### Subsection\n\n",
+    )
+
+    errors, warnings = module.check_i18n_core_parity(tmp_path)
+
+    assert any(
+        "Normative marker presence mismatch for controlbus.md" in err for err in errors
+    )
+    assert warnings == []
+
+
+def test_spec_mapped_arch_doc_is_included_in_parity_targets(tmp_path: Path) -> None:
+    module = load_module()
+    base = "# Title\n\n## Section\n\n### Subsection\n\nMUST\n"
+    _seed_docs(tmp_path, module, base, base)
+    spec_file = tmp_path / "qmtl" / "foundation" / "spec.py"
+    _write(
+        spec_file,
+        "ARCH_SPEC_VERSIONS = {'architecture': 'v1.0', 'new-contract': 'v1.0'}\n",
+    )
+    _write(
+        tmp_path / "docs" / "ko" / "architecture" / "new-contract.md",
+        base,
+    )
+
+    errors, warnings = module.check_i18n_core_parity(tmp_path)
+
+    assert any("Missing mirrored file for new-contract.md" in err for err in errors)
+    assert warnings == []
+
+
 def test_main_returns_nonzero_with_actionable_output(
     tmp_path: Path, capsys
 ) -> None:

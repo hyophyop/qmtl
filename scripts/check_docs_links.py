@@ -8,6 +8,48 @@ import yaml
 
 
 LINK_RE = re.compile(r"!??\[[^\]]*\]\(([^)]+)\)")
+EN_CORE_ARCH_DOCS = {
+    "architecture.md",
+    "gateway.md",
+    "worldservice.md",
+    "controlbus.md",
+    "dag-manager.md",
+    "ack_resync_rfc.md",
+}
+
+
+def _find_i18n_config(plugins: object) -> dict[str, object] | None:
+    if not isinstance(plugins, list):
+        return None
+    for plugin in plugins:
+        if not (isinstance(plugin, dict) and "i18n" in plugin):
+            continue
+        i18n_cfg = plugin.get("i18n")
+        if isinstance(i18n_cfg, dict):
+            return i18n_cfg
+        return None
+    return None
+
+
+def _parse_i18n_languages(
+    languages: object, *, fallback_default: str
+) -> tuple[set[str], str]:
+    locales: set[str] = set()
+    default_locale = fallback_default
+    if not isinstance(languages, list):
+        return locales, default_locale
+
+    for ent in languages:
+        if not isinstance(ent, dict):
+            continue
+        loc = ent.get("locale")
+        if not loc:
+            continue
+        locale = str(loc)
+        locales.add(locale)
+        if ent.get("default") is True:
+            default_locale = locale
+    return locales, default_locale
 
 
 def _load_i18n_locales(repo_root: Path) -> tuple[set[str], str]:
@@ -16,45 +58,48 @@ def _load_i18n_locales(repo_root: Path) -> tuple[set[str], str]:
     Returns a tuple of (locales, default_locale). Falls back to ({}, 'en') on error.
     """
     mkdocs_path = repo_root / "mkdocs.yml"
+    fallback: tuple[set[str], str] = (set(), "en")
     try:
         data = yaml.safe_load(mkdocs_path.read_text(encoding="utf-8"))
-        plugins = data.get("plugins", []) or []
-        i18n_cfg = None
-        for p in plugins:
-            if isinstance(p, dict) and "i18n" in p:
-                i18n_cfg = p.get("i18n")
-                break
-        locales: set[str] = set()
-        default_locale = "en"
-        if isinstance(i18n_cfg, dict):
-            for ent in i18n_cfg.get("languages", []) or []:
-                if isinstance(ent, dict):
-                    loc = ent.get("locale")
-                    if loc:
-                        locales.add(str(loc))
-                        if ent.get("default") is True:
-                            default_locale = str(loc)
-        return locales, default_locale
     except Exception:
-        return set(), "en"
+        return fallback
+    if not isinstance(data, dict):
+        return fallback
+
+    i18n_cfg = _find_i18n_config(data.get("plugins", []) or [])
+    if i18n_cfg is None:
+        return fallback
+    return _parse_i18n_languages(
+        i18n_cfg.get("languages", []) or [], fallback_default="en"
+    )
 
 
 def _iter_markdown_files(repo_root: Path, docs_dir: Path) -> Iterable[Path]:
     """Yield Markdown files to validate.
 
-    We intentionally skip locale-specific trees (e.g. docs/ko) and archived
-    content, as these may contain historical links or translation placeholders
-    that do not map 1:1 to files in the current repo state. The public site
-    build (mkdocs with i18n) handles these safely, but our static checker
-    should focus on the canonical docs that gate CI.
+    Include canonical docs plus focused EN parity scope:
+    - default locale tree (full)
+    - EN architecture core-loop docs
+    - non-locale docs at repository docs root
+    Skip other locale trees and archived content.
     """
     locales, default_locale = _load_i18n_locales(repo_root)
     for p in docs_dir.rglob("*.md"):
         rel = p.relative_to(docs_dir)
         parts = rel.parts
-        # Skip non-default locale trees and archived docs
-        if parts and parts[0] in locales and parts[0] != default_locale:
-            continue
+        if parts and parts[0] in locales:
+            locale = parts[0]
+            if locale == default_locale:
+                pass
+            elif locale == "en":
+                if not (
+                    len(parts) >= 3
+                    and parts[1] == "architecture"
+                    and parts[2] in EN_CORE_ARCH_DOCS
+                ):
+                    continue
+            else:
+                continue
         if "archive" in parts:
             continue
         yield p

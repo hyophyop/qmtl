@@ -66,14 +66,14 @@ Non-Goals
 The recommended default is **Option A**.
 
 - ACK meaning: `requires_ack=true` means Gateway single-stage ACK.
-- Gate rule: Gateway must not apply later events (especially unfreeze) before prior required sequences are applied/ACKed.
-- Recommended default gap timeout: `activation_gap_timeout_ms=3000`.
+- Gate rule: Gateway MUST NOT apply later events (especially unfreeze) before prior required sequences are applied/ACKed.
+- Recommended default gap timeout: `activation_gap_timeout_ms=3000` (consumers SHOULD expose this as an operator-configurable setting).
 - Recommended gap procedure:
   1. Keep order gates closed for the affected `(world_id, run_id)` stream.
   2. Probe divergence via `GET /worlds/{world_id}/activation/state_hash`.
   3. If needed, fetch snapshot via `GET /worlds/{world_id}/activation` and reconcile local state.
   4. Do not apply unfreeze until reconciliation succeeds.
-- Apply completion semantics: keep current behavior; WorldService apply completion is not hard-blocked on ACK stream convergence.
+- Apply completion semantics: keep current behavior; WorldService apply completion is not hard-blocked on ACK stream convergence, but operators SHOULD alert on prolonged ACK divergence.
 
 ## 6. Open Questions
 

@@ -36,6 +36,7 @@ class TagQueryUpsertData(BaseModel):
 class SentinelWeightData(BaseModel):
     sentinel_id: StrictStr
     weight: StrictFloat
+    sentinel_version: Optional[StrictStr] = None
     world_id: Optional[StrictStr] = None
     version: StrictInt
 
@@ -54,6 +55,9 @@ class ActivationUpdatedData(BaseModel):
     run_id: Optional[StrictStr] = None
     ts: Optional[StrictStr] = None
     state_hash: Optional[StrictStr] = None
+    phase: Optional[StrictStr] = None
+    requires_ack: Optional[bool] = None
+    sequence: Optional[StrictInt] = None
 
 
 class PolicyUpdatedData(BaseModel):

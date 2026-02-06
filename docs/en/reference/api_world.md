@@ -2,7 +2,7 @@
 title: "World API Reference — Proxied via Gateway"
 tags: [reference, api, world]
 author: "QMTL Team"
-last_modified: 2025-09-22
+last_modified: 2026-02-06
 ---
 
 {{ nav_links() }}
@@ -82,20 +82,33 @@ Response (ActivationEnvelope)
   "freeze": false,
   "drain": false,
   "effective_mode": "paper",
-  "execution_domain": "dryrun",
+  "execution_domain": "backtest",
+  "compute_context": {
+    "world_id": "crypto_mom_1h",
+    "execution_domain": "backtest",
+    "as_of": null,
+    "partition": null,
+    "dataset_fingerprint": null,
+    "downgraded": true,
+    "downgrade_reason": "missing_as_of",
+    "safe_mode": true
+  },
   "etag": "act:crypto_mom_1h:abcd:long:42",
   "run_id": "7a1b4c...",
   "ts": "2025-08-28T09:00:00Z"
 }
 ```
 `effective_mode` carries the WorldService policy string and remains
-backwards-compatible (`validate|compute-only|paper|live`). The raw
-WorldService ActivationEnvelope schema omits the derived
-`execution_domain`, but Gateway proxies add it by applying the
-normative mapping: `validate → backtest (orders gated OFF)`,
-`compute-only → backtest`, `paper → dryrun`, `live → live`. `shadow`
-remains reserved for operator-controlled dual runs. SDKs treat this
-mapping as read-only annotation for local state/metrics; it MUST NOT
+backwards-compatible (`validate|compute-only|paper|live|shadow`). The
+shared compute-context canonical mode->domain mapping is
+`validate → backtest`, `compute-only → backtest`, `paper → dryrun`,
+`live → live`, `shadow → shadow`. However, `/worlds/{id}/activation`
+envelopes do not include `as_of`, so Gateway safe-mode evaluation
+downgrades `paper` to `backtest` when it materializes `compute_context`
+(`downgraded=true`, `downgrade_reason=missing_as_of`, `safe_mode=true`).
+As a result, the current activation response contract exposes
+`effective_mode=paper` with `execution_domain=backtest`. SDKs treat this
+field as read-only annotation for local state/metrics; it MUST NOT
 override backend decisions or change execution behavior client-side.
 When `execution_domain=shadow` is active, Gateway preserves the value
 end-to-end (ControlBus/WebSocket relays, queue maps/tag queries) while
@@ -103,6 +116,9 @@ enforcing that order publishing paths are disabled. Shadow runs mirror
 live inputs in an isolated namespace; operator gates such as
 `X-Allow-Live` (for HTTP) and policy-based `allow_live` checks still
 apply to connections and subscriptions.
+Stale activation fail-safe invariants (cache response path):
+- When Gateway serves a stale activation (`X-Stale: true`, `Warning: 110 - Response is stale`), it enforces fail-closed values: `active=false`, `weight=0.0`, `effective_mode=compute-only`, `execution_domain=backtest`.
+- Rationale: stale cache state cannot prove current activation safety, so order-enable paths must stay closed and converge to compute-only behavior.
 Schema: reference/schemas/activation_envelope.schema.json
 
 ### GET /worlds/{id}/{topic}/state_hash

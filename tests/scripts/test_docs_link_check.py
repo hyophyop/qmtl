@@ -56,3 +56,37 @@ def test_allows_new_tests_qmtl_paths(tmp_path: Path) -> None:
     errors = check(tmp_path, docs)
     assert errors == []
 
+
+def test_checks_default_and_en_locales_but_skips_other_locales(tmp_path: Path) -> None:
+    check = load_check()
+    (tmp_path / "mkdocs.yml").write_text(
+        """
+plugins:
+  - i18n:
+      languages:
+        - locale: ko
+          default: true
+        - locale: en
+        - locale: ja
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    docs = tmp_path / "docs"
+    (docs / "ko" / "architecture").mkdir(parents=True)
+    (docs / "en" / "architecture").mkdir(parents=True)
+    (docs / "ja" / "architecture").mkdir(parents=True)
+    (docs / "ko" / "architecture" / "gateway.md").write_text("정상 링크", encoding="utf-8")
+    (docs / "en" / "architecture" / "gateway.md").write_text(
+        "See [broken](missing.md)",
+        encoding="utf-8",
+    )
+    (docs / "ja" / "architecture" / "gateway.md").write_text(
+        "See [broken](missing.md)",
+        encoding="utf-8",
+    )
+
+    errors = check(tmp_path, docs)
+
+    assert any("docs/en/architecture/gateway.md" in e for e in errors)
+    assert not any("docs/ja/architecture/gateway.md" in e for e in errors)

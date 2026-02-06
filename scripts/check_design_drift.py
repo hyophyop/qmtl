@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
-"""Design drift check: compare docs spec versions with code constants.
+"""Design drift check: compare architecture docs spec versions with code.
 
 The documentation tree is locale-scoped (mkdocs i18n). This checker reads the
-default locale from ``mkdocs.yml`` and validates the corresponding docs under
-``docs/<default_locale>/architecture/*.md`` (falling back to the legacy
-non-i18n path when present).
+default locale from ``mkdocs.yml`` and validates both:
+
+- ``docs/<default_locale>/architecture/*.md``
+- ``docs/en/architecture/*.md``
+
+Each doc with front-matter ``spec_version`` must map to
+``qmtl/foundation/spec.py::ARCH_SPEC_VERSIONS`` and each key in
+``ARCH_SPEC_VERSIONS`` must have a matching doc file in required locale trees.
 
 Exit codes:
-- 0: OK or no docs declare ``spec_version``
-- 1: Soft warning (no mapping in code for a doc with spec_version)
-- 2: Mismatch or missing spec_version in docs for a known key
+- 0: Passed
+- 1: Warning-only result
+- 2: Hard failure (missing/mismatched versions or missing required docs)
 
-Set ``DRIFT_STRICT=1`` to treat all warnings as failures.
+Set ``DRIFT_STRICT=1`` to treat warnings as failures.
 """
 
 from __future__ import annotations
@@ -24,41 +29,77 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _default_locale(root: Path) -> str:
+def _find_i18n_config(plugins: object) -> dict[str, object] | None:
+    if not isinstance(plugins, list):
+        return None
+    for entry in plugins:
+        if not (isinstance(entry, dict) and "i18n" in entry):
+            continue
+        i18n_cfg = entry.get("i18n")
+        if isinstance(i18n_cfg, dict):
+            return i18n_cfg
+        return None
+    return None
+
+
+def _parse_i18n_languages(
+    languages: object, *, fallback_default: str
+) -> tuple[set[str], str]:
+    locales: set[str] = set()
+    default_locale = fallback_default
+    if not isinstance(languages, list):
+        return locales, default_locale
+
+    for lang in languages:
+        if not isinstance(lang, dict):
+            continue
+        loc = lang.get("locale")
+        if not loc:
+            continue
+        locale = str(loc)
+        locales.add(locale)
+        if lang.get("default") is True:
+            default_locale = locale
+    return locales, default_locale
+
+
+def _load_i18n_locales(root: Path) -> tuple[set[str], str]:
+    """Return (configured_locales, default_locale) from mkdocs i18n config."""
     mkdocs_path = root / "mkdocs.yml"
+    fallback: tuple[set[str], str] = (set(), "ko")
     try:
         import yaml  # type: ignore
 
-        data = yaml.safe_load(mkdocs_path.read_text(encoding="utf-8"))
-        plugins = data.get("plugins", []) or []
-        for ent in plugins:
-            if not (isinstance(ent, dict) and "i18n" in ent):
-                continue
-            i18n_cfg = ent.get("i18n")
-            if not isinstance(i18n_cfg, dict):
-                break
-            for lang in i18n_cfg.get("languages", []) or []:
-                if isinstance(lang, dict) and lang.get("default") is True:
-                    loc = lang.get("locale")
-                    if loc:
-                        return str(loc)
-            break
+        data = yaml.safe_load(mkdocs_path.read_text(encoding="utf-8")) or {}
     except Exception:
-        # Default locale is Korean by policy; fall back defensively.
-        return "ko"
-    return "ko"
+        return fallback
+
+    if not isinstance(data, dict):
+        return fallback
+    i18n_cfg = _find_i18n_config(data.get("plugins", []) or [])
+    if i18n_cfg is None:
+        return fallback
+    return _parse_i18n_languages(
+        i18n_cfg.get("languages", []) or [], fallback_default="ko"
+    )
 
 
-def _architecture_dir(root: Path) -> Path | None:
-    default_locale = _default_locale(root)
-    candidates = [
-        root / "docs" / default_locale / "architecture",
-        root / "docs" / "architecture",  # legacy, pre-i18n
-    ]
-    for cand in candidates:
-        if cand.exists():
-            return cand
-    return None
+def _required_arch_locales(root: Path) -> tuple[tuple[str, ...], bool]:
+    """Return required locales and whether mkdocs i18n mode is active."""
+    locales, default_locale = _load_i18n_locales(root)
+    if locales:
+        required: list[str] = [default_locale]
+        if "en" not in required:
+            required.append("en")
+        # Preserve insertion order and remove duplicates.
+        return tuple(dict.fromkeys(required)), True
+    return ("legacy",), False
+
+
+def _architecture_dir(root: Path, locale: str, *, i18n_enabled: bool) -> Path:
+    if i18n_enabled:
+        return root / "docs" / locale / "architecture"
+    return root / "docs" / "architecture"
 
 
 def _read_front_matter(path: Path) -> dict[str, str]:
@@ -82,59 +123,104 @@ def _read_front_matter(path: Path) -> dict[str, str]:
     return out
 
 
-def check_design_drift(root: Path = ROOT) -> tuple[int, str]:
-    # Late import to avoid import-time failures if qmtl isn't installed yet
-    # Avoid importing the qmtl.foundation package to prevent import-time cycles.
-    # Load the spec file directly.
+def _load_arch_spec_versions(root: Path) -> dict[str, str]:
+    """Load ARCH_SPEC_VERSIONS directly from qmtl/foundation/spec.py."""
     spec_file = root / "qmtl" / "foundation" / "spec.py"
-    try:
-        ns: dict[str, object] = {}
-        code = spec_file.read_text(encoding="utf-8")
-        exec(compile(code, str(spec_file), "exec"), ns, ns)
-        ARCH_SPEC_VERSIONS = ns.get("ARCH_SPEC_VERSIONS", {})  # type: ignore[assignment]
-        if not isinstance(ARCH_SPEC_VERSIONS, dict):
-            raise RuntimeError("ARCH_SPEC_VERSIONS not found or invalid in spec.py")
-    except Exception as exc:  # pragma: no cover - defensive
-        return 2, f"Failed to load foundation spec: {exc}"
+    ns: dict[str, object] = {}
+    code = spec_file.read_text(encoding="utf-8")
+    exec(compile(code, str(spec_file), "exec"), ns, ns)
+    arch_spec_versions = ns.get("ARCH_SPEC_VERSIONS", {})
+    if not isinstance(arch_spec_versions, dict):
+        raise RuntimeError("ARCH_SPEC_VERSIONS not found or invalid in spec.py")
+    out: dict[str, str] = {}
+    for key, value in arch_spec_versions.items():
+        out[str(key)] = str(value)
+    return out
 
-    arch_dir = _architecture_dir(root)
-    if arch_dir is None:
-        return 0, "No architecture docs; skipping design drift check"
 
+def _collect_locale_docs(
+    root: Path, required_locales: tuple[str, ...], *, i18n_enabled: bool
+) -> tuple[dict[str, dict[str, Path]], list[str], str | None]:
+    locale_docs: dict[str, dict[str, Path]] = {}
+    errors: list[str] = []
+    for locale in required_locales:
+        arch_dir = _architecture_dir(root, locale, i18n_enabled=i18n_enabled)
+        if arch_dir.exists():
+            locale_docs[locale] = {md.stem: md for md in sorted(arch_dir.glob("*.md"))}
+            continue
+        if not i18n_enabled:
+            return {}, errors, "No architecture docs; skipping design drift check"
+        errors.append(f"[{locale}] Missing architecture docs directory: {arch_dir}")
+    return locale_docs, errors, None
+
+
+def _doc_version_issues(
+    locale: str, md: Path, *, code_ver: str | None, doc_ver: str | None
+) -> tuple[str | None, str | None]:
+    if code_ver is None and doc_ver is not None:
+        return (
+            f"[{locale}] Doc {md} declares spec_version={doc_ver} but no code mapping exists (qmtl/foundation/spec.py)",
+            None,
+        )
+    if code_ver is not None and doc_ver is None:
+        return None, (
+            f"[{locale}] Doc {md} missing spec_version; expected {code_ver} in front-matter"
+        )
+    if code_ver is not None and doc_ver is not None and code_ver != doc_ver:
+        return None, f"[{locale}] Version mismatch for {md}: docs={doc_ver} vs code={code_ver}"
+    return None, None
+
+
+def _collect_doc_version_issues(
+    locale_docs: dict[str, dict[str, Path]], arch_spec_versions: dict[str, str]
+) -> tuple[list[str], list[str]]:
     warnings: list[str] = []
     errors: list[str] = []
-
-    for md in sorted(arch_dir.glob("*.md")):
-        stem = md.stem  # e.g., 'gateway', 'dag-manager'
-        fm = _read_front_matter(md)
-        doc_ver = fm.get("spec_version")
-        code_ver = ARCH_SPEC_VERSIONS.get(stem)
-
-        if code_ver is None and doc_ver is not None:
-            warnings.append(
-                f"Doc {md} declares spec_version={doc_ver} but no code mapping exists (qmtl/foundation/spec.py)"
+    for locale, docs_by_stem in locale_docs.items():
+        for stem, md in docs_by_stem.items():
+            doc_ver = _read_front_matter(md).get("spec_version")
+            warning, error = _doc_version_issues(
+                locale, md, code_ver=arch_spec_versions.get(stem), doc_ver=doc_ver
             )
-            continue
+            if warning:
+                warnings.append(warning)
+            if error:
+                errors.append(error)
+    return errors, warnings
 
-        if code_ver is not None and doc_ver is None:
+
+def _missing_spec_doc_errors(
+    root: Path,
+    locale_docs: dict[str, dict[str, Path]],
+    arch_spec_versions: dict[str, str],
+    *,
+    i18n_enabled: bool,
+) -> list[str]:
+    errors: list[str] = []
+    for stem, code_ver in sorted(arch_spec_versions.items()):
+        for locale, docs_by_stem in locale_docs.items():
+            if stem in docs_by_stem:
+                continue
+            expected_doc = (
+                _architecture_dir(root, locale, i18n_enabled=i18n_enabled) / f"{stem}.md"
+            )
             errors.append(
-                f"Doc {md} missing spec_version; expected {code_ver} in front-matter"
+                f"[{locale}] Missing architecture doc for spec key '{stem}': expected {expected_doc} (spec_version={code_ver})"
             )
-            continue
+    return errors
 
-        if code_ver is not None and doc_ver is not None and code_ver != doc_ver:
-            errors.append(
-                f"Version mismatch for {md}: docs={doc_ver} vs code={code_ver}"
-            )
 
-    strict = os.getenv("DRIFT_STRICT", "0") == "1"
+def _build_result(
+    errors: list[str], warnings: list[str], *, strict: bool
+) -> tuple[int, str]:
     if errors:
         msg = [
             "Design drift check failed:",
             *errors,
-            "",
-            "Update qmtl/spec.py or the docs' spec_version to resolve.",
         ]
+        if warnings:
+            msg.extend(["", "Additional warnings:", *warnings])
+        msg.extend(["", "Update qmtl/foundation/spec.py or docs front-matter to resolve."])
         return 2, "\n".join(msg)
     if warnings:
         msg = [
@@ -144,6 +230,32 @@ def check_design_drift(root: Path = ROOT) -> tuple[int, str]:
         ]
         return (2 if strict else 1), "\n".join(msg)
     return 0, "Design drift check passed"
+
+
+def check_design_drift(root: Path = ROOT) -> tuple[int, str]:
+    # Avoid importing the qmtl.foundation package to prevent import-time cycles.
+    # Load the spec file directly.
+    try:
+        arch_spec_versions = _load_arch_spec_versions(root)
+    except Exception as exc:  # pragma: no cover - defensive
+        return 2, f"Failed to load foundation spec: {exc}"
+
+    required_locales, i18n_enabled = _required_arch_locales(root)
+    locale_docs, errors, skip_message = _collect_locale_docs(
+        root, required_locales, i18n_enabled=i18n_enabled
+    )
+    if skip_message is not None:
+        return 0, skip_message
+
+    doc_errors, warnings = _collect_doc_version_issues(locale_docs, arch_spec_versions)
+    errors.extend(doc_errors)
+    errors.extend(
+        _missing_spec_doc_errors(
+            root, locale_docs, arch_spec_versions, i18n_enabled=i18n_enabled
+        )
+    )
+    strict = os.getenv("DRIFT_STRICT", "0") == "1"
+    return _build_result(errors, warnings, strict=strict)
 
 
 def main() -> int:
