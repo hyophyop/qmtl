@@ -101,6 +101,71 @@ def _format_levels(levels: list[int], limit: int = 24) -> str:
     return f"{prefix} ... ({len(compact)} total)"
 
 
+def _missing_mirror_error(filename: str, ko_file: Path, en_file: Path) -> str | None:
+    missing: list[str] = []
+    if not ko_file.exists():
+        missing.append(str(ko_file))
+    if not en_file.exists():
+        missing.append(str(en_file))
+    if not missing:
+        return None
+    return (
+        f"Missing mirrored file for {filename}: "
+        f"create missing counterpart(s): {', '.join(missing)}"
+    )
+
+
+def _heading_mismatch_error(filename: str, ko_file: Path, en_file: Path) -> str | None:
+    ko_levels = _heading_levels(ko_file)
+    en_levels = _heading_levels(en_file)
+    min_len = min(len(ko_levels), len(en_levels))
+    prefix_matches = ko_levels[:min_len] == en_levels[:min_len]
+    length_delta = abs(len(ko_levels) - len(en_levels))
+    if prefix_matches and length_delta <= 1:
+        return None
+
+    mismatch_pos = next(
+        (
+            idx
+            for idx, (ko_lvl, en_lvl) in enumerate(zip(ko_levels, en_levels), start=1)
+            if ko_lvl != en_lvl
+        ),
+        min_len + 1 if len(ko_levels) != len(en_levels) else None,
+    )
+    pos_desc = f"mismatch at heading #{mismatch_pos}" if mismatch_pos else "unknown mismatch"
+    return (
+        "Heading level sequence mismatch for "
+        f"{filename} ({pos_desc}). "
+        f"ko={_format_levels(ko_levels)} | en={_format_levels(en_levels)} "
+        "(H1/H2 sequence must match; max length delta=1)."
+    )
+
+
+def _normative_parity_messages(
+    filename: str, ko_file: Path, en_file: Path
+) -> tuple[str | None, str | None]:
+    ko_normative = _normative_count(ko_file)
+    en_normative = _normative_count(en_file)
+    max_normative = max(ko_normative, en_normative)
+    min_normative = min(ko_normative, en_normative)
+    if max_normative >= NORMATIVE_MIN_REQUIRED and min_normative == 0:
+        return (
+            "Normative marker presence mismatch for "
+            f"{filename}: ko={ko_normative}, en={en_normative}. "
+            "When one locale uses substantial MUST/SHALL/SHOULD markers, "
+            "the mirrored locale must also include normative markers.",
+            None,
+        )
+    if abs(ko_normative - en_normative) > 6:
+        return (
+            None,
+            "Normative marker count differs noticeably for "
+            f"{filename}: ko={ko_normative}, en={en_normative}. "
+            "Review translation parity for MUST/SHALL/SHOULD usage.",
+        )
+    return None, None
+
+
 def check_i18n_core_parity(root: Path = ROOT) -> tuple[list[str], list[str]]:
     """Return (errors, warnings) for parity violations."""
     errors: list[str] = []
@@ -113,56 +178,20 @@ def check_i18n_core_parity(root: Path = ROOT) -> tuple[list[str], list[str]]:
         ko_file = ko_arch / filename
         en_file = en_arch / filename
 
-        if not ko_file.exists() or not en_file.exists():
-            missing = []
-            if not ko_file.exists():
-                missing.append(str(ko_file))
-            if not en_file.exists():
-                missing.append(str(en_file))
-            errors.append(
-                f"Missing mirrored file for {filename}: create missing counterpart(s): {', '.join(missing)}"
-            )
+        missing_error = _missing_mirror_error(filename, ko_file, en_file)
+        if missing_error:
+            errors.append(missing_error)
             continue
 
-        ko_levels = _heading_levels(ko_file)
-        en_levels = _heading_levels(en_file)
-        min_len = min(len(ko_levels), len(en_levels))
-        prefix_matches = ko_levels[:min_len] == en_levels[:min_len]
-        length_delta = abs(len(ko_levels) - len(en_levels))
-        if not prefix_matches or length_delta > 1:
-            mismatch_pos = next(
-                (
-                    idx
-                    for idx, (ko_lvl, en_lvl) in enumerate(zip(ko_levels, en_levels), start=1)
-                    if ko_lvl != en_lvl
-                ),
-                min_len + 1 if len(ko_levels) != len(en_levels) else None,
-            )
-            pos_desc = f"mismatch at heading #{mismatch_pos}" if mismatch_pos else "unknown mismatch"
-            errors.append(
-                "Heading level sequence mismatch for "
-                f"{filename} ({pos_desc}). "
-                f"ko={_format_levels(ko_levels)} | en={_format_levels(en_levels)} "
-                "(H1/H2 sequence must match; max length delta=1)."
-            )
+        heading_error = _heading_mismatch_error(filename, ko_file, en_file)
+        if heading_error:
+            errors.append(heading_error)
 
-        ko_normative = _normative_count(ko_file)
-        en_normative = _normative_count(en_file)
-        max_normative = max(ko_normative, en_normative)
-        min_normative = min(ko_normative, en_normative)
-        if max_normative >= NORMATIVE_MIN_REQUIRED and min_normative == 0:
-            errors.append(
-                "Normative marker presence mismatch for "
-                f"{filename}: ko={ko_normative}, en={en_normative}. "
-                "When one locale uses substantial MUST/SHALL/SHOULD markers, "
-                "the mirrored locale must also include normative markers."
-            )
-        elif abs(ko_normative - en_normative) > 6:
-            warnings.append(
-                "Normative marker count differs noticeably for "
-                f"{filename}: ko={ko_normative}, en={en_normative}. "
-                "Review translation parity for MUST/SHALL/SHOULD usage."
-            )
+        normative_error, normative_warning = _normative_parity_messages(filename, ko_file, en_file)
+        if normative_error:
+            errors.append(normative_error)
+        elif normative_warning:
+            warnings.append(normative_warning)
 
     return errors, warnings
 
