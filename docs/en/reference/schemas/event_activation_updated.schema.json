@@ -58,7 +58,7 @@
     "specversion": { "type": "string", "const": "1.0", "default": "1.0" },
     "id": { "type": "string" },
     "source": { "type": "string" },
-    "type": { "type": "string" },
+    "type": { "type": "string", "const": "activation_updated" },
     "time": { "type": "string", "format": "date-time" },
     "datacontenttype": { "type": "string", "const": "application/json", "default": "application/json" },
     "data": { "$ref": "#/$defs/ActivationUpdatedData" },
