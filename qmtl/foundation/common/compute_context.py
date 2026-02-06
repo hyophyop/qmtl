@@ -17,6 +17,7 @@ __all__ = [
     "build_strategy_compute_context",
     "build_worldservice_compute_context",
     "coerce_compute_context",
+    "canonicalize_world_mode_alias",
     "canonicalize_world_mode",
 ]
 
@@ -308,15 +309,24 @@ def build_strategy_compute_context(meta: Mapping[str, Any] | None) -> ComputeCon
     )
 
 
+def canonicalize_world_mode_alias(value: Any | None) -> str | None:
+    """Return canonical world mode for known aliases, otherwise ``None``."""
+
+    if not isinstance(value, str):
+        return None
+    token = value.strip().lower()
+    if not token:
+        return None
+    return _WORLD_MODE_ALIASES.get(token)
+
+
 def canonicalize_world_mode(value: Any | None) -> str:
     """Normalize world policy modes to the canonical vocabulary."""
 
-    if not isinstance(value, str):
+    canonical = canonicalize_world_mode_alias(value)
+    if canonical is None:
         return "validate"
-    token = value.strip().lower()
-    if not token:
-        return "validate"
-    return _WORLD_MODE_ALIASES.get(token, "validate")
+    return canonical
 
 
 def _resolve_world_mode(value: Any | None) -> str:

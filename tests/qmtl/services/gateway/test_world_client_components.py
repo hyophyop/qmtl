@@ -154,6 +154,15 @@ async def test_augment_decision_payload_records_downgrade(reset_gateway_metrics)
     assert metric_value == 1
 
 
+def test_augment_decision_payload_canonicalizes_legacy_effective_mode() -> None:
+    payload = {"effective_mode": "sim", "as_of": "2025-01-01T00:00:00Z"}
+    augmented = augment_decision_payload("world-123", payload)
+
+    assert augmented["effective_mode"] == "paper"
+    assert augmented["execution_domain"] == "dryrun"
+    assert augmented["compute_context"]["execution_domain"] == "dryrun"
+
+
 def test_augment_activation_payload_attaches_compute_context(reset_gateway_metrics) -> None:
     payload = {
         "world_id": "world-xyz",

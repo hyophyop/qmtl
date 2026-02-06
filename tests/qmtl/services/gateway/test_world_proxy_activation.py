@@ -162,18 +162,18 @@ async def test_activation_backend_error_no_cache(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("effective_mode", "expected_domain"),
+    ("effective_mode", "expected_domain", "expected_mode"),
     [
-        ("validate", "backtest"),
-        ("compute-only", "backtest"),
-        ("paper", "backtest"),
-        ("sim", "backtest"),
-        ("live", "live"),
-        ("shadow", "shadow"),
+        ("validate", "backtest", "validate"),
+        ("compute-only", "backtest", "compute-only"),
+        ("paper", "backtest", "paper"),
+        ("sim", "backtest", "paper"),
+        ("live", "live", "live"),
+        ("shadow", "shadow", "shadow"),
     ],
 )
 async def test_activation_execution_domain_augmentation(
-    gateway_app_factory, effective_mode, expected_domain
+    gateway_app_factory, effective_mode, expected_domain, expected_mode
 ) -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/activation"):
@@ -196,7 +196,7 @@ async def test_activation_execution_domain_augmentation(
         )
 
     data = resp.json()
-    assert data["effective_mode"] == effective_mode
+    assert data["effective_mode"] == expected_mode
     assert data["execution_domain"] == expected_domain
 
 
