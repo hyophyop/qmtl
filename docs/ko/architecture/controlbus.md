@@ -75,7 +75,7 @@ ActivationUpdated (버전 관리됨)
 
 - `phase`는 [`freeze`, `unfreeze`] 중 하나이며 WorldService의 [`ActivationEventPublisher.update_activation_state`]({{ code_url('qmtl/services/worldservice/activation.py#L58') }})에서 설정된다.
 - `requires_ack=true` 이벤트는 Gateway가 `(world_id, run_id)` 기준 연속 시퀀스만 적용하고, 적용 완료된 각 `sequence`에 대해 `control.activation.ack`로 ACK를 게시해야 함을 의미한다(SHALL). 이 ACK는 Gateway 수신/적용 확인이며, 모든 하위 SDK/WebSocket 소비자까지의 종단 ACK나 주문 경로 재개 완료를 뜻하지 않는다.
-- `sequence`는 [`ApplyRunState.next_sequence()`]({{ code_url('qmtl/services/worldservice/run_state.py#L47') }})에서 생성되는 run별 단조 증가 값이다. 현재 Gateway 컨슈머는 `sequence < next_sequence`를 중복으로 드롭하고, `sequence > next_sequence`는 버퍼링한 뒤 누락 구간이 채워질 때까지 ACK/릴레이를 보류하며, `sequence == next_sequence`가 들어오면 연속 버퍼를 순차 플러시한다.
+- `sequence`는 [`ApplyRunState.next_sequence()`]({{ code_url('qmtl/services/worldservice/run_state.py#L47') }})에서 생성되는 run별 단조 증가 값이다. 현재 Gateway 컨슈머는 `sequence < next_sequence`를 중복으로 드롭하고, `sequence > next_sequence`는 버퍼링한 뒤 ACK/릴레이를 보류하며, `sequence == next_sequence`가 들어오면 연속 버퍼를 순차 플러시한다. gap이 설정 시간(`activation_gap_timeout_ms`, 기본 3000ms) 내에 해소되지 않으면 Gateway는 가장 이른 버퍼 시퀀스로 강제 재정렬(fail-safe liveness 경로)하고 gap을 드롭 이벤트로 기록한다.
 
 ActivationAck (버전 관리됨)
 ```json
@@ -157,8 +157,9 @@ PolicyUpdated (버전 관리됨)
 
 - Freeze/Unfreeze 이벤트(`requires_ack=true`)마다 Gateway는 해당 이벤트가 연속 시퀀스로 적용된 뒤 `ActivationAck`를 ControlBus 응답 채널(예: `control.activation.ack`)로 게시한다(SHALL). 메시지에는 최소한 `world_id`, `run_id`, `sequence`가 포함되어야 하며, 운영팀이 재동기화 상태를 판단할 수 있어야 한다.
 - `requires_ack=true`인데 `sequence`가 없거나 정수가 아니면 메시지를 드롭하고(`event_relay_dropped_total` 증가) ACK를 게시하지 않는다.
-- 누락 시퀀스 gap이 있는 경우(`sequence > next_sequence`) 현재 구현은 해당 메시지를 버퍼링하고 ACK/릴레이를 보류한다. Gateway 컨슈머 내부에는 gap timeout 또는 강제 resync 로직이 내장되어 있지 않으므로, 누락 메시지가 도착하거나 프로세스가 재시작될 때까지 대기한다.
-- 따라서 timeout 임계치, 경보, 강제 resync(HTTP snapshot/state_hash reconcile), apply 중단/롤백 판단은 WorldService/운영 도구의 외부 정책으로 처리한다(SHOULD). 현재 구현의 apply 완료는 ACK 스트림 수렴을 하드 게이트로 차단하지 않는다. 기본 운영 가이드는 [ACK/Gap Resync RFC (초안)](ack_resync_rfc.md)에서 관리한다.
+- 누락 시퀀스 gap이 있는 경우(`sequence > next_sequence`) Gateway는 메시지를 버퍼링하고 ACK/릴레이를 보류한다. gap이 `activation_gap_timeout_ms`(기본 3000ms)를 넘기면 가장 이른 버퍼 시퀀스로 강제 재정렬 후 순차 재생을 재개한다.
+- 강제 재정렬은 의미적 수렴을 보장하는 절차가 아니라 정지(stall) 방지를 위한 fail-safe liveness 메커니즘이다. 따라서 snapshot/state_hash 기반 reconcile과 경보/중단/롤백 판단은 WorldService/운영 도구가 외부 정책으로 계속 수행해야 한다(SHOULD).
+- 현재 구현의 apply 완료는 ACK 스트림 수렴을 하드 게이트로 차단하지 않는다. 기본 운영 가이드는 [ACK/Gap Resync RFC (초안)](ack_resync_rfc.md)에서 관리한다.
 
 ---
 

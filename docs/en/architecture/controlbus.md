@@ -75,7 +75,7 @@ ActivationUpdated (versioned)
 
 - `phase` is either `freeze` or `unfreeze` and is populated by [`ActivationEventPublisher.update_activation_state`]({{ code_url('qmtl/services/worldservice/activation.py#L58') }}).
 - `requires_ack=true` means Gateway MUST apply only contiguous sequences per `(world_id, run_id)` and publish an acknowledgement for each applied `sequence` via the ControlBus response channel. This is Gateway transport/apply acknowledgement, not end-to-end acknowledgement from every downstream SDK/WebSocket client and not proof that order-flow reopening completed.
-- `sequence` is the per-run monotonic counter produced by [`ApplyRunState.next_sequence()`]({{ code_url('qmtl/services/worldservice/run_state.py#L47') }}). In the current Gateway consumer implementation: `sequence < next_sequence` is dropped as duplicate, `sequence > next_sequence` is buffered (ACK/relay deferred), and `sequence == next_sequence` is processed while contiguous buffered events are flushed in order.
+- `sequence` is the per-run monotonic counter produced by [`ApplyRunState.next_sequence()`]({{ code_url('qmtl/services/worldservice/run_state.py#L47') }}). In the current Gateway consumer implementation: `sequence < next_sequence` is dropped as duplicate, `sequence > next_sequence` is buffered (ACK/relay deferred), and `sequence == next_sequence` is processed while contiguous buffered events are flushed in order. If a gap does not close within the configured timeout (`activation_gap_timeout_ms`, default 3000 ms), Gateway forces resequencing to the earliest buffered sequence (fail-safe liveness path) and records the gap as a dropped activation relay event.
 
 ActivationAck (versioned)
 ```json
@@ -157,8 +157,9 @@ PolicyUpdated (versioned)
 
 - For each Freeze/Unfreeze event with `requires_ack=true`, Gateway publishes `ActivationAck` to the ControlBus response channel (e.g., `control.activation.ack`) only after the event is accepted in the contiguous sequence stream (SHALL). The payload MUST include `world_id`, `run_id`, and `sequence` so operators can reconcile state.
 - If `requires_ack=true` but `sequence` is missing or not an integer, Gateway drops the message (increments `event_relay_dropped_total`) and publishes no ACK.
-- For sequence gaps (`sequence > next_sequence`), current behavior is to buffer the message and defer both relay and ACK. Gateway does not currently run an in-consumer gap timeout or forced-resync routine; buffered gaps remain pending until the missing sequence arrives or the process restarts.
-- Therefore timeout thresholds, alerting, and forced-resync actions (HTTP snapshot/state_hash reconcile, apply pause/rollback) are external WorldService/operations policy (SHOULD). In the current implementation, apply completion is not hard-blocked on ACK stream convergence. Baseline operational guidance is tracked in [ACK/Gap Resync RFC (Draft)](ack_resync_rfc.md).
+- For sequence gaps (`sequence > next_sequence`), Gateway buffers the message and defers both relay and ACK. If the gap remains open longer than `activation_gap_timeout_ms` (default 3000 ms), Gateway forces resequencing to the earliest buffered sequence and resumes ordered replay from there.
+- Forced resequencing is a fail-safe liveness mechanism, not proof of semantic convergence. WorldService/operations tooling SHOULD still trigger snapshot/state_hash reconciliation and decide alert/pause/rollback policy externally.
+- In the current implementation, apply completion is not hard-blocked on ACK stream convergence. Baseline operational guidance is tracked in [ACK/Gap Resync RFC (Draft)](ack_resync_rfc.md).
 
 ---
 
