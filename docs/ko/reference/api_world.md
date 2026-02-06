@@ -2,7 +2,7 @@
 title: "World API 레퍼런스 — Gateway 프록시"
 tags: [reference, api, world]
 author: "QMTL Team"
-last_modified: 2025-09-22
+last_modified: 2026-02-06
 ---
 
 {{ nav_links() }}
@@ -82,14 +82,27 @@ Gateway는 SDK와 도구를 위해 WorldService 엔드포인트를 프록시합�
   "freeze": false,
   "drain": false,
   "effective_mode": "paper",
-  "execution_domain": "dryrun",
+  "execution_domain": "backtest",
+  "compute_context": {
+    "world_id": "crypto_mom_1h",
+    "execution_domain": "backtest",
+    "as_of": null,
+    "partition": null,
+    "dataset_fingerprint": null,
+    "downgraded": true,
+    "downgrade_reason": "missing_as_of",
+    "safe_mode": true
+  },
   "etag": "act:crypto_mom_1h:abcd:long:42",
   "run_id": "7a1b4c...",
   "ts": "2025-08-28T09:00:00Z"
 }
 ```
-`effective_mode` 는 WorldService 정책 문자열을 담으며 기존 호환성을 유지합니다 (`validate|compute-only|paper|live`). WorldService ActivationEnvelope 원본 스키마에는 파생 필드인 `execution_domain` 이 없지만, Gateway 프록시는 다음 규칙을 적용해 값을 추가합니다: `validate → backtest (주문 차단)`, `compute-only → backtest`, `paper → dryrun`, `live → live`. `shadow` 는 운영자가 제어하는 듀얼 런을 위해 예약되어 있습니다. SDK는 이 매핑을 로컬 상태/메트릭을 위한 읽기 전용 주석으로 취급해야 하며, 백엔드 결정을 덮어쓰거나 클라이언트 실행 동작을 변경해서는 안 됩니다.
+`effective_mode` 는 WorldService 정책 문자열을 담으며 기존 호환성을 유지합니다 (`validate|compute-only|paper|live|shadow`). 공통 compute-context 정규화 기준의 모드→도메인 매핑은 `validate → backtest`, `compute-only → backtest`, `paper → dryrun`, `live → live`, `shadow → shadow` 입니다. 다만 `/worlds/{id}/activation` 엔벌로프는 `as_of` 를 포함하지 않으므로, Gateway가 `compute_context` 를 조립할 때 안전 가드가 `paper` 를 `backtest` 로 강등합니다(`downgraded=true`, `downgrade_reason=missing_as_of`, `safe_mode=true`). 따라서 현재 구현의 activation 응답에서 `effective_mode=paper` 는 `execution_domain=backtest` 로 노출됩니다. SDK는 이 필드를 로컬 상태/메트릭용 읽기 전용 주석으로 취급해야 하며, 백엔드 결정을 덮어쓰거나 클라이언트 실행 동작을 변경해서는 안 됩니다.
 `execution_domain=shadow` 가 활성화되면 Gateway는 값을 그대로 전달(ControlBus/WebSocket 릴레이, 큐 맵/태그 쿼리)하면서 주문 발행 경로를 차단합니다. 섀도우 런은 라이브 입력을 분리된 네임스페이스에서 미러링하며, HTTP `X-Allow-Live` 헤더나 `allow_live` 정책 게이트 같은 운영자 검증은 계속 적용됩니다.
+stale activation fail-safe 불변식(캐시 응답 경로):
+- Gateway가 stale 응답을 반환할 때(`X-Stale: true`, `Warning: 110 - Response is stale`) 활성화는 반드시 fail-closed 로 강제됩니다: `active=false`, `weight=0.0`, `effective_mode=compute-only`, `execution_domain=backtest`.
+- 근거: stale 캐시는 최신 활성화 상태를 보장하지 못하므로 주문 경로를 열어두지 않고 compute-only 상태로 수렴시켜 안전성을 우선합니다.
 스키마: reference/schemas/activation_envelope.schema.json
 
 ### GET /worlds/{id}/{topic}/state_hash
