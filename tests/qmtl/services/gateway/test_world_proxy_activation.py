@@ -26,19 +26,41 @@ def _make_activation_stale_handler(
 
 def _assert_stale_activation_response(response: httpx.Response) -> None:
     payload = response.json()
-    assert payload["world_id"] == "abc"
-    assert payload["strategy_id"] == "s"
-    assert payload["side"] == "long"
-    assert payload["active"] is False
-    assert payload["weight"] == 0.0
-    assert payload["effective_mode"] == "compute-only"
-    assert payload["execution_domain"] == "backtest"
-    assert payload["compute_context"]["execution_domain"] == "backtest"
-    assert payload["compute_context"]["downgraded"] is True
-    assert payload["compute_context"]["downgrade_reason"] == "missing_as_of"
-    assert payload["compute_context"]["safe_mode"] is True
-    assert response.headers["X-Stale"] == "true"
-    assert response.headers["Warning"] == "110 - Response is stale"
+    assert {
+        "world_id": payload["world_id"],
+        "strategy_id": payload["strategy_id"],
+        "side": payload["side"],
+        "active": payload["active"],
+        "weight": payload["weight"],
+        "effective_mode": payload["effective_mode"],
+        "execution_domain": payload["execution_domain"],
+    } == {
+        "world_id": "abc",
+        "strategy_id": "s",
+        "side": "long",
+        "active": False,
+        "weight": 0.0,
+        "effective_mode": "compute-only",
+        "execution_domain": "backtest",
+    }
+    assert {
+        "execution_domain": payload["compute_context"]["execution_domain"],
+        "downgraded": payload["compute_context"]["downgraded"],
+        "downgrade_reason": payload["compute_context"]["downgrade_reason"],
+        "safe_mode": payload["compute_context"]["safe_mode"],
+    } == {
+        "execution_domain": "backtest",
+        "downgraded": True,
+        "downgrade_reason": "missing_as_of",
+        "safe_mode": True,
+    }
+    assert {
+        "X-Stale": response.headers["X-Stale"],
+        "Warning": response.headers["Warning"],
+    } == {
+        "X-Stale": "true",
+        "Warning": "110 - Response is stale",
+    }
 
 
 @pytest.mark.asyncio
