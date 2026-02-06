@@ -10,6 +10,7 @@ from qmtl.services.gateway.controlbus_consumer import (
     ControlBusConsumer,
     ControlBusMessage,
 )
+from qmtl.services.gateway.event_models import ActivationUpdatedData, SentinelWeightData
 from qmtl.services.worldservice.controlbus_producer import ControlBusProducer
 
 
@@ -191,6 +192,72 @@ async def test_activation_sequence_out_of_order_buffer_and_gap_fill_release() ->
 
 
 @pytest.mark.asyncio
+async def test_activation_sequence_gap_timeout_forced_resync_releases_buffered_messages() -> None:
+    hub = FakeHub()
+    ack_dummy = DummyProducer()
+    ack_producer = ActivationAckProducer(
+        brokers=["kafka:9092"],
+        topic="control.activation.ack",
+    )
+    ack_producer._producer = ack_dummy
+
+    consumer = ControlBusConsumer(
+        brokers=[],
+        topics=["activation"],
+        group="gateway",
+        ws_hub=hub,
+        ack_producer=ack_producer,
+        activation_gap_timeout_ms=20,
+    )
+    await consumer.start()
+
+    await consumer.publish(_activation_message(world_id="w-gap", run_id="r-gap", sequence=10))
+    await consumer.publish(_activation_message(world_id="w-gap", run_id="r-gap", sequence=12))
+    await consumer._queue.join()
+
+    # Wait for the gap timeout task to enqueue and process the forced-resync event.
+    await asyncio.sleep(0.05)
+    await consumer._queue.join()
+    await consumer.stop()
+
+    assert [evt["sequence"] for evt in hub.activations] == [10, 12]
+    assert _ack_sequences(ack_dummy.sent) == [10, 12]
+
+
+@pytest.mark.asyncio
+async def test_activation_sequence_gap_timeout_still_releases_when_multiple_buffered() -> None:
+    hub = FakeHub()
+    ack_dummy = DummyProducer()
+    ack_producer = ActivationAckProducer(
+        brokers=["kafka:9092"],
+        topic="control.activation.ack",
+    )
+    ack_producer._producer = ack_dummy
+
+    consumer = ControlBusConsumer(
+        brokers=[],
+        topics=["activation"],
+        group="gateway",
+        ws_hub=hub,
+        ack_producer=ack_producer,
+        activation_gap_timeout_ms=20,
+    )
+    await consumer.start()
+
+    await consumer.publish(_activation_message(world_id="w-gap2", run_id="r-gap2", sequence=3))
+    await consumer.publish(_activation_message(world_id="w-gap2", run_id="r-gap2", sequence=6))
+    await consumer.publish(_activation_message(world_id="w-gap2", run_id="r-gap2", sequence=7))
+    await consumer._queue.join()
+
+    await asyncio.sleep(0.05)
+    await consumer._queue.join()
+    await consumer.stop()
+
+    assert [evt["sequence"] for evt in hub.activations] == [3, 6, 7]
+    assert _ack_sequences(ack_dummy.sent) == [3, 6, 7]
+
+
+@pytest.mark.asyncio
 async def test_activation_sequence_ignores_stale_lower_sequence() -> None:
     hub = FakeHub()
     ack_dummy = DummyProducer()
@@ -307,3 +374,34 @@ async def test_activation_requires_ack_with_missing_or_invalid_sequence_drops_wi
         in record.message
         for record in caplog.records
     )
+
+
+def test_activation_updated_schema_accepts_phase_ack_sequence() -> None:
+    payload = ActivationUpdatedData.model_validate(
+        {
+            "version": 1,
+            "world_id": "world-1",
+            "strategy_id": "s1",
+            "side": "long",
+            "active": True,
+            "weight": 0.5,
+            "phase": "unfreeze",
+            "requires_ack": True,
+            "sequence": 17,
+        }
+    )
+    assert payload.phase == "unfreeze"
+    assert payload.requires_ack is True
+    assert payload.sequence == 17
+
+
+def test_sentinel_weight_schema_accepts_optional_sentinel_version() -> None:
+    payload = SentinelWeightData.model_validate(
+        {
+            "sentinel_id": "sentinel-A",
+            "weight": 0.25,
+            "version": 1,
+            "sentinel_version": "v1.2.3",
+        }
+    )
+    assert payload.sentinel_version == "v1.2.3"

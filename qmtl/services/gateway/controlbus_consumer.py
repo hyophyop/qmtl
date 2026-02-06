@@ -46,6 +46,14 @@ class ControlBusMessage:
 class _ActivationSequenceState:
     next_sequence: int
     buffered: dict[int, ControlBusMessage]
+    gap_timeout_task: asyncio.Task[None] | None = None
+    gap_timeout_token: int = 0
+
+
+@dataclass(frozen=True)
+class _ActivationGapTimeout:
+    sequence_key: tuple[str, str]
+    token: int
 
 
 class ControlBusConsumer:
@@ -60,6 +68,7 @@ class ControlBusConsumer:
         ws_hub: WebSocketHub | None = None,
         rebalancing_policy: RebalancingExecutionPolicy | None = None,
         ack_producer: ActivationAckProducer | None = None,
+        activation_gap_timeout_ms: int = 3000,
     ) -> None:
         self.brokers = brokers or []
         self.topics = topics
@@ -67,12 +76,17 @@ class ControlBusConsumer:
         self.ws_hub = ws_hub
         self._rebalancing_policy = rebalancing_policy
         self._ack_producer = ack_producer
-        self._queue: asyncio.Queue[ControlBusMessage | None] = asyncio.Queue()
+        self._queue: asyncio.Queue[ControlBusMessage | _ActivationGapTimeout | None] = (
+            asyncio.Queue()
+        )
         self._task: asyncio.Task | None = None
         self._broker_task: asyncio.Task | None = None
         self._consumer: Any | None = None
         self._last_seen: dict[tuple[str, str], tuple[Any, ...]] = {}
         self._activation_sequence_states: dict[tuple[str, str], _ActivationSequenceState] = {}
+        self._activation_gap_timeout_seconds = max(
+            float(activation_gap_timeout_ms) / 1000.0, 0.001
+        )
         # Track discovered tag+interval combinations to emit upsert events
         self._known_tag_intervals: set[tuple[tuple[str, ...], int, str]] = set()
 
@@ -96,6 +110,7 @@ class ControlBusConsumer:
             with contextlib.suppress(Exception):
                 await self._consumer.stop()
             self._consumer = None
+        self._cancel_all_activation_gap_timeouts()
         if self._ack_producer is not None:
             with contextlib.suppress(Exception):
                 await self._ack_producer.stop()
@@ -114,6 +129,9 @@ class ControlBusConsumer:
             if msg is None:
                 break
             try:
+                if isinstance(msg, _ActivationGapTimeout):
+                    await self._handle_activation_gap_timeout(msg)
+                    continue
                 await self._handle_message(msg)
             finally:
                 self._queue.task_done()
@@ -412,10 +430,25 @@ class ControlBusConsumer:
 
         if sequence > state.next_sequence:
             state.buffered.setdefault(sequence, msg)
+            self._schedule_activation_gap_timeout(sequence_key, state)
             return
 
-        current_message = msg
-        current_sequence = sequence
+        self._clear_activation_gap_timeout(state)
+        await self._drain_sequenced_activation_messages(
+            sequence_key=sequence_key,
+            state=state,
+            current_message=msg,
+            current_sequence=sequence,
+        )
+
+    async def _drain_sequenced_activation_messages(
+        self,
+        *,
+        sequence_key: tuple[str, str],
+        state: _ActivationSequenceState,
+        current_message: ControlBusMessage,
+        current_sequence: int,
+    ) -> None:
         while True:
             await self._process_generic_message_now(
                 current_message,
@@ -425,9 +458,87 @@ class ControlBusConsumer:
             state.next_sequence = current_sequence + 1
             buffered_next = state.buffered.pop(state.next_sequence, None)
             if buffered_next is None:
+                if state.buffered:
+                    self._schedule_activation_gap_timeout(sequence_key, state)
+                else:
+                    self._clear_activation_gap_timeout(state)
                 return
             current_message = buffered_next
             current_sequence = state.next_sequence
+
+    def _schedule_activation_gap_timeout(
+        self,
+        sequence_key: tuple[str, str],
+        state: _ActivationSequenceState,
+    ) -> None:
+        task = state.gap_timeout_task
+        if task is not None and not task.done():
+            return
+        state.gap_timeout_token += 1
+        token = state.gap_timeout_token
+        state.gap_timeout_task = asyncio.create_task(
+            self._activation_gap_timeout_after(sequence_key, token)
+        )
+
+    def _clear_activation_gap_timeout(self, state: _ActivationSequenceState) -> None:
+        task = state.gap_timeout_task
+        if task is not None:
+            task.cancel()
+            state.gap_timeout_task = None
+        state.gap_timeout_token += 1
+
+    def _cancel_all_activation_gap_timeouts(self) -> None:
+        for state in self._activation_sequence_states.values():
+            self._clear_activation_gap_timeout(state)
+
+    async def _activation_gap_timeout_after(
+        self,
+        sequence_key: tuple[str, str],
+        token: int,
+    ) -> None:
+        try:
+            await asyncio.sleep(self._activation_gap_timeout_seconds)
+            await self._queue.put(_ActivationGapTimeout(sequence_key=sequence_key, token=token))
+        except asyncio.CancelledError:
+            return
+
+    async def _handle_activation_gap_timeout(self, timeout: _ActivationGapTimeout) -> None:
+        state = self._activation_sequence_states.get(timeout.sequence_key)
+        if state is None:
+            return
+        if timeout.token != state.gap_timeout_token:
+            return
+        state.gap_timeout_task = None
+        if not state.buffered:
+            return
+
+        next_available = min(state.buffered)
+        if next_available > state.next_sequence:
+            world_id, run_id = timeout.sequence_key
+            skipped_count = next_available - state.next_sequence
+            logger.warning(
+                "activation sequence gap timeout exceeded; forcing resync (world_id=%s run_id=%s expected=%s available=%s skipped=%s)",
+                world_id,
+                run_id,
+                state.next_sequence,
+                next_available,
+                skipped_count,
+            )
+            gw_metrics.record_event_dropped("activation")
+            state.next_sequence = next_available
+
+        next_message = state.buffered.pop(state.next_sequence, None)
+        if next_message is None:
+            if state.buffered:
+                self._schedule_activation_gap_timeout(timeout.sequence_key, state)
+            return
+
+        await self._drain_sequenced_activation_messages(
+            sequence_key=timeout.sequence_key,
+            state=state,
+            current_message=next_message,
+            current_sequence=state.next_sequence,
+        )
 
     async def _process_generic_message_now(
         self,
