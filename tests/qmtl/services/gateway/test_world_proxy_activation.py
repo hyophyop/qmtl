@@ -167,6 +167,7 @@ async def test_activation_backend_error_no_cache(
         ("validate", "backtest"),
         ("compute-only", "backtest"),
         ("paper", "backtest"),
+        ("sim", "backtest"),
         ("live", "live"),
         ("shadow", "shadow"),
     ],

@@ -38,6 +38,7 @@ async def test_decide_ttl_cache(gateway_app_factory, reset_gateway_metrics) -> N
         ("validate", "backtest"),
         ("compute-only", "backtest"),
         ("paper", "dryrun"),
+        ("sim", "dryrun"),
         ("live", "live"),
         ("shadow", "shadow"),
         ("ACTIVE", "live"),

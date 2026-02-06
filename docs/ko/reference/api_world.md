@@ -98,11 +98,11 @@ Gateway는 SDK와 도구를 위해 WorldService 엔드포인트를 프록시합�
   "ts": "2025-08-28T09:00:00Z"
 }
 ```
-`effective_mode` 는 WorldService 정책 문자열을 담으며 기존 호환성을 유지합니다 (`validate|compute-only|paper|live|shadow`).
+`effective_mode` 는 WorldService 정책 문자열을 담으며 기존 호환성을 유지합니다 (`validate|compute-only|paper|live|shadow`). Gateway는 augmentation 과정에서 레거시 `sim` 값도 `paper` 별칭으로 해석합니다.
 Activation relay/augmentation 계약(현재 런타임):
 - Gateway는 `GET /worlds/{id}/activation` 응답, `/events/subscribe` activation bootstrap 프레임, ControlBus `activation_updated` 릴레이(WebSocket fan-out 직전)에서 `execution_domain`/`compute_context`를 파생해서 추가합니다.
-- 이 augmentation 경로에서 사용하는 모드→도메인 매핑은 `validate → backtest`, `compute-only → backtest`, `paper → dryrun`, `live → live`, `shadow → shadow` 입니다.
-- activation 엔벌로프에는 `as_of`가 없으므로 safe-mode 평가에서 `validate|compute-only|paper`처럼 `backtest/dryrun`으로 매핑되는 모드는 `execution_domain=backtest`로 강등될 수 있습니다(`downgraded=true`, `downgrade_reason=missing_as_of`, `safe_mode=true`). 이 메타데이터는 `paper`에만 한정되지 않습니다. 반대로 `shadow`는 missing-`as_of` 가드로 강등되지 않습니다.
+- 이 augmentation 경로에서 사용하는 모드→도메인 매핑은 `validate → backtest`, `compute-only → backtest`, `paper|sim → dryrun`, `live → live`, `shadow → shadow` 입니다.
+- activation 엔벌로프에는 `as_of`가 없으므로 safe-mode 평가에서 `validate|compute-only|paper|sim`처럼 `backtest/dryrun`으로 매핑되는 모드는 `execution_domain=backtest`로 강등될 수 있습니다(`downgraded=true`, `downgrade_reason=missing_as_of`, `safe_mode=true`). 이 메타데이터는 `paper`에만 한정되지 않습니다. 반대로 `shadow`는 missing-`as_of` 가드로 강등되지 않습니다.
 - activation payload에 `effective_mode`가 없으면 Gateway는 fail-closed로 `execution_domain=backtest`를 강제하고 `safe_mode=true`, `downgraded=true`, `downgrade_reason=decision_unavailable`를 설정합니다.
 - ControlBus `activation_updated` 경로에서도 Gateway는 `effective_mode` 기준으로 augmentation을 재계산하며, upstream producer가 보낸 `execution_domain`/`compute_context` 값은 canonical augmentation 결과로 덮어씁니다.
 - 큐/태그 릴레이에서는 `queue_update`가 `world_id`/`execution_domain`을 포함할 수 있을 때 그대로 전달하고, `tagquery.upsert` payload 자체에는 두 필드가 포함되지 않습니다(단, Gateway는 dedupe 키 `(tags, interval, execution_domain)` 계산에는 `execution_domain`을 사용합니다).
