@@ -42,6 +42,12 @@ class ControlBusMessage:
     timestamp_ms: Optional[float] = None
 
 
+@dataclass
+class _ActivationSequenceState:
+    next_sequence: int
+    buffered: dict[int, ControlBusMessage]
+
+
 class ControlBusConsumer:
     """Consume ControlBus events and relay them to WebSocket clients."""
 
@@ -66,6 +72,7 @@ class ControlBusConsumer:
         self._broker_task: asyncio.Task | None = None
         self._consumer: Any | None = None
         self._last_seen: dict[tuple[str, str], tuple[Any, ...]] = {}
+        self._activation_sequence_states: dict[tuple[str, str], _ActivationSequenceState] = {}
         # Track discovered tag+interval combinations to emit upsert events
         self._known_tag_intervals: set[tuple[tuple[str, ...], int, str]] = set()
 
@@ -349,15 +356,85 @@ class ControlBusConsumer:
             await self.ws_hub.send_sentinel_weight(sentinel_id, weight)
 
     async def _process_generic_message(self, msg: ControlBusMessage) -> None:
+        sequenced_activation = self._sequenced_activation_context(msg)
+        if sequenced_activation is not None:
+            sequence_key, sequence = sequenced_activation
+            await self._process_sequenced_activation_message(msg, sequence_key, sequence)
+            return
+
+        await self._process_generic_message_now(msg)
+
+    def _sequenced_activation_context(
+        self, msg: ControlBusMessage
+    ) -> tuple[tuple[str, str], int] | None:
+        if msg.topic != "activation" or not msg.data.get("requires_ack"):
+            return None
+
+        sequence = msg.data.get("sequence")
+        if isinstance(sequence, bool) or not isinstance(sequence, int):
+            return None
+
+        world_id = str(msg.data.get("world_id") or msg.key or "")
+        run_id = str(msg.data.get("run_id") or msg.run_id or "")
+        return (world_id, run_id), sequence
+
+    async def _process_sequenced_activation_message(
+        self,
+        msg: ControlBusMessage,
+        sequence_key: tuple[str, str],
+        sequence: int,
+    ) -> None:
+        state = self._activation_sequence_states.get(sequence_key)
+        if state is None:
+            state = _ActivationSequenceState(
+                next_sequence=sequence,
+                buffered={},
+            )
+            self._activation_sequence_states[sequence_key] = state
+
+        if sequence < state.next_sequence:
+            gw_metrics.record_event_dropped(msg.topic)
+            return
+
+        if sequence > state.next_sequence:
+            state.buffered.setdefault(sequence, msg)
+            return
+
+        current_message = msg
+        current_sequence = sequence
+        while True:
+            await self._process_generic_message_now(
+                current_message,
+                await_activation_ack=True,
+                activation_sequence=current_sequence,
+            )
+            state.next_sequence = current_sequence + 1
+            buffered_next = state.buffered.pop(state.next_sequence, None)
+            if buffered_next is None:
+                return
+            current_message = buffered_next
+            current_sequence = state.next_sequence
+
+    async def _process_generic_message_now(
+        self,
+        msg: ControlBusMessage,
+        *,
+        await_activation_ack: bool = False,
+        activation_sequence: int | None = None,
+    ) -> None:
         key = (msg.topic, msg.key)
-        marker = self._marker_for_generic_message(msg)
+        marker = self._marker_for_generic_message(
+            msg, activation_sequence=activation_sequence
+        )
         if not self._track_delivery(key, marker, msg.topic):
             return
 
         gw_metrics.record_controlbus_message(msg.topic, msg.timestamp_ms)
 
         if msg.topic == "activation":
-            self._record_apply_ack_metrics(msg)
+            await self._record_apply_ack_metrics(
+                msg, await_publish=await_activation_ack
+            )
             fields = build_observability_fields(
                 world_id=msg.data.get("world_id"),
                 run_id=msg.data.get("run_id"),
@@ -374,11 +451,21 @@ class ControlBusConsumer:
 
         await self._dispatch_generic_message(msg, ws_hub)
 
-    def _marker_for_generic_message(self, msg: ControlBusMessage) -> tuple[Any, ...]:
+    def _marker_for_generic_message(
+        self,
+        msg: ControlBusMessage,
+        *,
+        activation_sequence: int | None = None,
+    ) -> tuple[Any, ...]:
         if msg.topic == "policy":
             return (
                 msg.data.get("checksum"),
                 msg.data.get("policy_version"),
+            )
+        if msg.topic == "activation" and activation_sequence is not None:
+            return (
+                msg.data.get("run_id") or msg.run_id,
+                activation_sequence,
             )
         return (msg.etag, msg.run_id)
 
@@ -400,11 +487,16 @@ class ControlBusConsumer:
 
         logger.warning("Unhandled ControlBus topic %s", msg.topic)
 
-    def _record_apply_ack_metrics(self, msg: ControlBusMessage) -> None:
+    async def _record_apply_ack_metrics(
+        self,
+        msg: ControlBusMessage,
+        *,
+        await_publish: bool = False,
+    ) -> None:
         if not msg.data.get("requires_ack"):
             return
         world_id = str(msg.data.get("world_id") or msg.key or "")
-        run_id = str(msg.data.get("run_id") or "")
+        run_id = str(msg.data.get("run_id") or msg.run_id or "")
         phase = str(msg.data.get("phase") or "unknown")
         gw_metrics.record_controlbus_apply_ack(
             world_id=world_id,
@@ -413,6 +505,16 @@ class ControlBusConsumer:
             sent_timestamp=msg.data.get("ts"),
             broker_timestamp_ms=msg.timestamp_ms,
         )
+        if await_publish:
+            await self._publish_activation_ack(
+                world_id=world_id,
+                run_id=run_id,
+                sequence=msg.data.get("sequence"),
+                phase=phase,
+                etag=msg.etag,
+            )
+            return
+
         asyncio.create_task(
             self._publish_activation_ack(
                 world_id=world_id,

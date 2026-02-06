@@ -1,11 +1,15 @@
 import asyncio
 import json
 import time
+from typing import Any
 
 import pytest
 
 from qmtl.services.gateway.controlbus_ack import ActivationAckProducer
-from qmtl.services.gateway.controlbus_consumer import ControlBusConsumer
+from qmtl.services.gateway.controlbus_consumer import (
+    ControlBusConsumer,
+    ControlBusMessage,
+)
 from qmtl.services.worldservice.controlbus_producer import ControlBusProducer
 
 
@@ -25,6 +29,17 @@ class DummyProducer:
         self.sent_event.set()
 
 
+class DelayedDummyProducer(DummyProducer):
+    def __init__(self, delays_by_sequence: dict[int, float] | None = None) -> None:
+        super().__init__()
+        self._delays_by_sequence = delays_by_sequence or {}
+
+    async def send_and_wait(self, topic: str, data: bytes, key: bytes | None = None) -> None:
+        sequence = int(json.loads(data.decode())["data"]["sequence"])
+        await asyncio.sleep(self._delays_by_sequence.get(sequence, 0.0))
+        await super().send_and_wait(topic, data, key=key)
+
+
 class FakeKafkaMessage:
     def __init__(self, *, topic: str, value: bytes, key: bytes | None, headers=None, timestamp: float | None = None) -> None:
         self.topic = topic
@@ -32,6 +47,43 @@ class FakeKafkaMessage:
         self.key = key
         self.headers = headers or []
         self.timestamp = timestamp
+
+
+class FakeHub:
+    def __init__(self) -> None:
+        self.activations: list[dict[str, Any]] = []
+
+    async def send_activation_updated(self, data: dict[str, Any]) -> None:
+        self.activations.append(data)
+
+
+def _activation_message(*, world_id: str, run_id: str, sequence: int) -> ControlBusMessage:
+    return ControlBusMessage(
+        topic="activation",
+        key=world_id,
+        etag=f"etag-{run_id}-{sequence}",
+        run_id=run_id,
+        data={
+            "version": 1,
+            "world_id": world_id,
+            "run_id": run_id,
+            "requires_ack": True,
+            "sequence": sequence,
+            "phase": "apply",
+            "etag": f"etag-{run_id}-{sequence}",
+            "ts": "2024-01-01T00:00:00Z",
+            "strategy_id": "s1",
+        },
+        timestamp_ms=time.time() * 1000,
+    )
+
+
+def _ack_sequences(sent: list[tuple[str, bytes, bytes | None]]) -> list[int]:
+    return [int(json.loads(data.decode())["data"]["sequence"]) for _, data, _ in sent]
+
+
+def _ack_run_ids(sent: list[tuple[str, bytes, bytes | None]]) -> list[str]:
+    return [str(json.loads(data.decode())["data"]["run_id"]) for _, data, _ in sent]
 
 
 @pytest.mark.asyncio
@@ -89,3 +141,105 @@ async def test_activation_update_requires_ack_emits_gateway_ack():
     assert ack_evt["data"]["phase"] == "apply"
     assert ack_evt["data"]["etag"] == "e1"
     assert "idempotency_key" in ack_evt["data"]
+
+
+@pytest.mark.asyncio
+async def test_activation_sequence_out_of_order_buffer_and_gap_fill_release() -> None:
+    hub = FakeHub()
+    ack_dummy = DelayedDummyProducer(delays_by_sequence={11: 0.03, 12: 0.0})
+    ack_producer = ActivationAckProducer(
+        brokers=["kafka:9092"],
+        topic="control.activation.ack",
+    )
+    ack_producer._producer = ack_dummy
+
+    consumer = ControlBusConsumer(
+        brokers=[],
+        topics=["activation"],
+        group="gateway",
+        ws_hub=hub,
+        ack_producer=ack_producer,
+    )
+    await consumer.start()
+
+    await consumer.publish(_activation_message(world_id="w1", run_id="r1", sequence=10))
+    await consumer._queue.join()
+    assert [evt["sequence"] for evt in hub.activations] == [10]
+    assert _ack_sequences(ack_dummy.sent) == [10]
+
+    await consumer.publish(_activation_message(world_id="w1", run_id="r1", sequence=12))
+    await consumer._queue.join()
+    assert [evt["sequence"] for evt in hub.activations] == [10]
+    assert _ack_sequences(ack_dummy.sent) == [10]
+
+    await consumer.publish(_activation_message(world_id="w1", run_id="r1", sequence=11))
+    await consumer._queue.join()
+    await consumer.stop()
+
+    assert [evt["sequence"] for evt in hub.activations] == [10, 11, 12]
+    assert _ack_sequences(ack_dummy.sent) == [10, 11, 12]
+
+
+@pytest.mark.asyncio
+async def test_activation_sequence_ignores_stale_lower_sequence() -> None:
+    hub = FakeHub()
+    ack_dummy = DummyProducer()
+    ack_producer = ActivationAckProducer(
+        brokers=["kafka:9092"],
+        topic="control.activation.ack",
+    )
+    ack_producer._producer = ack_dummy
+
+    consumer = ControlBusConsumer(
+        brokers=[],
+        topics=["activation"],
+        group="gateway",
+        ws_hub=hub,
+        ack_producer=ack_producer,
+    )
+    await consumer.start()
+
+    await consumer.publish(_activation_message(world_id="w2", run_id="r-stale", sequence=5))
+    await consumer.publish(_activation_message(world_id="w2", run_id="r-stale", sequence=4))
+    await consumer._queue.join()
+    await consumer.stop()
+
+    assert [evt["sequence"] for evt in hub.activations] == [5]
+    assert _ack_sequences(ack_dummy.sent) == [5]
+
+
+@pytest.mark.asyncio
+async def test_activation_sequence_resets_for_new_run_id() -> None:
+    hub = FakeHub()
+    ack_dummy = DummyProducer()
+    ack_producer = ActivationAckProducer(
+        brokers=["kafka:9092"],
+        topic="control.activation.ack",
+    )
+    ack_producer._producer = ack_dummy
+
+    consumer = ControlBusConsumer(
+        brokers=[],
+        topics=["activation"],
+        group="gateway",
+        ws_hub=hub,
+        ack_producer=ack_producer,
+    )
+    await consumer.start()
+
+    await consumer.publish(_activation_message(world_id="w3", run_id="r-old", sequence=8))
+    await consumer.publish(_activation_message(world_id="w3", run_id="r-old", sequence=9))
+    await consumer.publish(_activation_message(world_id="w3", run_id="r-new", sequence=1))
+    await consumer._queue.join()
+    await consumer.stop()
+
+    assert [(evt["run_id"], evt["sequence"]) for evt in hub.activations] == [
+        ("r-old", 8),
+        ("r-old", 9),
+        ("r-new", 1),
+    ]
+    assert list(zip(_ack_run_ids(ack_dummy.sent), _ack_sequences(ack_dummy.sent))) == [
+        ("r-old", 8),
+        ("r-old", 9),
+        ("r-new", 1),
+    ]
