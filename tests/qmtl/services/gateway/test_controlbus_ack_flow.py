@@ -120,8 +120,7 @@ async def test_activation_update_requires_ack_emits_gateway_ack():
         FakeKafkaMessage(topic=topic, value=data, key=key, timestamp=time.time() * 1000)
     )
 
-    assert cb_msg.data.get("requires_ack") is True
-    assert cb_msg.data.get("sequence") == 7
+    assert (cb_msg.data.get("requires_ack"), cb_msg.data.get("sequence")) == (True, 7)
 
     await consumer.publish(cb_msg)
     await consumer._queue.join()
@@ -130,17 +129,28 @@ async def test_activation_update_requires_ack_emits_gateway_ack():
 
     ack_topic, ack_data, ack_key = ack_dummy.sent[0]
     ack_evt = json.loads(ack_data.decode())
+    ack_payload = dict(ack_evt["data"])
+    idempotency_key = ack_payload.pop("idempotency_key", None)
 
-    assert ack_topic == "control.activation.ack"
-    assert ack_key == b"w1"
-    assert ack_evt["type"] == "activation_ack"
-    assert ack_evt["correlation_id"] == "activation:w1:r1"
-    assert ack_evt["data"]["world_id"] == "w1"
-    assert ack_evt["data"]["run_id"] == "r1"
-    assert ack_evt["data"]["sequence"] == 7
-    assert ack_evt["data"]["phase"] == "apply"
-    assert ack_evt["data"]["etag"] == "e1"
-    assert "idempotency_key" in ack_evt["data"]
+    assert (
+        ack_topic,
+        ack_key,
+        ack_evt["type"],
+        ack_evt["correlation_id"],
+    ) == (
+        "control.activation.ack",
+        b"w1",
+        "activation_ack",
+        "activation:w1:r1",
+    )
+    assert {k: ack_payload[k] for k in ("world_id", "run_id", "sequence", "phase", "etag")} == {
+        "world_id": "w1",
+        "run_id": "r1",
+        "sequence": 7,
+        "phase": "apply",
+        "etag": "e1",
+    }
+    assert idempotency_key
 
 
 @pytest.mark.asyncio
