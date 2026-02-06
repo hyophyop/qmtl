@@ -68,7 +68,7 @@ QMTL 전체의 핵심 가치인 **“전략 로직에만 집중하면 시스템�
 
 #### ExecutionDomain / effective_mode
 
-- WS는 `effective_mode`(`validate | compute-only | paper | live`)를 계산하고, Gateway/SDK는 이를 `execution_domain(backtest/dryrun/live/shadow)`로 매핑한다.
+- 현재 `/worlds/{world_id}/decide` 정책 경로는 `effective_mode`를 `validate | compute-only | live` 범위에서 산출합니다. Gateway/SDK는 `effective_mode`를 `execution_domain(backtest/dryrun/live/shadow)`로 매핑하며, 활성화/수동 오버라이드 페이로드 호환을 위해 `paper`/`shadow` 토큰도 매퍼에서 허용합니다.
 - 제출 메타의 `execution_domain` 값은 참조용 힌트이며 권한 있는 도메인 값은 WS `effective_mode`에서만 파생되고, `world/world.md`, `architecture.md`, `gateway.md`, 본 문서가 동일한 규범(매핑 테이블·우선순위)을 공유한다.
 
 #### 월드 자본 배분 / 리밸런싱
@@ -163,10 +163,12 @@ DecisionEnvelope
 }
 ```
 
-`effective_mode` remains the policy string. Gateway/SDK derive an
-ExecutionDomain from it and only attach `execution_domain` on the
-ControlBus/WebSocket copies they relay downstream; the field is not part of
-the canonical WorldService schema.
+`effective_mode`는 정책 문자열 그대로 유지됩니다.
+`execution_domain`/`compute_context`는 정식 WorldService 스키마 필드가 아니라
+Gateway가 부가하는 필드입니다. Gateway는 HTTP 프록시 응답
+(`GET /worlds/{id}/decide`, `GET /worlds/{id}/activation`), `/events/subscribe`
+activation 부트스트랩 프레임, ControlBus `activation_updated` 릴레이에서
+이 필드를 materialize 합니다.
 
 ActivationEnvelope
 ```json
@@ -192,9 +194,10 @@ Field semantics and precedence
 - `freeze=true` overrides `drain`; both imply orders gated OFF.
 - `drain=true` blocks new orders but allows existing opens to complete naturally.
 - When either `freeze` or `drain` is true, `active` is effectively false (explicit flags provided for clarity and auditability).
-- `weight` soft‑scales sizing in the range [0.0, 1.0]. If absent, default is 1.0 when `active=true`, else 0.0.
-- `effective_mode` communicates the policy string from WorldService (`validate|compute-only|paper|live`).
-- Gateway derives an `execution_domain` when relaying the envelope downstream (ControlBus → SDK) by mapping `effective_mode` as `validate → backtest (orders gated OFF by default)`, `compute-only → backtest`, `paper/sim → dryrun`, `live → live`. `shadow` remains reserved for operator-led validation streams. The canonical ActivationEnvelope schema emitted by WorldService omits this derived field; Gateway adds it for clients so the mapping stays centralized.
+- `weight`는 [0.0, 1.0] 범위의 소프트 스케일입니다. WS 활성화 write에서 `weight`를 생략하면 현재 저장소 구현은 `active` 값과 무관하게 `1.0`을 저장하며, 주문 게이트는 별도로 inactive/freeze/drain 상태를 비거래로 처리합니다.
+- `effective_mode`는 WorldService 정책 문자열을 담습니다 (`validate|compute-only|paper|live|shadow`).
+- Gateway augmentation 경로(`GET /worlds/{id}/activation`, `/events/subscribe` activation bootstrap, ControlBus `activation_updated` 릴레이)에서는 `effective_mode`를 `validate → backtest`, `compute-only → backtest`, `paper → dryrun`, `live → live`, `shadow → shadow`로 매핑한 뒤 `execution_domain`/`compute_context`를 materialize 합니다. activation 엔벌로프에는 `as_of`가 없기 때문에 현재 런타임에서 `paper`는 `execution_domain=backtest`로 강등되고(`compute_context.downgraded=true`, `downgrade_reason=missing_as_of`) 노출됩니다.
+- ControlBus relay 경로에서도 Gateway는 WebSocket fan-out 전에 동일한 매핑/safe-mode 규칙으로 payload를 augmentation 합니다.
 - ControlBus 팬아웃 시 [`ActivationEventPublisher.update_activation_state`]({{ code_url('qmtl/services/worldservice/activation.py#L58') }})가 `phase`(`freeze|unfreeze`), `requires_ack`, `sequence`를 주입한다. `sequence`는 [`ApplyRunState.next_sequence()`]({{ code_url('qmtl/services/worldservice/run_state.py#L47') }})에서 run별 단조 증가 값으로 생성된다.
 - `requires_ack=true`의 기본 의미는 Gateway가 해당 `sequence`를 선형 순서로 적용하고 `control.activation.ack`로 `ActivationAck`를 게시하는 것이다(SHALL). 이 ACK는 버스 수신 확인(transport/apply)이며, 개별 SDK/WebSocket 소비자까지의 종단 확인을 뜻하지 않는다.
 - Gateway는 선행 `sequence`가 수렴하기 전에는 후속 이벤트(특히 Unfreeze)를 적용하거나 주문 게이트를 열어서는 안 된다(SHALL). 시퀀스 gap 타임아웃·자동 복구 정책은 [ACK/Gap Resync RFC (초안)](ack_resync_rfc.md)에서 정의한다.
@@ -376,7 +379,7 @@ WorldService는 월드 비중과 전략 슬리브를 조정하기 위한 두 가
 
 - Gateway: `/worlds/*` 프록시, TTL 기반 결정 캐시, `--allow-live` 가드 적용
 - DAG Manager: 결정과는 독립, 큐/그래프 메타데이터만 연계
-- ControlBus: WS는 ActivationUpdated/PolicyUpdated 발행; Gateway가 구독 후 WS를 통해 SDK로 중계
+- ControlBus: WS는 ActivationUpdated/PolicyUpdated를 발행하고 Gateway가 구독해 SDK로 중계합니다. activation 릴레이는 fan-out 전에 `execution_domain`/`compute_context` augmentation을 거치며, `/events/subscribe` activation 부트스트랩 프레임도 같은 augmentation 경로를 사용합니다.
 
 Runner & SDK 통합(명확화)
 - SDK/Runner는 실행 모드를 노출하지 않습니다. 호출자는 전략 시작 시 `world_id`만 제공하며, Runner는 WorldService 결정과 활성화 이벤트를 따릅니다.

@@ -70,7 +70,7 @@ Related: [Core Loop × WorldService — Campaign Automation and Promotion Govern
 
 #### ExecutionDomain / effective_mode
 
-- WS computes `effective_mode` (`validate | compute-only | paper | live`), Gateway/SDK map it to `execution_domain(backtest/dryrun/live/shadow)`.
+- The current `/worlds/{world_id}/decide` policy path emits `effective_mode` in `validate | compute-only | live`. Gateway/SDK map `effective_mode` to `execution_domain(backtest/dryrun/live/shadow)`, and the mapper also accepts `paper`/`shadow` tokens for activation/manual-override payloads.
 - Submission `meta.execution_domain` is advisory at most; authority sits with WS `effective_mode`, and the mapping/precedence rules are shared across `world/world.md`, `architecture.md`, `gateway.md`, and this document.
 
 #### World-Level Allocation / Rebalancing
@@ -169,10 +169,12 @@ DecisionEnvelope
 }
 ```
 
-`effective_mode` remains the policy string. Gateway/SDK derive an
-ExecutionDomain from it and only attach `execution_domain` on the
-ControlBus/WebSocket copies they relay downstream; the field is not part of
-the canonical WorldService schema.
+`effective_mode` remains the policy string.
+`execution_domain`/`compute_context` are Gateway augmentation fields, not part
+of the canonical WorldService schema. Gateway materializes them on HTTP proxy
+responses (`GET /worlds/{id}/decide`, `GET /worlds/{id}/activation`), on
+activation bootstrap frames emitted by `/events/subscribe`, and on
+ControlBus `activation_updated` relays.
 
 ActivationEnvelope
 ```json
@@ -198,9 +200,10 @@ Field semantics and precedence
 - `freeze=true` overrides `drain`; both imply orders gated OFF.
 - `drain=true` blocks new orders but allows existing opens to complete naturally.
 - When either `freeze` or `drain` is true, `active` is effectively false (explicit flags provided for clarity and auditability).
-- `weight` soft-scales sizing in the range [0.0, 1.0]. If absent, default is 1.0 when `active=true`, else 0.0.
-- `effective_mode` communicates the policy string from WorldService (`validate|compute-only|paper|live`).
-- Gateway derives an `execution_domain` when relaying the envelope downstream (ControlBus -> SDK) by mapping `effective_mode` as `validate -> backtest (orders gated OFF by default)`, `compute-only -> backtest`, `paper/sim -> dryrun`, `live -> live`. `shadow` remains reserved for operator-led validation streams. The canonical ActivationEnvelope schema emitted by WorldService omits this derived field; Gateway adds it for clients so the mapping stays centralized.
+- `weight` soft-scales sizing in the range [0.0, 1.0]. If omitted in a WS activation write, storage currently persists `1.0` regardless of `active`; downstream order gating still treats inactive/frozen/draining states as non-tradable.
+- `effective_mode` communicates the policy string from WorldService (`validate|compute-only|paper|live|shadow`).
+- Gateway augmentation paths (`GET /worlds/{id}/activation`, activation bootstrap over `/events/subscribe`, ControlBus `activation_updated` relay): map `effective_mode` as `validate -> backtest`, `compute-only -> backtest`, `paper -> dryrun`, `live -> live`, `shadow -> shadow`, then materialize `execution_domain`/`compute_context`. Because activation envelopes do not carry `as_of`, `paper` currently materializes as `execution_domain=backtest` with `compute_context.downgraded=true` and `downgrade_reason=missing_as_of`.
+- On ControlBus relays, Gateway augments outbound payloads before WebSocket fan-out using the same mapping/safe-mode rules as activation HTTP/bootstrap paths.
 - ControlBus fan-out injects `phase` (`freeze|unfreeze`), `requires_ack`, and `sequence` via [`ActivationEventPublisher.update_activation_state`]({{ code_url('qmtl/services/worldservice/activation.py#L58') }}). `sequence` is produced per run by [`ApplyRunState.next_sequence()`]({{ code_url('qmtl/services/worldservice/run_state.py#L47') }}).
 - `requires_ack=true` currently means Gateway MUST apply the event in-order and publish `ActivationAck` on `control.activation.ack` for that `sequence` (SHALL). This is transport/apply acknowledgement at Gateway, not an end-to-end confirmation from every downstream SDK/WebSocket client.
 - Gateway MUST NOT apply later events (especially Unfreeze) or reopen order gates before prior required sequences converge (SHALL). Gap timeout/auto-recovery policy is tracked in [ACK/Gap Resync RFC (Draft)](ack_resync_rfc.md).
@@ -381,7 +384,7 @@ Alerts
 
 - Gateway: proxy `/worlds/*`, cache decisions with TTL, enforce `--allow-live` guard
 - DAG Manager: no dependency for decisions; only for queue/graph metadata
-- ControlBus: WS publishes ActivationUpdated/PolicyUpdated; Gateway subscribes and relays via WS to SDK
+- ControlBus: WS publishes ActivationUpdated/PolicyUpdated; Gateway subscribes and relays via WS to SDK. Activation relays are augmented (`execution_domain`/`compute_context`) before fan-out; `/events/subscribe` bootstrap activation frames also use the augmentation path.
 
 Runner & SDK Integration (clarification)
 - SDK/Runner do not expose execution modes. Callers provide only `world_id` when starting a strategy; Runner adheres to WorldService decisions and activation events.
