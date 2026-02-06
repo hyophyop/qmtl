@@ -314,9 +314,9 @@ examples are catalogued under [operations/](../operations/README.md) and
   `effective_mode`. The canonical WS schema omits this field. The mapping is
   `validate -> backtest (orders gated OFF)`, `compute-only -> backtest`,
   `paper/sim -> dryrun`, `live -> live`, while `shadow` remains operator-only.
-  Runner/SDK does not execute in `shadow`; any such input is safely treated as
-  backtest. Ambiguous aliases like `offline`/`sandbox` also downgrade to
-  backtest.
+  Runner/SDK preserves `shadow` as a distinct execution domain, but order
+  publish paths remain hard-blocked in `shadow`. Ambiguous aliases like
+  `offline`/`sandbox` downgrade to backtest.
 - **Queue namespaces:** Production deployments SHALL partition topics with the
   prefix `{world_id}.{execution_domain}.<topic>` and enforce cross-domain access
   via ACLs. Operational namespace defaults to `live`. If a world decision is

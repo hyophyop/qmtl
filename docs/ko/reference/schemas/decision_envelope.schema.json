@@ -8,6 +8,8 @@
     "world_id": { "type": "string" },
     "policy_version": { "type": "integer", "minimum": 0 },
     "effective_mode": { "type": "string", "enum": ["validate", "compute-only", "paper", "live", "shadow"] },
+    "execution_domain": { "type": "string", "enum": ["backtest", "dryrun", "live", "shadow"] },
+    "compute_context": { "type": "object", "additionalProperties": true },
     "reason": { "type": "string" },
     "as_of": { "type": "string", "format": "date-time" },
     "ttl": { "type": "string" },
