@@ -18,7 +18,9 @@ Gateway proxies WorldService endpoints for SDKs and tools. This page lists the k
 ## Endpoints
 
 ### GET /worlds/{id}
-Returns world metadata and default policy version.
+Returns world metadata.
+For default policy metadata, use `GET /worlds/{id}/describe`.
+Schema: reference/schemas/world.schema.json
 
 ### GET /worlds/{id}/decide
 Returns a DecisionEnvelope for the specified `as_of`.
@@ -32,12 +34,22 @@ Response (DecisionEnvelope)
   "world_id": "crypto_mom_1h",
   "policy_version": 3,
   "effective_mode": "validate",
+  "execution_domain": "backtest",
+  "compute_context": {
+    "world_id": "crypto_mom_1h",
+    "execution_domain": "backtest",
+    "as_of": "2025-08-28T09:00:00Z",
+    "partition": null,
+    "dataset_fingerprint": null
+  },
   "reason": "data_currency_ok&gates_pass&hysteresis",
   "as_of": "2025-08-28T09:00:00Z",
   "ttl": "300s",
   "etag": "w:crypto_mom_1h:v3:1724835600"
 }
 ```
+`execution_domain` and `compute_context` are Gateway-derived annotations on the proxied
+DecisionEnvelope. WorldService canonical envelopes may omit these fields.
 Schema: reference/schemas/decision_envelope.schema.json
 
 ### POST /worlds/{id}/decisions

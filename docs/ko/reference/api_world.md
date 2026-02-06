@@ -18,7 +18,9 @@ Gateway는 SDK와 도구를 위해 WorldService 엔드포인트를 프록시합�
 ## 엔드포인트
 
 ### GET /worlds/{id}
-월드 메타데이터와 기본 정책 버전을 반환합니다.
+월드 메타데이터를 반환합니다.
+기본 정책 메타데이터는 `GET /worlds/{id}/describe`를 사용합니다.
+스키마: reference/schemas/world.schema.json
 
 ### GET /worlds/{id}/decide
 지정한 `as_of`에 대한 DecisionEnvelope을 반환합니다.
@@ -32,12 +34,22 @@ Gateway는 SDK와 도구를 위해 WorldService 엔드포인트를 프록시합�
   "world_id": "crypto_mom_1h",
   "policy_version": 3,
   "effective_mode": "validate",
+  "execution_domain": "backtest",
+  "compute_context": {
+    "world_id": "crypto_mom_1h",
+    "execution_domain": "backtest",
+    "as_of": "2025-08-28T09:00:00Z",
+    "partition": null,
+    "dataset_fingerprint": null
+  },
   "reason": "data_currency_ok&gates_pass&hysteresis",
   "as_of": "2025-08-28T09:00:00Z",
   "ttl": "300s",
   "etag": "w:crypto_mom_1h:v3:1724835600"
 }
 ```
+`execution_domain`, `compute_context`는 Gateway가 프록시 응답에 추가하는 파생 주석 필드입니다.
+WorldService 정규 DecisionEnvelope에는 이 필드가 생략될 수 있습니다.
 스키마: reference/schemas/decision_envelope.schema.json
 
 ### POST /worlds/{id}/decisions

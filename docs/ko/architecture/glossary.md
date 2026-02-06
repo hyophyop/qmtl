@@ -14,7 +14,7 @@ last_modified: 2025-11-22
 - 목적: QMTL 아키텍처 전반에서 사용하는 핵심 용어(DecisionEnvelope, ExecutionDomain, GSG/WVG 등)를 한 곳에 모아 정의합니다.
 - Core Loop 상 위치: Core Loop 각 단계에서 등장하는 개념을 **일관된 용어로 연결하는 참고 사전** 역할을 하며, 다른 설계 문서를 읽을 때 공통 배경을 제공합니다.
 - DecisionEnvelope: 월드 결정 결과로 `world_id`, `policy_version`, `effective_mode`, `reason`, `as_of`, `ttl`, `etag`를 포함합니다.
-- effective_mode: DecisionEnvelope의 정책 결과 문자열. 값: `validate | compute-only | paper | live`. 소비자는 계산/라우팅을 위해 ExecutionDomain으로 매핑해야 합니다(아래 규범 참조).
+- effective_mode: DecisionEnvelope의 정책 결과 문자열. 값: `validate | compute-only | paper | live | shadow`. 소비자는 계산/라우팅을 위해 ExecutionDomain으로 매핑해야 합니다(아래 규범 참조).
 - execution_domain: Gateway/SDK가 `effective_mode`를 매핑한 파생 필드 (`backtest | dryrun | live | shadow`). SDK로 중계되는 봉투(envelope)에 유지됩니다. 제출자의 `meta.execution_domain`은 힌트이며, 권한 있는 값은 WS `effective_mode`에서만 파생됩니다. Runner/SDK는 `shadow`를 백테스트로 강등하지 않고 유지하되 주문 발행은 하드 차단합니다.
 - ActivationEnvelope: `(world_id, strategy_id, side)`에 대한 활성화 상태. `active`, `weight`, `etag`, `run_id`, `ts`, 선택적 `state_hash` 포함.
 - ControlBus: 버전이 명시된 제어 이벤트(ActivationUpdated, QueueUpdated, PolicyUpdated)를 운반하는 내부 제어 버스(Kafka/Redpanda). 공개 API가 아닙니다.
