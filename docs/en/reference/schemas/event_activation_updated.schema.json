@@ -1,29 +1,69 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://qmtl.dev/schemas/event_activation_updated.schema.json",
-  "title": "ActivationUpdated",
+  "title": "CloudEvent[ActivationUpdatedData]",
   "type": "object",
-  "additionalProperties": false,
-  "properties": {
-    "type": { "const": "ActivationUpdated" },
-    "version": { "type": "integer", "minimum": 1 },
-    "world_id": { "type": "string" },
-    "strategy_id": { "type": "string" },
-    "side": { "type": "string", "enum": ["long", "short"] },
-    "active": { "type": "boolean" },
-    "weight": { "type": "number", "minimum": 0, "maximum": 1 },
-    "freeze": { "type": "boolean" },
-    "drain": { "type": "boolean" },
-    "effective_mode": { "type": "string", "enum": ["validate", "compute-only", "paper", "live", "shadow"] },
-    "execution_domain": { "type": "string", "enum": ["backtest", "dryrun", "live", "shadow"] },
-    "compute_context": { "type": "object", "additionalProperties": true },
-    "etag": { "type": "string" },
-    "run_id": { "type": "string" },
-    "ts": { "type": "string", "format": "date-time" },
-    "state_hash": { "type": "string" },
-    "phase": { "type": "string" },
-    "requires_ack": { "type": "boolean" },
-    "sequence": { "type": "integer", "minimum": 1 }
+  "$defs": {
+    "ActivationUpdatedData": {
+      "type": "object",
+      "title": "ActivationUpdatedData",
+      "properties": {
+        "version": { "type": "integer" },
+        "world_id": { "type": "string" },
+        "strategy_id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "default": null },
+        "side": {
+          "anyOf": [
+            { "type": "string", "enum": ["long", "short"] },
+            { "type": "null" }
+          ],
+          "default": null
+        },
+        "active": { "anyOf": [{ "type": "boolean" }, { "type": "null" }], "default": null },
+        "weight": { "anyOf": [{ "type": "number" }, { "type": "null" }], "default": null },
+        "freeze": { "anyOf": [{ "type": "boolean" }, { "type": "null" }], "default": null },
+        "drain": { "anyOf": [{ "type": "boolean" }, { "type": "null" }], "default": null },
+        "effective_mode": {
+          "anyOf": [
+            { "type": "string", "enum": ["validate", "compute-only", "paper", "live", "shadow"] },
+            { "type": "null" }
+          ],
+          "default": null
+        },
+        "execution_domain": {
+          "anyOf": [
+            { "type": "string", "enum": ["backtest", "dryrun", "live", "shadow"] },
+            { "type": "null" }
+          ],
+          "default": null
+        },
+        "compute_context": {
+          "anyOf": [
+            { "type": "object", "additionalProperties": true },
+            { "type": "null" }
+          ],
+          "default": null
+        },
+        "etag": { "anyOf": [{ "type": "string" }, { "type": "null" }], "default": null },
+        "run_id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "default": null },
+        "ts": { "anyOf": [{ "type": "string" }, { "type": "null" }], "default": null },
+        "state_hash": { "anyOf": [{ "type": "string" }, { "type": "null" }], "default": null },
+        "phase": { "anyOf": [{ "type": "string" }, { "type": "null" }], "default": null },
+        "requires_ack": { "anyOf": [{ "type": "boolean" }, { "type": "null" }], "default": null },
+        "sequence": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "default": null }
+      },
+      "required": ["version", "world_id"]
+    }
   },
-  "required": ["type", "version", "world_id", "strategy_id", "side", "active", "weight", "etag", "ts"]
+  "properties": {
+    "specversion": { "type": "string", "const": "1.0", "default": "1.0" },
+    "id": { "type": "string" },
+    "source": { "type": "string" },
+    "type": { "type": "string" },
+    "time": { "type": "string", "format": "date-time" },
+    "datacontenttype": { "type": "string", "const": "application/json", "default": "application/json" },
+    "data": { "$ref": "#/$defs/ActivationUpdatedData" },
+    "correlation_id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "default": null },
+    "seq_no": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "default": null }
+  },
+  "required": ["id", "source", "type", "time", "data"]
 }
