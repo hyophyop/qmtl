@@ -50,7 +50,9 @@ class ActivationUpdatedData(BaseModel):
     weight: Optional[StrictFloat] = None
     freeze: Optional[bool] = None
     drain: Optional[bool] = None
-    effective_mode: Optional[Literal["validate", "compute-only", "paper", "live"]] = None
+    effective_mode: Optional[Literal["validate", "compute-only", "paper", "live", "shadow"]] = None
+    execution_domain: Optional[Literal["backtest", "dryrun", "live", "shadow"]] = None
+    compute_context: Optional[Dict[str, Any]] = None
     etag: Optional[StrictStr] = None
     run_id: Optional[StrictStr] = None
     ts: Optional[StrictStr] = None

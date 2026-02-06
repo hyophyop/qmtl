@@ -14,6 +14,8 @@ from .caches import ActivationCache, ActivationCacheEntry, TTLCache, TTLCacheRes
 from .transport import BreakerRetryTransport
 from .world_payloads import augment_activation_payload, augment_decision_payload
 
+_RETRYABLE_STALE_4XX_STATUSES = {408, 429}
+
 
 @dataclass
 class Budget:
@@ -244,7 +246,7 @@ class WorldServiceClient:
         if resp.status_code == 304 and cached_entry is not None:
             gw_metrics.record_worlds_cache_hit()
             return cached_payload, False
-        if resp.status_code >= 500 and cached_entry is not None:
+        if self._is_stale_fallback_status(resp.status_code) and cached_entry is not None:
             gw_metrics.record_worlds_stale_response()
             return (
                 self._build_stale_activation_failsafe(
@@ -332,10 +334,14 @@ class WorldServiceClient:
                 gw_metrics.record_worlds_stale_response()
                 return cached.value, True
             raise
-        if resp.status_code >= 500 and cached.present:
+        if self._is_stale_fallback_status(resp.status_code) and cached.present:
             gw_metrics.record_worlds_stale_response()
             return cached.value, True
         return resp
+
+    @staticmethod
+    def _is_stale_fallback_status(status_code: int) -> bool:
+        return status_code >= 500 or status_code in _RETRYABLE_STALE_4XX_STATUSES
 
     @staticmethod
     def _normalize_as_of(value: str | None) -> str | None:
