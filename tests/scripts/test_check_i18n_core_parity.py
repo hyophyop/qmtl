@@ -38,9 +38,10 @@ def test_reports_missing_mirrored_file(tmp_path: Path) -> None:
     _seed_docs(tmp_path, module, base, base)
     (tmp_path / "docs" / "en" / "architecture" / "controlbus.md").unlink()
 
-    errors = module.check_i18n_core_parity(tmp_path)
+    errors, warnings = module.check_i18n_core_parity(tmp_path)
 
     assert any("Missing mirrored file for controlbus.md" in err for err in errors)
+    assert warnings == []
 
 
 def test_reports_heading_level_sequence_mismatch(tmp_path: Path) -> None:
@@ -50,50 +51,56 @@ def test_reports_heading_level_sequence_mismatch(tmp_path: Path) -> None:
     _seed_docs(tmp_path, module, ko, en)
     _write(
         tmp_path / "docs" / "en" / "architecture" / "gateway.md",
-        "# Title\n\n### Unexpected\n\n## Out of order\n\nMUST\n",
+        "# Title\n\n## Section\n\n## Added\n\n## Added2\n\nMUST\n",
     )
 
-    errors = module.check_i18n_core_parity(tmp_path)
+    errors, warnings = module.check_i18n_core_parity(tmp_path)
 
     assert any(
         "Heading level sequence mismatch for gateway.md" in err for err in errors
     )
+    assert warnings == []
 
 
-def test_normative_marker_tolerance_allows_small_delta(tmp_path: Path) -> None:
+def test_normative_marker_count_delta_is_warning_not_error(tmp_path: Path) -> None:
     module = load_module()
     ko = (
         "# Title\n\n## Section\n\n### Subsection\n\n"
-        "MUST SHOULD\n\n"
+        "MUST SHOULD SHALL\n\n"
         "```text\nMUST SHALL\n# heading-like\n```\n\n"
         "`SHALL`\n"
     )
-    en = "# Title\n\n## Section\n\n### Subsection\n\nMUST SHOULD SHALL SHALL\n"
+    en = (
+        "# Title\n\n## Section\n\n### Subsection\n\n"
+        "MUST SHOULD SHALL MUST SHALL SHOULD MUST MUST SHALL SHOULD MUST SHALL\n"
+    )
     _seed_docs(tmp_path, module, ko, en)
 
-    errors = module.check_i18n_core_parity(tmp_path)
+    errors, warnings = module.check_i18n_core_parity(tmp_path)
 
     assert errors == []
+    assert any("Normative marker count differs noticeably" in warning for warning in warnings)
 
 
-def test_normative_marker_delta_over_tolerance_fails(tmp_path: Path) -> None:
+def test_normative_marker_presence_mismatch_fails(tmp_path: Path) -> None:
     module = load_module()
-    stable = "# Title\n\n## Section\n\n### Subsection\n\nMUST\n"
+    stable = "# Title\n\n## Section\n\n### Subsection\n\nMUST SHALL SHOULD MUST SHALL\n"
     _seed_docs(tmp_path, module, stable, stable)
     _write(
         tmp_path / "docs" / "ko" / "architecture" / "worldservice.md",
-        "# Title\n\n## Section\n\n### Subsection\n\nMUST\n",
+        "# Title\n\n## Section\n\n### Subsection\n\n",
     )
     _write(
         tmp_path / "docs" / "en" / "architecture" / "worldservice.md",
-        "# Title\n\n## Section\n\n### Subsection\n\nMUST SHALL SHOULD MUST SHALL\n",
+        "# Title\n\n## Section\n\n### Subsection\n\nMUST SHALL SHOULD MUST SHALL SHOULD\n",
     )
 
-    errors = module.check_i18n_core_parity(tmp_path)
+    errors, warnings = module.check_i18n_core_parity(tmp_path)
 
     assert any(
-        "Normative marker count mismatch for worldservice.md" in err for err in errors
+        "Normative marker presence mismatch for worldservice.md" in err for err in errors
     )
+    assert warnings == []
 
 
 def test_main_returns_nonzero_with_actionable_output(

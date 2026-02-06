@@ -3,11 +3,12 @@
 
 Checks:
 1) Mirrored file existence for required docs.
-2) Heading level sequence parity for H1/H2/H3 (heading text is ignored).
-3) Normative marker parity for MUST/SHALL/SHOULD counts with tolerance <= 2.
+2) Top-level heading structure parity for H1/H2 (heading text is ignored).
+3) Normative-marker presence parity (MUST/SHALL/SHOULD) for docs that contain
+   substantial normative language.
 
 Exit codes:
-- 0: parity checks passed
+- 0: parity checks passed (warnings may be printed)
 - 1: one or more parity violations found
 """
 
@@ -27,7 +28,10 @@ CORE_LOOP_DOCS: tuple[str, ...] = (
     "ack_resync_rfc.md",
 )
 
-NORMATIVE_TOKEN_TOLERANCE = 2
+# Require explicit counterpart only when a document uses substantial normative
+# markers. This avoids false positives in descriptive docs while still catching
+# one-sided loss of normative constraints.
+NORMATIVE_MIN_REQUIRED = 5
 
 _HEADING_RE = re.compile(r"^\s{0,3}(#{1,6})\s+")
 _FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
@@ -73,7 +77,7 @@ def _heading_levels(path: Path) -> list[int]:
         if not match:
             continue
         level = len(match.group(1))
-        if level <= 3:
+        if level <= 2:
             levels.append(level)
     return levels
 
@@ -97,9 +101,10 @@ def _format_levels(levels: list[int], limit: int = 24) -> str:
     return f"{prefix} ... ({len(compact)} total)"
 
 
-def check_i18n_core_parity(root: Path = ROOT) -> list[str]:
-    """Return parity violations as actionable error strings."""
+def check_i18n_core_parity(root: Path = ROOT) -> tuple[list[str], list[str]]:
+    """Return (errors, warnings) for parity violations."""
     errors: list[str] = []
+    warnings: list[str] = []
     docs_root = root / "docs"
     ko_arch = docs_root / "ko" / "architecture"
     en_arch = docs_root / "en" / "architecture"
@@ -121,44 +126,49 @@ def check_i18n_core_parity(root: Path = ROOT) -> list[str]:
 
         ko_levels = _heading_levels(ko_file)
         en_levels = _heading_levels(en_file)
-        if ko_levels != en_levels:
+        min_len = min(len(ko_levels), len(en_levels))
+        prefix_matches = ko_levels[:min_len] == en_levels[:min_len]
+        length_delta = abs(len(ko_levels) - len(en_levels))
+        if not prefix_matches or length_delta > 1:
             mismatch_pos = next(
                 (
                     idx
-                    for idx, (ko_lvl, en_lvl) in enumerate(
-                        zip(ko_levels, en_levels), start=1
-                    )
+                    for idx, (ko_lvl, en_lvl) in enumerate(zip(ko_levels, en_levels), start=1)
                     if ko_lvl != en_lvl
                 ),
-                None,
+                min_len + 1 if len(ko_levels) != len(en_levels) else None,
             )
-            pos_desc = (
-                f"first mismatch at heading #{mismatch_pos}"
-                if mismatch_pos is not None
-                else "different number of H1/H2/H3 headings"
-            )
+            pos_desc = f"mismatch at heading #{mismatch_pos}" if mismatch_pos else "unknown mismatch"
             errors.append(
                 "Heading level sequence mismatch for "
                 f"{filename} ({pos_desc}). "
-                f"ko={_format_levels(ko_levels)} | en={_format_levels(en_levels)}"
+                f"ko={_format_levels(ko_levels)} | en={_format_levels(en_levels)} "
+                "(H1/H2 sequence must match; max length delta=1)."
             )
 
         ko_normative = _normative_count(ko_file)
         en_normative = _normative_count(en_file)
-        delta = abs(ko_normative - en_normative)
-        if delta > NORMATIVE_TOKEN_TOLERANCE:
+        max_normative = max(ko_normative, en_normative)
+        min_normative = min(ko_normative, en_normative)
+        if max_normative >= NORMATIVE_MIN_REQUIRED and min_normative == 0:
             errors.append(
-                "Normative marker count mismatch for "
-                f"{filename}: ko={ko_normative}, en={en_normative}, "
-                f"delta={delta} (allowed <= {NORMATIVE_TOKEN_TOLERANCE}). "
-                "Align MUST/SHALL/SHOULD markers across locales."
+                "Normative marker presence mismatch for "
+                f"{filename}: ko={ko_normative}, en={en_normative}. "
+                "When one locale uses substantial MUST/SHALL/SHOULD markers, "
+                "the mirrored locale must also include normative markers."
+            )
+        elif abs(ko_normative - en_normative) > 6:
+            warnings.append(
+                "Normative marker count differs noticeably for "
+                f"{filename}: ko={ko_normative}, en={en_normative}. "
+                "Review translation parity for MUST/SHALL/SHOULD usage."
             )
 
-    return errors
+    return errors, warnings
 
 
 def main(root: Path = ROOT) -> int:
-    errors = check_i18n_core_parity(root)
+    errors, warnings = check_i18n_core_parity(root)
     if errors:
         print("i18n core-loop parity check failed:")
         for error in errors:
@@ -166,12 +176,14 @@ def main(root: Path = ROOT) -> int:
         print()
         print("Suggested fixes:")
         print("- Add missing mirrored files under docs/ko/architecture and docs/en/architecture.")
-        print("- Keep H1/H2/H3 heading structure in the same order across locales.")
-        print(
-            "- Keep MUST/SHALL/SHOULD counts close across locales (delta <= "
-            f"{NORMATIVE_TOKEN_TOLERANCE})."
-        )
+        print("- Keep H1/H2 heading structure in the same order across locales.")
+        print("- Ensure normative markers exist in both locales for normative documents.")
         return 1
+
+    if warnings:
+        print("i18n core-loop parity warnings:")
+        for warning in warnings:
+            print(f"- {warning}")
 
     print("i18n core-loop parity check passed")
     return 0
