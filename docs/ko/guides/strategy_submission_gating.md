@@ -31,7 +31,7 @@ Runner.submit(
 ### CLI (권장)
 
 ```bash
-qmtl submit strategy.py --world my-world
+qmtl submit strategies.my_strategy:MyStrategy --world my-world
 ```
 
 ### Python API

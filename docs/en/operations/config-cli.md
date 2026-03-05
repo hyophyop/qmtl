@@ -52,9 +52,9 @@ copy it to `qmtl.yml` so long-running daemons can discover it automatically:
 # Validate first.
 uv run qmtl config validate --config qmtl/examples/qmtl.yml --offline
 
-# Launch services using the same YAML.
-qmtl service gateway --config qmtl/examples/qmtl.yml
-qmtl service dagmanager server --config qmtl/examples/qmtl.yml
+# Launch operator services using the same YAML.
+qmtl --admin gateway --config qmtl/examples/qmtl.yml
+qmtl --admin dagmanager-server server --config qmtl/examples/qmtl.yml
 ```
 
 When no configuration file is discovered the services log a warning and fall

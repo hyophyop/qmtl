@@ -393,13 +393,13 @@ Scale the cluster (Neo4j memory, Kafka brokers) before approaching these limits 
 
 ```shell
 # Diff example (non-destructive read)
-qmtl service dagmanager diff --file dag.json
+qmtl --admin dagmanager-server diff --file dag.json
 # queue stats
-qmtl service dagmanager queue-stats --tag indicator --interval 1h
+qmtl --admin dagmanager-server queue-stats --tag indicator --interval 1h
 # trigger GC for a sentinel
-qmtl service dagmanager gc --sentinel v1.2.3
+qmtl --admin dagmanager-server gc --sentinel v1.2.3
 # export schema DDL
-qmtl service dagmanager export-schema --out schema.cypher
+qmtl --admin dagmanager-server export-schema --out schema.cypher
 ```
 
 Canary deployment steps live in [`docs/canary_rollout.md`](../operations/canary_rollout.md).
@@ -408,7 +408,7 @@ Canary deployment steps live in [`docs/canary_rollout.md`](../operations/canary_
 
 ## 12. Server Configuration File Usage
 
-The `qmtl service dagmanager server` subcommand accepts a single YAML configuration file. Define every server option in YAML and point to the file with `--config` when needed.
+The `qmtl --admin dagmanager-server server` subcommand accepts a single YAML configuration file. Define every server option in YAML and point to the file with `--config` when needed.
 
 Example:
 
@@ -419,14 +419,14 @@ neo4j_password: secret
 kafka_dsn: localhost:9092
 ```
 
-The sample installed by `qmtl project init` defaults to in-memory repositories and queues for local development. Uncommenting the DSN fields enables Neo4j and Kafka integrations.
+The example config `qmtl/examples/qmtl.yml` defaults to in-memory repositories and queues for local development. Filling the DSN fields enables Neo4j and Kafka integrations.
 
 ```
 # Run with defaults
-qmtl service dagmanager server
+qmtl --admin dagmanager-server server
 
 # Run with YAML configuration
-qmtl service dagmanager server --config qmtl/examples/qmtl.yml
+qmtl --admin dagmanager-server server --config qmtl/examples/qmtl.yml
 ```
 
 The command reads the `dagmanager` section in `qmtl/examples/qmtl.yml`. Without `--config`, in-memory repositories and queues are used because no DSNs are provided. The sample file documents each field inline.

@@ -11,15 +11,10 @@ last_modified: 2025-08-21
 
 # Strategy Templates
 
-QMTL ships with starter strategies that can be used when running `qmtl project init`.
+The public strategy-author path is `qmtl init <path>`.
+This page documents the starter strategy/template inventory that still exists around the older layered scaffold flow while that surface is being consolidated.
 For a step-by-step introduction and a minimal working example, see the
 [SDK Tutorial](../guides/sdk_tutorial.md).
-
-Add sample data and an analysis notebook with `--with-sample-data`:
-
-```bash
-qmtl project init --path my_proj --preset minimal --with-sample-data
-```
 
 ## general
 
@@ -76,8 +71,7 @@ state inside a strategy.
 
 ## Backend configuration templates
 
-When you scaffold a project with `qmtl project init`, two backend configuration samples
-are included under the generated `templates/` directory:
+The layered scaffold flow includes two backend configuration samples under a generated `templates/` directory:
 
 * {{ code_link('qmtl/examples/templates/local_stack.example.yml', text='`local_stack.example.yml`') }} &mdash; lightweight backend stack that relies on
   SQLite, optional Redis, and in-process fallbacks for Kafka and Neo4j. Useful

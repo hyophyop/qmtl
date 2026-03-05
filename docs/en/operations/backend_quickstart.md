@@ -46,16 +46,16 @@ Follow this quick validation and launch loop when an operations YAML is ready:
    For a canonical starting point use `qmtl/examples/qmtl.yml`. Adjust paths or copy the
    file into your working directory as `qmtl.yml` so service commands auto-discover it.
 
-2. **Gateway** – start the public entrypoint with the validated config.
+2. **Gateway** – start the operator/admin entrypoint with the validated config.
 
    ```bash
-   qmtl service gateway --config <path-to-config>
+   qmtl --admin gateway --config <path-to-config>
    ```
 
 3. **DAG Manager** – launch orchestration services with the same settings.
 
    ```bash
-   qmtl service dagmanager server --config <path-to-config>
+   qmtl --admin dagmanager-server server --config <path-to-config>
    ```
 
 For long-lived processes, copy the file to `qmtl.yml` in the working directory so the
@@ -89,13 +89,13 @@ Run the command from the same directory so `qmtl.yml` is discovered.
 - Start Gateway with the config:
 
 ```bash
-qmtl service gateway --config qmtl.yml
+qmtl --admin gateway --config qmtl.yml
 ```
 
 4) Start DAG Manager (same config)
 
 ```bash
-qmtl service dagmanager server --config qmtl.yml
+qmtl --admin dagmanager-server server --config qmtl.yml
 ```
 
 Notes
@@ -133,21 +133,22 @@ Stop stacks with `docker compose down` (add `-v` to remove volumes).
 - Neo4j init (if using Neo4j):
 
 ```bash
-qmtl service dagmanager neo4j-init \
+qmtl --admin dagmanager-server neo4j-init \
   --uri bolt://localhost:7687 --user neo4j --password neo4j
 ```
 
-## Try a Strategy (Gateway + WorldService)
+## Try the canonical local loop (Gateway + WorldService)
 
-Run a sample strategy against Gateway with a world id:
+After the local stack is up, run the public strategy-author flow against it:
 
 ```bash
-python -m qmtl.examples.general_strategy \
-  --gateway-url http://localhost:8000 \
-  --world-id demo
+qmtl init demo_project
+cd demo_project
+uv run qmtl submit strategies.my_strategy:MyStrategy --world demo_world --output json
 ```
 
-For offline runs (no WS/GW): `python -m qmtl.examples.general_strategy`.
+Use `qmtl status` / `qmtl world info demo_world` to inspect follow-up state.
+SDK-only/offline runs remain a secondary path.
 
 ## Troubleshooting
 

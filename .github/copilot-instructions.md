@@ -104,15 +104,9 @@ QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). The syst
 
 - **Initialize new project**:
   ```bash
-  qmtl init --path my_project
+  qmtl init my_project
   cd my_project
   ```
-
-- **List available templates**:
-  ```bash
-  qmtl init --path dummy --list-templates
-  ```
-  Available templates: general, single_indicator, multi_indicator, branching, state_machine
 
 ### Running Services
 
@@ -177,7 +171,7 @@ QMTL orchestrates trading strategies as directed acyclic graphs (DAGs). The syst
 1. Run environment setup commands
 2. Generate protobuf files
 3. Run a subset of tests: `uv run pytest tests/test_cli.py -v`
-4. Initialize a test project: `qmtl init --path /tmp/test_validation`
+4. Initialize a test project: `qmtl init /tmp/test_validation`
 5. Check CLI help works: `uv run qmtl --help`
 
 ### Service Integration Test

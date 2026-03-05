@@ -3,8 +3,8 @@
 Use the `snapshot` subcommand to capture or verify a DAG definition.
 
 ```bash
-qmtl service dagmanager snapshot --file dag.json --freeze
-qmtl service dagmanager snapshot --file dag.json --verify
+qmtl --admin dagmanager-server snapshot --file dag.json --freeze
+qmtl --admin dagmanager-server snapshot --file dag.json --verify
 ```
 
 - `--freeze` writes a snapshot containing a SHA-256 hash and the DAG payload

@@ -36,8 +36,8 @@ last_modified: 2026-01-11
 아래 명령은 Release 0.1의 필수 표면입니다. 각 명령은 최소 한 번 실제 실행 가능한 상태여야 합니다.
 
 - 구성 검증: `uv run qmtl config validate --config <path-to-config> --offline`
-- Gateway 기동: `qmtl service gateway --config <path-to-config>`
-- DAG Manager 기동: `qmtl service dagmanager server --config <path-to-config>`
+- Gateway 기동: `qmtl --admin gateway --config <path-to-config>`
+- DAG Manager 기동: `qmtl --admin dagmanager-server server --config <path-to-config>`
 - 예시 전략 실행(온라인): `python -m qmtl.examples.general_strategy --gateway-url http://localhost:8000 --world-id demo`
 
 자세한 실행 순서는 [백엔드 퀵스타트](backend_quickstart.md)를 참고합니다.

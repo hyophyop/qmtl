@@ -23,15 +23,11 @@ from importlib.metadata import PackageNotFoundError, version as pkg_version
 
 from qmtl.utils.i18n import set_language
 from qmtl.utils.i18n import _ as _t  # Alias to avoid shadowing in loops
+from qmtl.interfaces.scaffold import create_public_project
 
 from .http_client import gateway_url
 from .status import cmd_status
 from .submit import cmd_submit
-from .templates import (
-    DEFAULT_ENV_EXAMPLE,
-    DEFAULT_QMTL_CONFIG,
-    DEFAULT_STRATEGY_TEMPLATE,
-)
 from .world import cmd_world
 
 
@@ -58,37 +54,22 @@ def cmd_init(argv: List[str]) -> int:
         "path",
         help=_t("Project directory path"),
     )
-    parser.add_argument(
-        "--preset",
-        choices=["minimal", "full"],
-        default="minimal",
-        help=_t("Project template preset (default: minimal)"),
-    )
-    
+
     args = parser.parse_args(argv)
     project_path = Path(args.path)
     if project_path.exists() and any(project_path.iterdir()):
         print(_t("Error: Directory '{}' already exists and is not empty").format(args.path), file=sys.stderr)
         return 1
 
-    project_path.mkdir(parents=True, exist_ok=True)
-    strategies_dir = project_path / "strategies"
-    strategies_dir.mkdir(parents=True, exist_ok=True)
-    (strategies_dir / "__init__.py").write_text("")
-    (strategies_dir / "my_strategy.py").write_text(DEFAULT_STRATEGY_TEMPLATE)
-    (project_path / "qmtl.yml").write_text(DEFAULT_QMTL_CONFIG)
-    (project_path / ".env.example").write_text(DEFAULT_ENV_EXAMPLE)
+    create_public_project(project_path)
 
     print(_t("✅ Project initialized at '{}'").format(args.path))
     print()
     print(_t("Next steps:"))
     print(f"  1. cd {args.path}")
     print("  2. Edit strategies/my_strategy.py with your strategy logic")
-    print(
-        "  3. qmtl submit strategies.my_strategy:MyStrategy"
-        " --world demo_world"
-    )
-    print("     (project.strategy_root + default_world are tracked in qmtl.yml)")
+    print("  3. qmtl submit --output json")
+    print("     (project.strategy_root + default_strategy + default_world are tracked in qmtl.yml)")
 
     return 0
 
@@ -119,6 +100,8 @@ def _build_admin_help() -> str:
           dagmanager-server
                           DAG Manager server controls (alias)
           taglint         Tag validation utility
+
+        Use either `qmtl --help-admin` or `qmtl --admin --help`.
     """))
 
 
@@ -232,6 +215,9 @@ def _handle_help_requests(argv: List[str]) -> int | None:
         _build_top_help_parser().print_help()
         return 0
     if argv[0] == "--help-admin":
+        print(_build_admin_help())
+        return 0
+    if len(argv) >= 2 and argv[0] == "--admin" and argv[1] in {"-h", "--help"}:
         print(_build_admin_help())
         return 0
     return None

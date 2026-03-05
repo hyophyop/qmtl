@@ -27,6 +27,13 @@ class TestCLIHelp:
         result = main(["--help"])
         assert result == 0
 
+    def test_admin_help_with_admin_flag(self, capsys):
+        result = main(["--admin", "--help"])
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Admin/Operator commands" in captured.out
+        assert "gateway" in captured.out
+
 
 class TestCLIVersion:
     """Tests for version command."""
@@ -187,6 +194,76 @@ class TestCLIInit:
         captured = capsys.readouterr()
         assert "not empty" in captured.err
 
+    def test_init_next_steps_point_to_public_submit_flow(self, tmp_path, capsys):
+        project_dir = tmp_path / "public_flow"
+        result = main(["init", str(project_dir)])
+        assert result == 0
+
+        captured = capsys.readouterr()
+        assert "qmtl submit --output json" in captured.out
+
+
+class TestInitToSubmitLoop:
+    """Protect the supported local development loop."""
+
+    def test_generated_project_strategy_can_be_submitted_via_public_cli_ref(
+        self, tmp_path, monkeypatch
+    ):
+        project_dir = tmp_path / "loop_project"
+        assert main(["init", str(project_dir)]) == 0
+
+        monkeypatch.chdir(project_dir)
+        reset_runtime_config_cache()
+
+        captured: dict[str, object] = {}
+
+        def fake_submit(strategy_cls, args, overrides):
+            captured["strategy"] = strategy_cls
+            captured["world"] = args.world
+            captured["strategy_ref"] = args.strategy
+            return 0
+
+        monkeypatch.setattr(
+            "qmtl.interfaces.cli.submit._submit_and_print_result", fake_submit
+        )
+
+        result = cmd_submit(["strategies.my_strategy:MyStrategy"])
+
+        assert result == 0
+        assert captured["world"] == "demo_world"
+        assert captured["strategy_ref"] == "strategies.my_strategy:MyStrategy"
+        assert getattr(captured["strategy"], "__name__") == "MyStrategy"
+        reset_runtime_config_cache()
+
+    def test_generated_project_strategy_can_be_submitted_via_project_defaults(
+        self, tmp_path, monkeypatch
+    ):
+        project_dir = tmp_path / "loop_project_defaults"
+        assert main(["init", str(project_dir)]) == 0
+
+        monkeypatch.chdir(project_dir)
+        reset_runtime_config_cache()
+
+        captured: dict[str, object] = {}
+
+        def fake_submit(strategy_cls, args, overrides):
+            captured["strategy"] = strategy_cls
+            captured["world"] = args.world
+            captured["strategy_ref"] = args.strategy
+            return 0
+
+        monkeypatch.setattr(
+            "qmtl.interfaces.cli.submit._submit_and_print_result", fake_submit
+        )
+
+        result = cmd_submit([])
+
+        assert result == 0
+        assert captured["world"] == "demo_world"
+        assert captured["strategy_ref"] == "strategies.my_strategy:MyStrategy"
+        assert getattr(captured["strategy"], "__name__") == "MyStrategy"
+        reset_runtime_config_cache()
+
 
 class TestSubmitStrategyRoot:
     """Strategy resolution driven by qmtl.yml project section."""
@@ -208,6 +285,7 @@ class TestSubmitStrategyRoot:
             """
 project:
   strategy_root: strategies
+  default_strategy: strategies.demo:DemoStrategy
   default_world: demo_world
 """
         )
@@ -285,6 +363,19 @@ class DemoStrategy(Strategy):
         assert result == 0
         assert captured["world"] == "env_world"
         reset_runtime_config_cache()
+
+    def test_submit_requires_strategy_or_project_default(self, tmp_path, monkeypatch, capsys):
+        workspace = tmp_path / "workspace_missing_default_strategy"
+        workspace.mkdir()
+
+        monkeypatch.chdir(workspace)
+        reset_runtime_config_cache()
+
+        result = cmd_submit([])
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "strategy must be provided" in captured.err
 
 
 class TestCLILegacyCommands:

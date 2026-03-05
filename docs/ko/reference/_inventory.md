@@ -41,7 +41,6 @@ last_modified: 2025-08-26
 - `docs/ko/architecture/execution_state.md`
 - `docs/ko/architecture/gateway.md`
 - `docs/ko/architecture/glossary.md`
-- `docs/ko/architecture/layered_template_system.md`
 - `docs/ko/architecture/lean_brokerage_model.md`
 - `docs/ko/architecture/seamless_data_provider_v2.md`
 - `docs/ko/architecture/worldservice.md`
@@ -61,7 +60,6 @@ last_modified: 2025-08-26
 - `docs/guides/ccxt_spot_recipe.md`
 - `docs/guides/http_health_checks.md`
 - `docs/guides/httpx_usage.md`
-- `docs/guides/layered_templates_quickstart.md`
 - `docs/guides/migration_bc_removal.md`
 - `docs/guides/migration_nodeid_blake3.md`
 - `docs/guides/nodeset_adapters.md`

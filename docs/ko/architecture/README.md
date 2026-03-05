@@ -45,7 +45,6 @@ EventStreamDescriptor와 같은 표준 명칭을 확인할 수 있습니다.
 - [Risk Signal Hub](risk_signal_hub.md): 포트폴리오/리스크 스냅샷 SSOT.
 
 ### Templates
-- [레이어드 템플릿 시스템](layered_template_system.md): 프로젝트/템플릿을 레이어로 조립하는 아키텍처.
 
 ### Engineering notes
 - [SDK 레이어 가이드](../maintenance/engineering/sdk_layers.md): SDK 의존성 계층화 가이드.

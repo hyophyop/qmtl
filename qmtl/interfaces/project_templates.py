@@ -51,6 +51,7 @@ DEFAULT_QMTL_CONFIG = """# QMTL project defaults for strategy submission
 
 project:
   strategy_root: strategies
+  default_strategy: strategies.my_strategy:MyStrategy
   default_world: demo_world
 
 worldservice:

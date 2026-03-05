@@ -7,14 +7,14 @@
 모든 DDL은 `IF NOT EXISTS` 를 사용하므로 재실행해도 안전합니다.
 
 ```
-qmtl service dagmanager neo4j-init \
+qmtl --admin dagmanager-server neo4j-init \
   --uri bolt://localhost:7687 --user neo4j --password neo4j
 ```
 
 ## 현재 스키마 내보내기
 
 ```
-qmtl service dagmanager export-schema \
+qmtl --admin dagmanager-server export-schema \
   --uri bolt://localhost:7687 --user neo4j --password neo4j --out schema.cypher
 ```
 
@@ -23,7 +23,7 @@ qmtl service dagmanager export-schema \
 `neo4j-init` 가 만든 제약 조건과 인덱스를 `DROP ... IF EXISTS` 로 제거합니다.
 
 ```
-qmtl service dagmanager neo4j-rollback \
+qmtl --admin dagmanager-server neo4j-rollback \
   --uri bolt://localhost:7687 --user neo4j --password neo4j
 ```
 

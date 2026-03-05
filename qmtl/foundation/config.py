@@ -259,6 +259,9 @@ class ProjectConfig:
     strategy_root: str | None = field(
         default=None, metadata={"env": "QMTL_STRATEGY_ROOT"}
     )
+    default_strategy: str | None = field(
+        default=None, metadata={"env": "QMTL_DEFAULT_STRATEGY"}
+    )
     default_world: str | None = field(
         default=None, metadata={"env": "QMTL_DEFAULT_WORLD"}
     )
