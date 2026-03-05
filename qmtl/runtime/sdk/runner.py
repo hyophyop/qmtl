@@ -27,7 +27,6 @@ from .protocols import (
 )
 from .services import RunnerServices, get_global_services, set_global_services
 from .strategy import Strategy
-from .strategy_bootstrapper import StrategyBootstrapper
 from .tag_manager_service import TagManagerService
 from .submit import AutoReturnsConfig, SubmitResult, submit, submit_async
 
@@ -106,8 +105,11 @@ class Runner:
         auto_validate: bool = True,
     ) -> SubmitResult:
         """Submit a strategy for evaluation and potential activation.
-        
-        This is the single entry point for all strategy submissions in QMTL v2.0.
+
+        This is the thin public entry point for all strategy submissions in
+        QMTL v2.0. Author-facing defaults such as world/preset resolution are
+        normalized before the deeper orchestration pipeline takes over.
+
         The system automatically:
         1. Registers the strategy DAG
         2. Runs backtest validation
@@ -323,12 +325,6 @@ class Runner:
         return cls.services().feature_plane
 
     @staticmethod
-    def _prepare(strategy_cls: type[Strategy]) -> Strategy:
-        strategy = strategy_cls()
-        strategy.setup()
-        return strategy
-
-    @staticmethod
     def feed_queue_data(
         node,
         queue_id: str,
@@ -468,32 +464,6 @@ class Runner:
     async def _maybe_refresh_capabilities(gateway_url: str | None) -> None:
         if gateway_url:
             await Runner._refresh_gateway_capabilities(gateway_url)
-
-    @staticmethod
-    async def _bootstrap_strategy(
-        services,
-        strategy: Strategy,
-        compute_context: ComputeContext,
-        world_id: str,
-        gateway_url: str | None,
-        meta_payload: dict | None,
-        schema_enforcement: str,
-    ):
-        bootstrapper = StrategyBootstrapper(services.gateway_client)
-        return await bootstrapper.bootstrap(
-            strategy,
-            context=compute_context,
-            world_id=world_id,
-            gateway_url=gateway_url,
-            meta=meta_payload,
-            offline=False,
-            kafka_available=services.kafka_factory.available,
-            trade_mode=Runner._trade_mode,
-            schema_enforcement=schema_enforcement,
-            feature_plane=services.feature_plane,
-            gateway_context=None,
-            skip_gateway_submission=False,
-        )
 
     @staticmethod
     async def _configure_activation(
