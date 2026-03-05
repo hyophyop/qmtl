@@ -332,9 +332,7 @@ def _orders_from_overlay_deltas(
             detail="overlay config is required when mode='overlay'",
         )
 
-    per_world_orders: Dict[str, List[dict]] = {
-        str(world_id): [] for world_id in payload.world_alloc_after.keys()
-    }
+    per_world_orders: Dict[str, List[dict]] = {}
     symbol_to_world: dict[str, str] = {}
     for world_id, symbol in (overlay.instrument_by_world or {}).items():
         symbol_key = str(symbol)
@@ -385,7 +383,8 @@ def _orders_from_overlay_deltas(
                 venue_policies=venue_policies,
             ),
         )
-        per_world_orders.setdefault(mapped_world_id, []).extend(orders)
+        if orders:
+            per_world_orders.setdefault(mapped_world_id, []).extend(orders)
     return per_world_orders, overlay_deltas_payload
 
 

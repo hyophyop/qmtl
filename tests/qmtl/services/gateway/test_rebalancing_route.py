@@ -224,6 +224,90 @@ async def test_rebalancing_execute_overlay_mode_uses_overlay_deltas(
 
 
 @pytest.mark.asyncio
+async def test_rebalancing_submit_overlay_skips_empty_shadow_worlds(
+    gateway_app_factory,
+) -> None:
+    writer = StubCommitLogWriter()
+    payload = _default_payload()
+    payload["mode"] = "overlay"
+    payload["world_alloc_before"] = {"w1": 0.5, "w-shadow": 0.5}
+    payload["world_alloc_after"] = {"w1": 0.5, "w-shadow": 0.5}
+    payload["positions"] = [
+        {
+            "world_id": "w1",
+            "strategy_id": "s1",
+            "symbol": "BTCUSDT",
+            "qty": 1.0,
+            "mark": 30000.0,
+            "venue": "binance",
+        },
+        {
+            "world_id": "w-shadow",
+            "strategy_id": "s2",
+            "symbol": "ETHUSDT",
+            "qty": 2.0,
+            "mark": 2000.0,
+            "venue": "binance",
+        },
+    ]
+    payload["overlay"] = {
+        "instrument_by_world": {
+            "w1": "BTCUSDT_PERP",
+            "w-shadow": "ETHUSDT_PERP",
+        },
+        "price_by_symbol": {
+            "BTCUSDT_PERP": 30000.0,
+            "ETHUSDT_PERP": 2000.0,
+        },
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/rebalancing/plan":
+            return httpx.Response(
+                200,
+                json={
+                    "per_world": {},
+                    "global_deltas": [],
+                    "overlay_deltas": [
+                        {"symbol": "BTCUSDT_PERP", "delta_qty": 0.25, "venue": "binance"}
+                    ],
+                },
+            )
+        if request.method == "GET" and request.url.path == "/worlds/w1":
+            return httpx.Response(200, json={"world": {"id": "w1", "mode": "paper"}})
+        if request.method == "GET" and request.url.path == "/worlds/w-shadow":
+            return httpx.Response(
+                200,
+                json={"world": {"id": "w-shadow", "mode": "shadow"}},
+            )
+        raise AssertionError(f"Unexpected path {request.url.path}")
+
+    async with gateway_app_factory(handler, commit_log_writer=writer) as ctx:
+        resp = await ctx.client.post(
+            "/rebalancing/execute?submit=true",
+            json=payload,
+            headers={"X-Allow-Live": "true"},
+        )
+        body = resp.json()
+
+    assert resp.status_code == 200
+    assert body["submitted"] is True
+    assert body["orders_per_world"] == {
+        "w1": [
+            {
+                "symbol": "BTCUSDT_PERP",
+                "quantity": 0.25,
+                "side": "buy",
+                "time_in_force": "GTC",
+                "venue": "binance",
+            }
+        ]
+    }
+    assert len(writer.published) == 1
+    assert writer.published[0][1]["world_id"] == "w1"
+
+
+@pytest.mark.asyncio
 async def test_rebalancing_execute_hybrid_returns_501(gateway_app_factory):
     seen_paths: list[str] = []
     payload = _default_payload()
