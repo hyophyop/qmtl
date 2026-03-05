@@ -4,9 +4,9 @@ This module provides the new unified submission interface for QMTL v2.0.
 All legacy APIs (Runner.run, Runner.offline) are replaced by Runner.submit().
 
 Phase 2 Enhancements:
-- Automatic validation pipeline integration
+- Automatic metrics precheck integration
 - Performance metrics calculation from backtest
-- Threshold-based auto-activation
+- WorldService-backed evaluation and activation
 - Real contribution/weight/rank feedback
 
 Phase 3 Enhancements:
@@ -770,10 +770,10 @@ async def submit_async(
     This is the single entry point for all strategy submissions in QMTL v2.0.
     The system automatically:
     1. Registers the strategy DAG
-    2. Runs backtest validation
+    2. Runs a local metrics precheck
     3. Calculates performance metrics
-    4. Validates against policy thresholds
-    5. Activates valid strategies with appropriate weight
+    4. Delegates policy evaluation to WorldService
+    5. Surfaces WS activation/weight decisions when available
     
     Parameters
     ----------
@@ -802,7 +802,7 @@ async def submit_async(
         enabled, the SDK will try to compute percentage returns from common
         price attributes if explicit returns are missing.
     auto_validate : bool
-        Whether to run automatic validation pipeline. Default True.
+        Whether to run the automatic metrics precheck. Default True.
     
     Returns
     -------
@@ -1194,7 +1194,7 @@ async def _bootstrap_strategy(
     policy_payload: dict[str, Any] | None,
 ) -> BootstrapOutcome:
     if not gateway_available:
-        logger.info("Gateway not available at %s, running local validation", gateway_url)
+        logger.info("Gateway not available at %s, computing local metrics precheck only", gateway_url)
         return BootstrapOutcome(
             strategy_id=f"local_{strategy_class_name}_{id(strategy)}",
             offline_mode=True,
@@ -1353,7 +1353,6 @@ async def _run_validation_and_ws_eval(
     validation_pipeline = ValidationPipeline(
         preset=resolved_preset,
         world_id=resolved_world,
-        metrics_only=True,
     )
     validation_result = await validation_pipeline.validate(strategy, returns=backtest_returns)
 

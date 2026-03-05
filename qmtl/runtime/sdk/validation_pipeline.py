@@ -1,12 +1,7 @@
-"""Automatic validation pipeline for strategy submission.
+"""Automatic metrics pipeline for strategy submission.
 
-This module implements Phase 2 of the QMTL simplification proposal:
-1. Auto-trigger backtest on submission
-2. Calculate performance metrics automatically
-3. (Deprecated) threshold-based pre-checks
-
-As of World Validation v1.5, WorldService is the SSOT for validation policy/rules.
-Runner/SDK should only compute metrics and submit them.
+WorldService is the SSOT for validation policy/rules. Runner/SDK only computes
+metrics from backtest returns and forwards them to the authoritative service.
 """
 
 from __future__ import annotations
@@ -15,7 +10,7 @@ import logging
 import math
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Sequence
+from typing import TYPE_CHECKING, Any, Dict, List, Sequence
 
 if TYPE_CHECKING:
     from .strategy import Strategy
@@ -23,7 +18,7 @@ if TYPE_CHECKING:
 from qmtl.runtime.transforms.alpha_performance import alpha_performance_node
 from qmtl.runtime.transforms.linearity_metrics import equity_linearity_metrics_v2
 
-from .presets import PolicyPreset, PresetPolicy, ThresholdConfig, get_preset
+from .presets import PolicyPreset, get_preset
 
 logger = logging.getLogger(__name__)
 
@@ -224,164 +219,6 @@ def calculate_performance_metrics(
     )
 
 
-def _policy_from_preset(preset: PresetPolicy) -> dict[str, Any]:
-    """Deprecated: local Policy materialization is no longer supported."""
-    _ = preset
-    return {}
-
-
-def _check_thresholds(
-    metrics: PerformanceMetrics,
-    policy: Any,
-) -> List[ThresholdViolation]:
-    """Deprecated: local threshold checks are no longer supported (WS is SSOT)."""
-    _ = (metrics, policy)
-    return []
-
-
-def _monotonicity_violation(monotonicity: float | None) -> ThresholdViolation | None:
-    """Generate monotonicity violation when equity curve is trending downward."""
-    if monotonicity is None:
-        return None
-    if monotonicity < 0:
-        return ThresholdViolation(
-            metric="equity_monotonicity",
-            value=monotonicity,
-            threshold_type="min",
-            threshold_value=0.0,
-            message=f"Equity curve monotonicity below 0 (Spearman rho={monotonicity:.2f})",
-        )
-    return None
-
-
-def _generate_improvement_hints(violations: List[ThresholdViolation]) -> List[str]:
-    """Deprecated: use WorldService results for actionable hints."""
-    _ = violations
-    return []
-
-
-def _hint_sharpe(v: ThresholdViolation) -> str | None:
-    if v.threshold_type == "min":
-        return (
-            f"Improve Sharpe ratio: current {v.value:.2f}, need ≥{v.threshold_value}. "
-            "Consider reducing volatility or increasing returns."
-        )
-    return None
-
-
-def _hint_max_drawdown(v: ThresholdViolation) -> str | None:
-    if v.threshold_type == "max":
-        return (
-            f"Reduce max drawdown: current {v.value:.1%}, need ≤{v.threshold_value:.1%}. "
-            "Consider adding stop-loss or reducing position sizes."
-        )
-    return None
-
-
-def _hint_win_rate(v: ThresholdViolation) -> str | None:
-    if v.threshold_type == "min":
-        return (
-            f"Improve win rate: current {v.value:.1%}, need ≥{v.threshold_value:.1%}. "
-            "Consider refining entry signals or filtering low-probability trades."
-        )
-    return None
-
-
-def _hint_profit_factor(v: ThresholdViolation) -> str | None:
-    if v.threshold_type == "min":
-        return (
-            f"Improve profit factor: current {v.value:.2f}, need ≥{v.threshold_value}. "
-            "Consider improving risk/reward ratio or cutting losses faster."
-        )
-    return None
-
-
-def _hint_equity_monotonicity(_: ThresholdViolation) -> str:
-    return (
-        "Stabilize the equity curve: current monotonicity is negative. "
-        "Consider reducing choppiness or enforcing risk controls to avoid repeated drawdowns."
-    )
-
-
-def _calculate_weight_and_rank(
-    strategy_id: str,
-    metrics: PerformanceMetrics,
-    existing_strategies: Dict[str, Dict[str, float]],
-    policy: Any,
-) -> tuple[float, int]:
-    """Deprecated: local selection/weighting is no longer supported (WS is SSOT)."""
-    _ = (strategy_id, metrics, existing_strategies, policy)
-    return 0.0, 0
-
-
-def _estimate_contribution(
-    weight: float,
-    metrics: PerformanceMetrics,
-    world_sharpe: float = 1.0,
-) -> float:
-    """Deprecated: local contribution estimates are no longer supported (WS is SSOT)."""
-    _ = (weight, metrics, world_sharpe)
-    return 0.0
-
-
-def _calculate_correlation(
-    new_returns: Sequence[float],
-    existing_returns: Dict[str, Sequence[float]],
-) -> tuple[float, List[str]]:
-    """Calculate correlation between new strategy and existing strategies.
-
-    Args:
-        new_returns: Returns of the new strategy.
-        existing_returns: Dict mapping strategy_id to returns sequence.
-
-    Returns:
-        Tuple of (average_correlation, list of strategy IDs exceeding threshold).
-    """
-    if not existing_returns or not new_returns:
-        return 0.0, []
-
-    clean_new = _clean_series(new_returns)
-    if len(clean_new) < 2:
-        return 0.0, []
-
-    correlations: List[float] = []
-    high_correlation_strategies: List[str] = []
-
-    for sid, returns in existing_returns.items():
-        corr = _pairwise_correlation(clean_new, returns)
-        if corr is None:
-            continue
-        correlations.append(abs(corr))
-        if abs(corr) > 0.7:
-            high_correlation_strategies.append(sid)
-
-    avg_corr = sum(correlations) / len(correlations) if correlations else 0.0
-    return avg_corr, high_correlation_strategies
-
-
-def _clean_series(values: Sequence[float]) -> List[float]:
-    return [float(r) for r in values if not math.isnan(r)]
-
-
-def _pairwise_correlation(new_arr: Sequence[float], existing: Sequence[float]) -> float | None:
-    clean_existing = _clean_series(existing)
-    min_len = min(len(new_arr), len(clean_existing))
-    if min_len < 2:
-        return None
-
-    a = list(new_arr[:min_len])
-    b = list(clean_existing[:min_len])
-    mean_a = sum(a) / min_len
-    mean_b = sum(b) / min_len
-
-    numerator = sum((ai - mean_a) * (bi - mean_b) for ai, bi in zip(a, b))
-    std_a = math.sqrt(sum((x - mean_a) ** 2 for x in a))
-    std_b = math.sqrt(sum((x - mean_b) ** 2 for x in b))
-    if std_a == 0 or std_b == 0:
-        return None
-    return numerator / (std_a * std_b)
-
-
 def _linearity_metrics_from_returns(returns: Sequence[float]) -> Dict[str, float]:
     """Compute linearity/monotonicity metrics used by WS policy engine."""
     if not returns:
@@ -405,60 +242,24 @@ def _linearity_metrics_from_returns(returns: Sequence[float]) -> Dict[str, float
 
 
 class ValidationPipeline:
-    """Automatic validation pipeline for strategy submission.
+    """Compute submission metrics before WorldService evaluation.
 
     The pipeline:
-    1. Runs backtest on historical data
-    2. Calculates performance metrics
-    3. (Deprecated) local policy evaluation
-
-    Usage:
-        pipeline = ValidationPipeline(preset="conservative")
-        result = await pipeline.validate(strategy, returns=backtest_returns)
-
-        if result.passed:
-            print(f"Activated with weight {result.weight:.2%}")
-        else:
-            for hint in result.improvement_hints:
-                print(hint)
+    1. Resolves or extracts a return series
+    2. Calculates performance metrics locally
+    3. Returns a neutral metrics result for WorldService-backed evaluation
     """
 
     def __init__(
         self,
         *,
         preset: PolicyPreset | str | None = None,
-        policy: Any | None = None,
         world_id: str = "__default__",
-        existing_strategies: Dict[str, Dict[str, float]] | None = None,
-        existing_returns: Dict[str, Sequence[float]] | None = None,
-        world_sharpe: float = 1.0,
-        metrics_only: bool = False,
     ):
-        """Initialize validation pipeline.
-
-        Args:
-            preset: Policy preset to use (sandbox/conservative/moderate/aggressive)
-            policy: Deprecated (ignored)
-            world_id: Target world ID
-            existing_strategies: Deprecated (ignored)
-            existing_returns: Deprecated (ignored)
-            world_sharpe: Deprecated (ignored)
-            metrics_only: Deprecated (ignored; always metrics-only)
-        """
+        """Initialize a metrics-only validation helper."""
         self.world_id = world_id
-        self.preset_policy: PresetPolicy | None = get_preset(preset) if preset is not None else None
         self.metrics_only = True
-
-        _ = metrics_only
-        if policy is not None or existing_strategies or existing_returns or world_sharpe != 1.0:
-            logger.warning(
-                "ValidationPipeline local policy evaluation is deprecated; "
-                "Runner/SDK now only computes metrics. Use WorldService for evaluation.",
-            )
-
-    def _get_effective_policy(self) -> PresetPolicy:
-        """Deprecated: WorldService is SSOT for policies."""
-        return self.preset_policy or get_preset(PolicyPreset.SANDBOX)
+        _ = get_preset(preset) if preset is not None else None
 
     async def validate(
         self,
@@ -541,52 +342,6 @@ class ValidationPipeline:
             returns,
             risk_free_rate=risk_free_rate,
             transaction_cost=transaction_cost,
-        )
-
-    def _collect_metric_violations(
-        self, metrics: PerformanceMetrics, policy: Any
-    ) -> List[ThresholdViolation]:
-        logger.warning("ValidationPipeline local policy evaluation is deprecated; use WorldService.")
-        _ = (metrics, policy)
-        return []
-
-    def _collect_correlation(
-        self,
-        returns: Sequence[float],
-        policy: Any,
-    ) -> tuple[float, list[str], list[ThresholdViolation]]:
-        logger.warning("ValidationPipeline local policy evaluation is deprecated; use WorldService.")
-        _ = (returns, policy)
-        return 0.0, [], []
-
-    def _is_policy_active(
-        self,
-        strategy_id: str,
-        metrics: PerformanceMetrics,
-        policy: Any,
-    ) -> bool:
-        logger.warning("ValidationPipeline local policy evaluation is deprecated; use WorldService.")
-        _ = (strategy_id, metrics, policy)
-        return True
-
-    def _build_failure_result(
-        self,
-        strategy_id: str,
-        metrics: PerformanceMetrics,
-        violations: list[ThresholdViolation],
-        correlation_avg: float,
-        correlation_violations: list[str],
-    ) -> ValidationResult:
-        return ValidationResult(
-            status=ValidationStatus.FAILED,
-            metrics=metrics,
-            strategy_id=strategy_id,
-            world_id=self.world_id,
-            violations=violations,
-            improvement_hints=_generate_improvement_hints(violations),
-            activated=False,
-            correlation_avg=correlation_avg,
-            correlation_violations=correlation_violations,
         )
 
     def _extract_returns_from_strategy(
