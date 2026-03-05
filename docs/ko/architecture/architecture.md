@@ -98,8 +98,7 @@ QMTL 아키텍처 전반의 **핵심 설계 가치**는 다음 한 문장으로 
 
 #### 0.1.3 성과 자동 평가 → tradable 전환
 
-- `ValidationPipeline`이 Sharpe/MDD/선형성 등 지표 계산과 정책 기반 PASS/FAIL 판정을 수행하고,
-  Runner.submit은 `auto_returns` 전처리로 명시적 returns가 없는 전략도 가능한 한 백테스트 평가를 진행한다.
+- `ValidationPipeline`은 Sharpe/MDD/선형성 등 지표만 계산하고, Runner.submit은 `auto_returns` 전처리로 명시적 returns가 없는 전략도 가능한 한 백테스트 평가를 진행한 뒤 정책 평가는 WorldService에 위임한다.
 - WorldService `/worlds/{world_id}/evaluate` 결과(active/weight/contribution)와 `DecisionEnvelope`/`ActivationEnvelope`는
   Runner/CLI `SubmitResult.ws.*`에 그대로 매핑되고, 로컬 `ValidationPipeline` 출력은 `precheck` 섹션으로 분리되어
   “validation → activation → capital allocation” 흐름이 한눈에 이어진다.

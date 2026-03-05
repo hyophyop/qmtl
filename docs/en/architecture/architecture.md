@@ -115,7 +115,7 @@ From the user’s perspective, QMTL’s **Core Loop** is:
 
 #### 0.1.3 Auto Evaluation → Tradable Transition
 
-- `ValidationPipeline` computes Sharpe/MDD/linearity metrics and performs policy‑based PASS/FAIL checks, and `auto_returns` pre‑processing lets Runner.submit derive returns when explicit series are missing.
+- `ValidationPipeline` computes Sharpe/MDD/linearity metrics only, and `auto_returns` pre‑processing lets Runner.submit derive returns when explicit series are missing before delegating policy evaluation to WorldService.
 - WorldService `/worlds/{world_id}/evaluate` outputs (active/weight/contribution) map directly into Runner/CLI results, while local `ValidationPipeline` output is shown only in `precheck` so WS remains the SSOT for `status/weight/rank/contribution`.
 
 #### 0.1.4 World‑Level Capital Allocation

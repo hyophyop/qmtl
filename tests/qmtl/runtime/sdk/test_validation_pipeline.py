@@ -6,6 +6,8 @@ SDK-side pipeline computes metrics and does not gate/activate locally.
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
 from qmtl.runtime.sdk.validation_pipeline import (
@@ -134,6 +136,11 @@ class TestPerformanceMetrics:
 class TestValidationPipeline:
     """Tests for ValidationPipeline class."""
 
+    def test_constructor_exposes_metrics_only_surface(self):
+        signature = inspect.signature(ValidationPipeline)
+
+        assert list(signature.parameters) == ["preset", "world_id"]
+
     @pytest.mark.asyncio
     async def test_validate_good_strategy(self):
         """ValidationPipeline should compute metrics without gating."""
@@ -145,6 +152,7 @@ class TestValidationPipeline:
         assert result.status == ValidationStatus.PASSED
         assert result.activated is False
         assert result.weight == 0.0
+        assert result.violations == []
         assert result.metrics.sharpe > 0
 
     @pytest.mark.asyncio
