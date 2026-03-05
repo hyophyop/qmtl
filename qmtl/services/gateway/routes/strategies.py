@@ -38,6 +38,26 @@ def _ack_from_result(result: StrategySubmissionResult) -> StrategyAck:
     )
 
 
+def _validate_submission_worlds(payload: StrategySubmit) -> None:
+    world_ids = [world_id for world_id in (payload.world_ids or []) if str(world_id).strip()]
+    if payload.world_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "E_WORLD_ID_DEPRECATED",
+                "message": "Use world_ids instead of world_id for strategy submissions.",
+            },
+        )
+    if not world_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "E_WORLD_IDS_REQUIRED",
+                "message": "Strategy submissions must include at least one world_ids entry.",
+            },
+        )
+
+
 def create_router(deps: GatewayDependencyProvider) -> APIRouter:
     router = APIRouter()
 
@@ -52,6 +72,7 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
             deps.provide_submission_helper
         ),
     ) -> StrategyAck:
+        _validate_submission_worlds(payload)
         start = time.perf_counter()
         result = await submission_helper.process(
             payload,
@@ -76,6 +97,7 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
             deps.provide_submission_helper
         ),
     ) -> StrategyAck:
+        _validate_submission_worlds(payload)
         result = await submission_helper.process(
             payload,
             StrategySubmissionConfig(

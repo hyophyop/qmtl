@@ -52,6 +52,7 @@ def test_checksum_rejects_tampered_ids(client):
     good = StrategySubmit(
         dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
         meta=None,
+        world_ids=["world-main"],
         node_ids_crc32=checksum,
     )
     resp = client.post("/strategies", json=good.model_dump())
@@ -66,6 +67,7 @@ def test_checksum_rejects_tampered_ids(client):
     bad = StrategySubmit(
         dag_json=base64.b64encode(json.dumps(tampered).encode()).decode(),
         meta=None,
+        world_ids=["world-main"],
         node_ids_crc32=checksum,
     )
     resp2 = client.post("/strategies", json=bad.model_dump())

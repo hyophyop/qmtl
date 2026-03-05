@@ -271,6 +271,7 @@ def test_gateway_metrics_capture_nodeid_mismatch(core_loop_stack: CoreLoopStackH
     payload = {
         "dag_json": base64.b64encode(json.dumps(dag).encode()).decode(),
         "meta": None,
+        "world_ids": ["demo-world"],
         "node_ids_crc32": crc32_of_list([node["node_id"]]),
     }
 

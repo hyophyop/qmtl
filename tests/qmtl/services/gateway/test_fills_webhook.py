@@ -305,3 +305,20 @@ async def test_fills_webhook_forwards_cloudevents_headers(fake_redis):
     assert header_map["ce_type"] == b"trade.fill.forwarded"
     assert header_map["ce_source"] == b"test://forward"
     assert header_map["ce_time"] == b"2025-01-01T01:23:45Z"
+
+
+@pytest.mark.asyncio
+async def test_fills_replay_endpoint_is_not_exposed(fake_redis):
+    cfg = _event_config()
+    app = create_app(
+        redis_client=fake_redis,
+        database=FakeDB(),
+        enable_background=False,
+        event_config=cfg,
+        fill_producer=FakeProducer(),
+    )
+    async with httpx.ASGITransport(app=app) as transport:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/fills/replay")
+
+    assert resp.status_code == 404

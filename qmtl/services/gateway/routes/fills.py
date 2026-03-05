@@ -5,11 +5,9 @@ import hmac
 import json
 import logging
 import os
-import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from qmtl.services.gateway import metrics as gw_metrics
@@ -151,23 +149,6 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
             extra={"event": "fill_accepted", "world_id": world_id, "strategy_id": strategy_id},
         )
         return Response(status_code=status.HTTP_202_ACCEPTED)
-
-    @router.get("/fills/replay")
-    async def get_fills_replay(
-        start: int | None = None,
-        end: int | None = None,
-        world_id: str | None = None,
-        strategy_id: str | None = None,
-    ) -> Any:
-        cid = uuid.uuid4().hex
-        return JSONResponse(
-            {
-                "status": "accepted",
-                "correlation_id": cid,
-                "message": "replay not implemented in this build",
-            },
-            status_code=status.HTTP_202_ACCEPTED,
-        )
 
     return router
 
