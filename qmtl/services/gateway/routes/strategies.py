@@ -25,6 +25,8 @@ from qmtl.services.gateway.strategy_submission import (
 
 from .dependencies import GatewayDependencyProvider
 
+HTTP_422_UNPROCESSABLE_CONTENT = 422
+
 
 def _ack_from_result(result: StrategySubmissionResult) -> StrategyAck:
     return StrategyAck(
@@ -42,7 +44,7 @@ def _validate_submission_worlds(payload: StrategySubmit) -> None:
     world_ids = [world_id for world_id in (payload.world_ids or []) if str(world_id).strip()]
     if payload.world_id is not None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "code": "E_WORLD_ID_DEPRECATED",
                 "message": "Use world_ids instead of world_id for strategy submissions.",
@@ -50,7 +52,7 @@ def _validate_submission_worlds(payload: StrategySubmit) -> None:
         )
     if not world_ids:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "code": "E_WORLD_IDS_REQUIRED",
                 "message": "Strategy submissions must include at least one world_ids entry.",
