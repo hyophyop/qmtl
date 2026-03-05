@@ -174,6 +174,77 @@ async def test_rebalancing_execute_falls_back_when_worldservice_rejects(gateway_
 
 
 @pytest.mark.asyncio
+async def test_rebalancing_execute_overlay_mode_uses_overlay_deltas(
+    gateway_app_factory,
+):
+    payload = _default_payload()
+    payload["mode"] = "overlay"
+    payload["overlay"] = {
+        "instrument_by_world": {"w1": "BTCUSDT_PERP"},
+        "price_by_symbol": {"BTCUSDT_PERP": 30000.0},
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/rebalancing/plan":
+            return httpx.Response(
+                200,
+                json={
+                    "per_world": {},
+                    "global_deltas": [],
+                    "overlay_deltas": [
+                        {"symbol": "BTCUSDT_PERP", "delta_qty": 0.25, "venue": "binance"}
+                    ],
+                },
+            )
+        raise AssertionError(f"Unexpected path {request.url.path}")
+
+    async with gateway_app_factory(handler) as ctx:
+        resp = await ctx.client.post(
+            "/rebalancing/execute",
+            json=payload,
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["overlay_deltas"] == [
+        {"symbol": "BTCUSDT_PERP", "delta_qty": 0.25, "venue": "binance"}
+    ]
+    assert body["orders_per_world"] == {
+        "w1": [
+            {
+                "symbol": "BTCUSDT_PERP",
+                "quantity": 0.25,
+                "side": "buy",
+                "time_in_force": "GTC",
+                "venue": "binance",
+            }
+        ]
+    }
+    assert "orders_global" not in body
+
+
+@pytest.mark.asyncio
+async def test_rebalancing_execute_hybrid_returns_501(gateway_app_factory):
+    seen_paths: list[str] = []
+    payload = _default_payload()
+    payload["mode"] = "hybrid"
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen_paths.append(request.url.path)
+        raise AssertionError(f"Unexpected path {request.url.path}")
+
+    async with gateway_app_factory(handler) as ctx:
+        resp = await ctx.client.post("/rebalancing/execute", json=payload)
+
+    assert resp.status_code == 501
+    assert resp.json()["detail"] == {
+        "code": "E_REBALANCE_MODE_UNSUPPORTED",
+        "message": "Hybrid mode is not implemented yet. Use mode='scaling' or 'overlay'.",
+    }
+    assert seen_paths == []
+
+
+@pytest.mark.asyncio
 async def test_rebalancing_submit_records_metrics_and_audit(
     gateway_app_factory, reset_gateway_metrics
 ) -> None:

@@ -2,7 +2,7 @@
 title: "Schemas — Decision/Activation & Events"
 tags: [reference, schemas]
 author: "QMTL Team"
-last_modified: 2025-08-29
+last_modified: 2026-03-06
 ---
 
 {{ nav_links() }}
@@ -71,13 +71,11 @@ resolve `schema_id`s via an external Schema Registry. A lightweight in-memory
 client is available at `qmtl/foundation/schema/registry.py`. Production
 deployments can swap in Confluent or Redpanda clients.
 
-## ControlBus CloudEvents — Protobuf Migration Path
+## ControlBus Event Encoding
 
-ControlBus supports JSON today. A migration path to CloudEvents-over-Protobuf is
-available via the placeholder codec in `qmtl/services/gateway/controlbus_codec.py` which
-attaches `content_type=application/cloudevents+proto` and keeps a JSON payload
-for compatibility. Consumers route based on the header and decode accordingly.
-Rollout can proceed using dual publishing until all consumers understand the
-new header.
+The public Gateway ControlBus contract is JSON-only. Events are exchanged as
+UTF-8 JSON objects, and the public schema surface does not define a
+CloudEvents-over-Protobuf variant or `application/cloudevents+proto` content
+negotiation path.
 
 {{ nav_links() }}

@@ -59,6 +59,16 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
         alpha_metrics_capable: bool = Depends(deps.provide_alpha_metrics_capable),
     ) -> Dict[str, Any]:
         submit_requested = _parse_bool(request.query_params.get("submit"))
+        mode = _normalize_rebalance_mode(payload.mode)
+
+        if mode == "hybrid":
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail={
+                    "code": "E_REBALANCE_MODE_UNSUPPORTED",
+                    "message": "Hybrid mode is not implemented yet. Use mode='scaling' or 'overlay'.",
+                },
+            )
 
         if submit_requested and enforce_live_guard:
             if request.headers.get("X-Allow-Live") != "true":
@@ -100,40 +110,51 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
         marks_by_world, marks_global = _collect_mark_snapshots(position_slices)
         current_net_notional = _aggregate_net_notional(position_slices)
         min_trade_notional = payload.min_trade_notional
-        for wid, p in per_world_plans.items():
-            deltas = [
-                SymbolDelta(
-                    symbol=str(d.get("symbol")),
-                    delta_qty=float(d.get("delta_qty", 0.0)),
-                    venue=str(d.get("venue")) if d.get("venue") is not None else None,
+        overlay_deltas_payload: list[dict[str, Any]] | None = None
+        if mode == "overlay":
+            per_world_orders, overlay_deltas_payload = _orders_from_overlay_deltas(
+                payload,
+                plan_resp.get("overlay_deltas"),
+                lot_size_by_symbol=lot_sizes,
+                min_trade_notional=min_trade_notional,
+                venue_policies=venue_policies,
+            )
+        else:
+            for wid, p in per_world_plans.items():
+                deltas = [
+                    SymbolDelta(
+                        symbol=str(d.get("symbol")),
+                        delta_qty=float(d.get("delta_qty", 0.0)),
+                        venue=str(d.get("venue")) if d.get("venue") is not None else None,
+                    )
+                    for d in p.get("deltas", [])
+                    if isinstance(d, Mapping)
+                ]
+                scale_by_strategy = {
+                    str(k): float(v) for k, v in (p.get("scale_by_strategy", {}) or {}).items()
+                }
+                plan_obj = RebalancePlan(
+                    world_id=str(wid),
+                    scale_world=float(p.get("scale_world", 1.0)),
+                    scale_by_strategy=scale_by_strategy,
+                    deltas=deltas,
                 )
-                for d in p.get("deltas", [])
-                if isinstance(d, Mapping)
-            ]
-            scale_by_strategy = {
-                str(k): float(v) for k, v in (p.get("scale_by_strategy", {}) or {}).items()
-            }
-            plan_obj = RebalancePlan(
-                world_id=str(wid),
-                scale_world=float(p.get("scale_world", 1.0)),
-                scale_by_strategy=scale_by_strategy,
-                deltas=deltas,
-            )
-            orders = orders_from_world_plan(
-                plan_obj,
-                options=OrderOptions(
-                    lot_size_by_symbol=lot_sizes,
-                    min_trade_notional=min_trade_notional,
-                    marks_by_symbol=marks_by_world.get(wid, {}),
-                    venue_policies=venue_policies,
-                ),
-            )
-            per_world_orders[wid] = orders
+                orders = orders_from_world_plan(
+                    plan_obj,
+                    options=OrderOptions(
+                        lot_size_by_symbol=lot_sizes,
+                        min_trade_notional=min_trade_notional,
+                        marks_by_symbol=marks_by_world.get(wid, {}),
+                        venue_policies=venue_policies,
+                    ),
+                )
+                per_world_orders[wid] = orders
 
-        # 3) Shared account global netting (optional) or overlay mode
+        # 3) Shared-account global netting or overlay execution
         shared_account = request.query_params.get("shared_account", "false").lower() in {"1", "true", "yes"}
-        mode = (payload.mode or 'scaling').lower() if hasattr(payload, 'mode') else 'scaling'
         orders_global: List[dict] | None = None
+        global_scope_shared_account = False
+        global_scope_mode: str | None = None
         policy: SharedAccountPolicy | None = getattr(
             request.app.state, "shared_account_policy", None
         )
@@ -161,6 +182,7 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
                 marks_by_symbol=marks_global,
                 venue_policies=venue_policies,
             ))
+            global_scope_shared_account = True
             evaluation = policy.evaluate(
                 orders_global,
                 marks_by_symbol=marks_global,
@@ -177,8 +199,6 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
                         "context": dict(evaluation.context),
                     },
                 )
-        elif mode in ('overlay', 'hybrid'):
-            raise NotImplementedError("Overlay mode is not implemented yet. Use mode='scaling'.")
 
         # 4) Optionally split into per-strategy orders when requested (query param)
         per_strategy = request.query_params.get("per_strategy", "false").lower() in {"1", "true", "yes"}
@@ -226,6 +246,8 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
                     )
 
         result: Dict[str, Any] = {"orders_per_world": per_world_orders}
+        if overlay_deltas_payload is not None:
+            result["overlay_deltas"] = overlay_deltas_payload
         if orders_global is not None:
             result["orders_global"] = orders_global
         if orders_per_strategy is not None:
@@ -240,6 +262,8 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
                 orders_global,
                 orders_per_strategy,
                 shared_account=shared_account,
+                global_scope_shared_account=global_scope_shared_account,
+                global_scope_mode=global_scope_mode,
             )
             result["submitted"] = submitted
             if submitted:
@@ -274,6 +298,95 @@ def _parse_bool(value: str | None, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _normalize_rebalance_mode(value: str | None) -> str:
+    mode = (value or "scaling").strip().lower()
+    return mode or "scaling"
+
+
+def _overlay_mark_snapshot(
+    payload: MultiWorldRebalanceRequest,
+) -> Mapping[tuple[str | None, str], float]:
+    overlay = payload.overlay
+    if overlay is None or not overlay.price_by_symbol:
+        return {}
+    marks: dict[tuple[str | None, str], float] = {}
+    for symbol, price in overlay.price_by_symbol.items():
+        marks[(None, str(symbol))] = float(price)
+    return marks
+
+
+def _orders_from_overlay_deltas(
+    payload: MultiWorldRebalanceRequest,
+    overlay_deltas_raw: Sequence[Mapping[str, Any]] | None,
+    *,
+    lot_size_by_symbol: Mapping[str, float],
+    min_trade_notional: float | None,
+    venue_policies: Mapping[str, VenuePolicy],
+) -> tuple[Dict[str, List[dict]], list[dict[str, Any]]]:
+    overlay = payload.overlay
+    if overlay is None:
+        raise HTTPException(
+            status_code=HTTP_422_UNPROCESSABLE,
+            detail="overlay config is required when mode='overlay'",
+        )
+
+    per_world_orders: Dict[str, List[dict]] = {
+        str(world_id): [] for world_id in payload.world_alloc_after.keys()
+    }
+    symbol_to_world: dict[str, str] = {}
+    for world_id, symbol in (overlay.instrument_by_world or {}).items():
+        symbol_key = str(symbol)
+        existing_world = symbol_to_world.get(symbol_key)
+        if existing_world is not None and existing_world != str(world_id):
+            raise HTTPException(
+                status_code=HTTP_422_UNPROCESSABLE,
+                detail={
+                    "code": "E_OVERLAY_EXECUTION_AMBIGUOUS",
+                    "message": "overlay.instrument_by_world must map each execution symbol to a single world",
+                    "symbol": symbol_key,
+                    "world_ids": sorted({existing_world, str(world_id)}),
+                },
+            )
+        symbol_to_world[symbol_key] = str(world_id)
+
+    overlay_deltas_payload: list[dict[str, Any]] = []
+    marks_by_symbol = _overlay_mark_snapshot(payload)
+    for raw in overlay_deltas_raw or ():
+        delta = SymbolDelta(
+            symbol=str(raw.get("symbol")),
+            delta_qty=float(raw.get("delta_qty", 0.0)),
+            venue=str(raw.get("venue")) if raw.get("venue") is not None else None,
+        )
+        overlay_deltas_payload.append(
+            {
+                "symbol": delta.symbol,
+                "delta_qty": delta.delta_qty,
+                "venue": delta.venue,
+            }
+        )
+        mapped_world_id = symbol_to_world.get(delta.symbol)
+        if mapped_world_id is None:
+            raise HTTPException(
+                status_code=HTTP_422_UNPROCESSABLE,
+                detail={
+                    "code": "E_OVERLAY_EXECUTION_UNMAPPED",
+                    "message": "Gateway could not map an overlay delta back to a world",
+                    "symbol": delta.symbol,
+                },
+            )
+        orders = orders_from_symbol_deltas(
+            [delta],
+            options=OrderOptions(
+                lot_size_by_symbol=lot_size_by_symbol,
+                min_trade_notional=min_trade_notional,
+                marks_by_symbol=marks_by_symbol,
+                venue_policies=venue_policies,
+            ),
+        )
+        per_world_orders.setdefault(mapped_world_id, []).extend(orders)
+    return per_world_orders, overlay_deltas_payload
 
 
 def _collect_mark_snapshots(
@@ -446,13 +559,21 @@ async def _submit_rebalance_orders(
     orders_per_strategy: Sequence[Mapping[str, Any]] | None,
     *,
     shared_account: bool,
+    global_scope_shared_account: bool,
+    global_scope_mode: str | None,
 ) -> bool:
     writer = _ensure_commit_writer(manager.commit_log_writer)
     world_modes = await _resolve_world_modes(
         world_client, _collect_world_ids(per_world_orders, orders_per_strategy)
     )
     submitted_any = await _publish_per_world(writer, database, per_world_orders, world_modes, shared_account)
-    submitted_any |= await _publish_global(writer, database, orders_global)
+    submitted_any |= await _publish_global(
+        writer,
+        database,
+        orders_global,
+        shared_account=global_scope_shared_account,
+        mode=global_scope_mode,
+    )
     submitted_any |= await _publish_per_strategy(
         writer, database, orders_per_strategy, world_modes
     )
@@ -510,6 +631,9 @@ async def _publish_global(
     writer,
     database: Database,
     orders_global: Sequence[Mapping[str, Any]] | None,
+    *,
+    shared_account: bool,
+    mode: str | None,
 ) -> bool:
     if not orders_global:
         return False
@@ -519,9 +643,9 @@ async def _publish_global(
         "global",
         "global",
         list(orders_global),
-        None,
+        mode,
         execution_domain=None,
-        shared_account=True,
+        shared_account=shared_account,
     )
 
 

@@ -1,7 +1,7 @@
 ---
 title: "Rebalancing Execution Adapter"
 tags: [operations, rebalancing]
-last_modified: 2025-11-04
+last_modified: 2026-03-06
 ---
 
 # Rebalancing Execution Adapter
@@ -41,11 +41,13 @@ for payload in orders:
     - `per_strategy=true|false` (default false)
     - `shared_account=true|false` (default false; include `orders_global` using cross-world net deltas)
     - `submit=true|false` (default false; submit batches via CommitLog)
-  - Response: `{ orders_per_world: { world_id: [order_dict...] }, orders_global?: [order_dict...], orders_per_strategy?: [ {world_id, order} ... ] }`
+  - Response: `{ orders_per_world: { world_id: [order_dict...] }, overlay_deltas?: [symbol_delta...], orders_global?: [order_dict...], orders_per_strategy?: [ {world_id, order} ... ] }`
 
 Mode selection
 - Set `mode` in the request body (`scaling` default).
-- `overlay` requires `overlay.instrument_by_world` + `overlay.price_by_symbol` and returns `overlay_deltas`; `hybrid` is not implemented and returns HTTP 501.
+- `overlay` requires `overlay.instrument_by_world` + `overlay.price_by_symbol`. `/rebalancing/execute` maps `overlay_deltas` back to the owning world and emits executable per-world orders while preserving the raw `overlay_deltas` in the response for inspection.
+- `hybrid` is not implemented and returns HTTP 501 from both planning and execution surfaces.
+- For overlay execution, `overlay.instrument_by_world` must map each execution symbol to exactly one world. Reusing the same overlay symbol across multiple worlds is rejected with HTTP 422 because Gateway cannot route that order into a single world batch.
 
 Use `per_world` for execution unless running in a shared-account mode; treat `global_deltas` as an analytical net view otherwise. When `shared_account=true` the Gateway emits a `scope="global"` batch alongside the per-world batches so downstream consumers can decide which aggregation level to honour.
 
