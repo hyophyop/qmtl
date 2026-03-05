@@ -17,9 +17,26 @@ last_modified: 2025-12-01
 - Python 3.11+
 - QMTL 설치됨 (`pip install qmtl` 또는 `uv pip install -e .[dev]`)
 
-## 1단계: 전략 작성 (3분)
+## 1단계: 프로젝트 생성 (2분)
 
-`my_strategy.py` 파일을 생성합니다:
+```bash
+qmtl init quickstart_demo
+cd quickstart_demo
+```
+
+생성되는 기본 파일:
+- `strategies/my_strategy.py`
+- `qmtl.yml`
+- `.env.example`
+
+`qmtl.yml`에는 로컬 루프 기본값도 함께 기록됩니다:
+- `project.strategy_root`
+- `project.default_strategy`
+- `project.default_world`
+
+## 2단계: 기본 전략 수정 (3분)
+
+`strategies/my_strategy.py`를 아래처럼 바꿉니다:
 
 ```python
 from qmtl.sdk import Strategy, StreamInput, Node, Runner
@@ -66,13 +83,19 @@ if __name__ == "__main__":
     print(result)
 ```
 
-## 2단계: 전략 실행 (1분)
+## 3단계: 전략 제출 (1분)
 
 ```bash
-python my_strategy.py
+uv run qmtl submit strategies.my_strategy:MomentumStrategy --world quickstart_demo --output json
 ```
 
-## 3단계: 결과 확인 (1분)
+기본 scaffold의 `MyStrategy`를 그대로 쓴다면 가장 짧은 지원 경로는 아래입니다:
+
+```bash
+uv run qmtl submit --output json
+```
+
+## 4단계: 결과 확인 (1분)
 
 성공하면 다음과 같은 결과를 받습니다:
 
@@ -99,11 +122,7 @@ python my_strategy.py
 }
 ```
 
-CLI에서도 동일하게 `--output json` 플래그로 WS/Precheck가 분리된 결과를 받을 수 있습니다:
-
-```bash
-qmtl submit strategies.momentum:MomentumStrategy --world quickstart_demo --output json
-```
+이 로컬 루프는 빠른 전략 반복을 위한 공식 개발 경로입니다. Gateway/WorldService 입력이 없거나 오래되면 조용히 승격되는 대신 `downgraded` / `safe_mode`가 표시되어야 합니다.
 
 ---
 
@@ -187,8 +206,8 @@ def compute_signal(view):
 ### 전략 제출
 
 ```bash
-# 파일 직접 제출
-qmtl submit my_strategy.py --world quickstart_demo
+# 생성된 전략 제출
+qmtl submit --output json
 ```
 
 ### 상태 확인
@@ -238,11 +257,11 @@ Error: Cannot connect to Gateway at http://localhost:8000
 
 **해결:**
 ```bash
-# Gateway 서버 시작
-qmtl gateway
+# operator Gateway 실행
+qmtl --admin gateway --config qmtl.yml
 
 # 또는 다른 터미널에서 확인
-curl http://localhost:8000/health
+curl http://localhost:8000/status
 ```
 
 ### 데이터 없음 오류

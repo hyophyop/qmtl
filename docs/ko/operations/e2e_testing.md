@@ -37,8 +37,8 @@ Docker Compose로 모든 서비스를 시작합니다. DAG Manager와 Gateway는
 docker compose -f tests/docker-compose.e2e.yml up --build -d
 ```
 
-이 명령은 Redis, Postgres, Neo4j, Kafka, Zookeeper와 함께 `qmtl service gateway`,
-`qmtl service dagmanager server` 컨테이너를 기동합니다. Gateway는 포트 `8000`을
+이 명령은 Redis, Postgres, Neo4j, Kafka, Zookeeper와 함께 operator Gateway,
+DAG Manager 컨테이너를 기동합니다. Gateway는 포트 `8000`을
 노출하며, DAG Manager gRPC 엔드포인트는 `50051`에서 접근 가능합니다.
 
 ## 테스트 실행
@@ -78,13 +78,8 @@ uv run -m pytest -n auto -q tests
 
 라이브 처리가 시작되기 전에 과거 데이터를 로드하려면 전략 실행 시 백필을 시작합니다:
 
-```bash
-qmtl tools sdk run tests.sample_strategy:SampleStrategy \
-       --start-time 1700000000 \
-       --end-time 1700003600
-```
-
-전체 워크플로 개요는 [backfill.md](backfill.md)를 참고하세요.
+제출/평가 검증은 canonical author path(`qmtl init` + `qmtl submit ... --world ...`)를 기준으로 수행하세요.
+백필 전체 워크플로는 [backfill.md](backfill.md)를 참고하세요.
 
 
 {{ nav_links() }}

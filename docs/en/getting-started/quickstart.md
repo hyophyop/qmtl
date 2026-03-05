@@ -17,9 +17,26 @@ Follow this guide to write and submit your first strategy **in 10 minutes**.
 - Python 3.11+
 - QMTL installed (`pip install qmtl` or `uv pip install -e .[dev]`)
 
-## Step 1: Write a Strategy (3 min)
+## Step 1: Create a project (2 min)
 
-Create a file `my_strategy.py`:
+```bash
+qmtl init quickstart_demo
+cd quickstart_demo
+```
+
+This creates:
+- `strategies/my_strategy.py`
+- `qmtl.yml`
+- `.env.example`
+
+`qmtl.yml` also records the local-loop defaults:
+- `project.strategy_root`
+- `project.default_strategy`
+- `project.default_world`
+
+## Step 2: Edit the starter strategy (3 min)
+
+Replace `strategies/my_strategy.py` with:
 
 ```python
 from qmtl.sdk import Strategy, StreamInput, Node, Runner
@@ -66,13 +83,19 @@ if __name__ == "__main__":
     print(result)
 ```
 
-## Step 2: Run the Strategy (1 min)
+## Step 3: Submit the Strategy (1 min)
 
 ```bash
-python my_strategy.py
+uv run qmtl submit strategies.my_strategy:MomentumStrategy --world quickstart_demo --output json
 ```
 
-## Step 3: Check Results (1 min)
+If you keep the scaffolded `MyStrategy`, the shortest supported loop is:
+
+```bash
+uv run qmtl submit --output json
+```
+
+## Step 4: Check Results (1 min)
 
 On success, you'll receive results like:
 
@@ -99,11 +122,7 @@ On success, you'll receive results like:
 }
 ```
 
-The CLI can emit the same WS/Precheck-separated JSON with:
-
-```bash
-qmtl submit strategies.momentum:MomentumStrategy --world quickstart_demo --output json
-```
+This local loop is the supported development path for fast strategy iteration. If Gateway/WorldService inputs are missing or stale, the result should surface `downgraded` / `safe_mode` rather than silently promoting execution.
 
 ---
 
@@ -187,8 +206,8 @@ After you submit, WorldService may run additional campaigns (paper/live) based o
 ### Submit Strategy
 
 ```bash
-# Submit file directly
-qmtl submit my_strategy.py --world quickstart_demo
+# Submit the scaffolded strategy
+qmtl submit --output json
 ```
 
 ### Check Status
@@ -238,11 +257,11 @@ Error: Cannot connect to Gateway at http://localhost:8000
 
 **Solution:**
 ```bash
-# Start Gateway server
-qmtl gateway
+# Start the operator gateway process
+qmtl --admin gateway --config qmtl.yml
 
 # Or verify in another terminal
-curl http://localhost:8000/health
+curl http://localhost:8000/status
 ```
 
 ### No Data Error

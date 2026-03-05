@@ -16,11 +16,12 @@ This guide follows the Core Loop paved road: **Runner.submit + world/preset**. â
 ```bash
 uv venv
 uv pip install -e .[dev]
-qmtl project init --path my_qmtl_project --preset minimal --with-sample-data
+qmtl init my_qmtl_project
 cd my_qmtl_project
 ```
 
-- `strategy.py` ships with a Core Loop example; `qmtl.yml` carries default world/gateway settings.
+- `qmtl init` creates `strategies/my_strategy.py`, `.env.example`, and `qmtl.yml` with project defaults (`project.strategy_root`, `project.default_strategy`, `project.default_world`).
+- The public strategy-author path is `qmtl init` + `qmtl submit`; older layered scaffolds are being consolidated separately.
 - Extend the SDK via `generators/`, `indicators/`, `transforms/` as needed.
 
 ## 1. Minimal Core Loop strategy
@@ -82,6 +83,10 @@ uv run qmtl submit strategies.demo:DemoStrategy \
 
 ## Appendix â€” legacy/backtest-only path
 
+- Supported local development loop:
+  - edit `strategies/my_strategy.py`
+  - run `uv run qmtl submit --output json`
+  - inspect `ws.*`, `precheck`, and `downgraded/safe_mode`
 - Local experiments without a world run via `Runner.submit(...)`. This is a secondary path and does not bypass WS/activation/queue rules.
 - TagQuery/WebSocket details, test-mode budgets, and backfill tips live in [sdk_tutorial.md](sdk_tutorial.md) and [operations/e2e_testing.md](../operations/e2e_testing.md).
 

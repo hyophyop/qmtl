@@ -143,9 +143,12 @@ pip install -e .[dev]
 ### 2. 프로젝트 초기화
 
 ```bash
-qmtl project init --path my_project --preset minimal --with-sample-data
+qmtl init my_project
 cd my_project
 ```
+
+- 공개 전략 작성자 경로는 `qmtl init`, `qmtl submit`, `qmtl status`, `qmtl world` 입니다.
+- 로컬 전략 개발 루프에서는 `strategies/my_strategy.py`를 수정한 뒤 `qmtl submit --output json`로 빠르게 검증할 수 있습니다.
 
 ### 3. 예제 실행
 
@@ -159,11 +162,11 @@ python -m qmtl.examples.general_strategy
 # 설정 검증
 uv run qmtl config validate --config qmtl/examples/qmtl.yml --offline
 
-# Gateway 시작
-qmtl service gateway --config qmtl/examples/qmtl.yml
+# Gateway 시작 (operator/admin path)
+qmtl --admin gateway --config qmtl/examples/qmtl.yml
 
-# DAG Manager 시작
-qmtl service dagmanager server --config qmtl/examples/qmtl.yml
+# DAG Manager 시작 (operator/admin path)
+qmtl --admin dagmanager-server --config qmtl/examples/qmtl.yml
 
 # WorldService 시작
 uv run uvicorn qmtl.services.worldservice.api:create_app --factory --port 8080
@@ -253,8 +256,7 @@ uv run python -m grpc_tools.protoc \
 
 ```bash
 qmtl --help
-qmtl service --help
-qmtl project --help
+qmtl --help-admin
 qmtl config --help
 ```
 

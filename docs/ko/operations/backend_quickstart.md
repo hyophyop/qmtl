@@ -45,16 +45,16 @@ Release 0.1의 공식 배포 경로는 Docker/Compose로 확정되었습니다. 
 
    기준 시작점으로 `qmtl/examples/qmtl.yml` 을 사용할 수 있습니다. 경로를 조정하거나 작업 디렉터리에 `qmtl.yml` 로 복사하면 서비스 명령이 자동으로 찾습니다.
 
-2. **Gateway** – 검증한 설정으로 진입점을 실행합니다.
+2. **Gateway** – 검증한 설정으로 operator/admin 진입점을 실행합니다.
 
    ```bash
-   qmtl service gateway --config <path-to-config>
+   qmtl --admin gateway --config <path-to-config>
    ```
 
 3. **DAG Manager** – 동일한 설정으로 오케스트레이션 서비스를 시작합니다.
 
    ```bash
-   qmtl service dagmanager server --config <path-to-config>
+   qmtl --admin dagmanager-server server --config <path-to-config>
    ```
 
 장기 실행 프로세스에서는 구성 파일을 작업 디렉터리의 `qmtl.yml` 로 복사해 명령이 자동으로 찾도록 하는 것이 좋습니다.
@@ -87,13 +87,13 @@ uv run uvicorn qmtl.services.worldservice.api:create_app --factory --host 0.0.0.
 - 구성으로 Gateway 실행:
 
 ```bash
-qmtl service gateway --config qmtl.yml
+qmtl --admin gateway --config qmtl.yml
 ```
 
 4) 동일한 구성으로 DAG Manager 시작
 
 ```bash
-qmtl service dagmanager server --config qmtl.yml
+qmtl --admin dagmanager-server server --config qmtl.yml
 ```
 
 메모
@@ -131,21 +131,22 @@ docker compose up -d
 - Neo4j 초기화(사용 중일 때):
 
 ```bash
-qmtl service dagmanager neo4j-init \
+qmtl --admin dagmanager-server neo4j-init \
   --uri bolt://localhost:7687 --user neo4j --password neo4j
 ```
 
-## 전략 실행(Gateway + WorldService)
+## canonical 로컬 루프 실행(Gateway + WorldService)
 
-샘플 전략을 Gateway와 월드 ID를 지정해 실행합니다.
+로컬 스택이 준비되면 공개 전략 작성자 경로로 바로 제출을 검증합니다.
 
 ```bash
-python -m qmtl.examples.general_strategy \
-  --gateway-url http://localhost:8000 \
-  --world-id demo
+qmtl init demo_project
+cd demo_project
+uv run qmtl submit strategies.my_strategy:MyStrategy --world demo_world --output json
 ```
 
-오프라인 실행(WS/GW 없음): `python -m qmtl.examples.general_strategy`.
+후속 상태는 `qmtl status`, `qmtl world info demo_world`로 확인하세요.
+SDK-only/오프라인 실행은 보조 경로로 남겨 둡니다.
 
 ## 문제 해결
 

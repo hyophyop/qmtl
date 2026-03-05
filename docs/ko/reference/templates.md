@@ -11,15 +11,10 @@ last_modified: 2025-08-21
 
 # 전략 템플릿
 
-`qmtl project init` 실행 시 사용할 수 있는 스타터 전략 템플릿이 함께 제공됩니다.
+공개 전략 작성자 경로는 `qmtl init <path>`입니다.
+이 문서는 현재 정리 중인 예전 layered scaffold 흐름 주변에 남아 있는 스타터 전략/템플릿 목록을 설명합니다.
 단계별 소개와 최소 동작 예시는
 [SDK 사용 가이드](../guides/sdk_tutorial.md)를 참고하세요.
-
-`--with-sample-data` 옵션으로 샘플 데이터와 분석 노트북을 함께 추가할 수 있습니다:
-
-```bash
-qmtl project init --path my_proj --preset minimal --with-sample-data
-```
 
 ## general
 
@@ -72,7 +67,7 @@ graph LR
 
 ## 백엔드 구성 템플릿
 
-`qmtl project init`으로 프로젝트를 스캐폴딩하면 생성된 `templates/` 디렉터리에 두 가지 백엔드 구성 샘플이 포함됩니다:
+layered scaffold 흐름에서는 생성된 `templates/` 디렉터리에 두 가지 백엔드 구성 샘플이 포함됩니다:
 
 * {{ code_link('qmtl/examples/templates/local_stack.example.yml', text='`local_stack.example.yml`') }} &mdash; SQLite, 선택적 Redis, 그리고 Kafka/Neo4j의 인프로세스 대체를 사용하는 경량 백엔드 스택. 외부 의존성 없이 로컬 개발 또는 스모크 테스트에 유용합니다.
 * {{ code_link('qmtl/examples/templates/backend_stack.example.yml', text='`backend_stack.example.yml`') }} &mdash; Redis, Postgres, Kafka, Neo4j 및 관측성 서비스를 포함한 프로덕션 준비 템플릿. 배포 전에 플레이스홀더 값을 실제 값으로 교체하세요.

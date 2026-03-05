@@ -92,8 +92,8 @@ qmtl:
     dagmanager.memory_repo_path: ${dagmanager.memory_repo_path}
   sample_usage:
     - "uv run qmtl config validate --config ${qmtl.config_file} --offline"
-    - "uv run qmtl service gateway --config ${qmtl.config_file}"
-    - "uv run qmtl service dagmanager server --config ${qmtl.config_file}"
+    - "uv run qmtl --admin gateway --config ${qmtl.config_file}"
+    - "uv run qmtl --admin dagmanager-server server --config ${qmtl.config_file}"
     - "python -m qmtl.examples.general_strategy --gateway-url http://localhost:${gateway.port} --world-id demo"
 notes:
   - "Optional Redis container: docker run --rm -p 6379:6379 redis:7-alpine"

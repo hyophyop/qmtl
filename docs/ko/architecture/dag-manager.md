@@ -120,10 +120,10 @@ CLI 사용법:
 
 ```
 # 스키마 초기화 (idempotent)
-qmtl service dagmanager neo4j-init --uri bolt://localhost:7687 --user neo4j --password neo4j
+qmtl --admin dagmanager-server neo4j-init --uri bolt://localhost:7687 --user neo4j --password neo4j
 
 # 현재 스키마 내보내기
-qmtl service dagmanager export-schema --uri bolt://localhost:7687 --user neo4j --password neo4j --out schema.cypher
+qmtl --admin dagmanager-server export-schema --uri bolt://localhost:7687 --user neo4j --password neo4j --out schema.cypher
 ```
 ### 1.3 NodeID 생성 규칙
 - NodeID = `blake3:<digest>`이며, 다음의 정규 직렬화 입력을 해시합니다: 
@@ -403,20 +403,20 @@ sequenceDiagram
 
 ```shell
 # Diff 예시(비파괴 읽기)
-qmtl service dagmanager diff --file dag.json
+qmtl --admin dagmanager-server diff --file dag.json
 # 큐 통계 조회
-qmtl service dagmanager queue-stats --tag indicator --interval 1h
+qmtl --admin dagmanager-server queue-stats --tag indicator --interval 1h
 # 센티널 GC 트리거
-qmtl service dagmanager gc --sentinel v1.2.3
+qmtl --admin dagmanager-server gc --sentinel v1.2.3
 # 스키마 DDL 내보내기
-qmtl service dagmanager export-schema --out schema.cypher
+qmtl --admin dagmanager-server export-schema --out schema.cypher
 ```
 
 카나리아 배포 단계는 [`docs/canary_rollout.md`](../operations/canary_rollout.md)를 참고하세요.
 
 ## 12. 서버 설정 파일 사용법
 
-`qmtl service dagmanager server` 서브커맨드는 YAML 형식의 설정 파일 하나만 받는다.
+`qmtl --admin dagmanager-server server` 서브커맨드는 YAML 형식의 설정 파일 하나만 받는다.
 아래 예시와 같이 모든 서버 옵션을 YAML에 작성하고 필요하다면 ``--config`` 옵션으로 경로를 지정한다.
 
 예시:
@@ -428,14 +428,14 @@ neo4j_password: secret
 kafka_dsn: localhost:9092
 ```
 
-``qmtl project init``가 설치하는 샘플 파일은 로컬 개발을 위해 인메모리 레포지토리와 큐를 기본값으로 사용합니다. 위 DSN 주석을 해제하면 Neo4j/Kafka 연동이 활성화됩니다.
+예시 구성 `qmtl/examples/qmtl.yml` 는 로컬 개발을 위해 인메모리 레포지토리와 큐를 기본값으로 사용합니다. DSN 필드를 채우면 Neo4j/Kafka 연동이 활성화됩니다.
 
 ```
 # 기본값으로 실행
-qmtl service dagmanager server
+qmtl --admin dagmanager-server server
 
 # YAML 설정 파일로 실행
-qmtl service dagmanager server --config qmtl/examples/qmtl.yml
+qmtl --admin dagmanager-server server --config qmtl/examples/qmtl.yml
 ```
 
 해당 명령은 `qmtl/examples/qmtl.yml` 의 ``dagmanager`` 섹션을 읽어 서버를 실행한다.

@@ -289,14 +289,14 @@ Rebalancing plans from WorldService are delivered on the `rebalancing_planned` C
 
 ### Gateway CLI Options
 
-Run the Gateway service. The ``--config`` flag is optional:
+Run the Gateway service from the explicit operator/admin surface. The ``--config`` flag is optional:
 
 ```bash
 # start with built-in defaults
-qmtl service gateway
+qmtl --admin gateway
 
 # specify a configuration file
-qmtl service gateway --config qmtl/examples/qmtl.yml
+qmtl --admin gateway --config qmtl/examples/qmtl.yml
 ```
 
 When provided, the command reads the ``gateway`` section of

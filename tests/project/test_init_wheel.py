@@ -81,3 +81,5 @@ def test_init_wheel(tmp_path: Path) -> None:
     config_text = (dest / "qmtl.yml").read_text()
     assert "project:" in config_text
     assert "strategy_root: strategies" in config_text
+    assert "default_strategy: strategies.my_strategy:MyStrategy" in config_text
+    assert "default_world: demo_world" in config_text

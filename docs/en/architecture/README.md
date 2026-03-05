@@ -44,7 +44,6 @@ See also: Architecture Glossary (../architecture/glossary.md) for canonical term
 - [Risk Signal Hub](risk_signal_hub.md): Portfolio/risk snapshot SSOT.
 
 ### Templates
-- [Layered Template System](layered_template_system.md): Project/template layering architecture.
 
 ### Engineering notes
 - [SDK Layering](../maintenance/engineering/sdk_layers.md): SDK dependency layering guide.

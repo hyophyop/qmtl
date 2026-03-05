@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import sys
+from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
 from typing import List
@@ -12,8 +13,17 @@ from qmtl.utils.i18n import _ as _t
 from .common import parse_preset_overrides
 
 
-def _discover_project_settings() -> tuple[Path | None, str | None]:
-    """Return (strategy_root, default_world) from config/env if present."""
+@dataclass(frozen=True)
+class ProjectSubmitDefaults:
+    """CLI defaults sourced from qmtl.yml and environment variables."""
+
+    strategy_root: Path | None
+    default_strategy: str | None
+    default_world: str | None
+
+
+def _discover_project_settings() -> ProjectSubmitDefaults:
+    """Return strategy discovery defaults from config/env if present."""
 
     from qmtl.runtime.sdk.configuration import (
         get_runtime_config,
@@ -26,16 +36,26 @@ def _discover_project_settings() -> tuple[Path | None, str | None]:
         if env_strategy_root is not None
         else None
     )
+    default_strategy = os.environ.get("QMTL_DEFAULT_STRATEGY")
+    default_world = os.environ.get("QMTL_DEFAULT_WORLD")
 
     config = get_runtime_config()
     if config is None:
-        return strategy_root, None
+        return ProjectSubmitDefaults(
+            strategy_root=strategy_root,
+            default_strategy=default_strategy,
+            default_world=default_world,
+        )
 
     cfg_path = get_runtime_config_path()
     base_dir = Path(cfg_path).parent if cfg_path else Path.cwd()
     if config.project.strategy_root:
         strategy_root = (base_dir / config.project.strategy_root).expanduser().resolve()
-    return strategy_root, config.project.default_world
+    return ProjectSubmitDefaults(
+        strategy_root=strategy_root,
+        default_strategy=config.project.default_strategy or default_strategy,
+        default_world=config.project.default_world or default_world,
+    )
 
 
 def _prepend_strategy_root(strategy_root: Path | None) -> None:
@@ -80,10 +100,22 @@ def _strategy_module_matches_root(module: object, strategy_root: Path) -> bool:
     return False
 
 
+def _resolve_strategy_ref(
+    strategy_ref: str | None,
+    *,
+    default_strategy: str | None,
+) -> str | None:
+    candidate = (strategy_ref or "").strip()
+    if candidate:
+        return candidate
+    fallback = (default_strategy or "").strip()
+    return fallback or None
+
+
 def cmd_submit(argv: List[str]) -> int:
     """Submit a strategy for evaluation."""
-    strategy_root, config_default_world = _discover_project_settings()
-    default_world = config_default_world or os.environ.get("QMTL_DEFAULT_WORLD") or "__default__"
+    defaults = _discover_project_settings()
+    default_world = defaults.default_world or "__default__"
 
     parser = argparse.ArgumentParser(
         prog="qmtl submit",
@@ -91,7 +123,10 @@ def cmd_submit(argv: List[str]) -> int:
     )
     parser.add_argument(
         "strategy",
-        help=_t("Strategy file path or module:class (e.g., my_strategy.py or strategies.my:MyStrategy)"),
+        nargs="?",
+        help=_t(
+            "Strategy file path or module:class. Defaults to project.default_strategy in qmtl.yml when omitted"
+        ),
     )
     parser.add_argument(
         "--world", "-w",
@@ -140,11 +175,24 @@ def cmd_submit(argv: List[str]) -> int:
     if not args.world:
         print(_t("Error: world must be provided (use --world or set QMTL_DEFAULT_WORLD)"), file=sys.stderr)
         return 1
-    _prepend_strategy_root(strategy_root)
+    strategy_ref = _resolve_strategy_ref(
+        args.strategy,
+        default_strategy=defaults.default_strategy,
+    )
+    if strategy_ref is None:
+        print(
+            _t(
+                "Error: strategy must be provided (pass a strategy ref or set project.default_strategy / QMTL_DEFAULT_STRATEGY)"
+            ),
+            file=sys.stderr,
+        )
+        return 1
+    args.strategy = strategy_ref
+    _prepend_strategy_root(defaults.strategy_root)
     overrides = parse_preset_overrides(args.preset_override or [])
-    strategy_cls = _load_strategy(args.strategy)
+    strategy_cls = _load_strategy(strategy_ref)
     if strategy_cls is None:
-        print(_t("Error: Could not load strategy from '{}'").format(args.strategy), file=sys.stderr)
+        print(_t("Error: Could not load strategy from '{}'").format(strategy_ref), file=sys.stderr)
         return 1
     return _submit_and_print_result(strategy_cls, args, overrides)
 

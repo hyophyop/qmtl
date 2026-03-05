@@ -27,15 +27,15 @@ print(result.status, result.world)
 ## CLI
 
 ```bash
-# Submit strategy with preset policy
-qmtl submit my_strategy.py --world demo --preset aggressive
+# Submit the scaffolded strategy into a world-governed run
+qmtl submit strategies.my_strategy:MyStrategy --world demo
 
 # Create/inspect worlds with preset policies
 qmtl world create demo --policy conservative
 qmtl world info demo
 
 # Operator commands require --admin
-qmtl --admin gw --config qmtl.yml
+qmtl --admin gateway --config qmtl.yml
 ```
 
 ## Gateway `/strategies`
@@ -75,7 +75,7 @@ from qmtl.runtime.brokerage import PerShareFeeModel, VolumeShareSlippageModel
 ## Checklist
 
 - [ ] Replace all `Runner.backtest`/`Runner.dryrun`/`Runner.live`/`Runner.run`/`Runner.offline` with `Runner.submit(...)`.
-- [ ] CLI: use `qmtl submit [--preset <name>]` instead of legacy `service sdk run/offline`.
+- [ ] CLI: use `qmtl submit strategies.my_strategy:MyStrategy --world <world>` instead of legacy `service sdk run/offline`.
 - [ ] Configure world policy via `qmtl world create --policy <preset>` or `POST /worlds/{id}/policies` (preset + overrides supported).
 - [ ] Inspect world policy via `qmtl world info` or `GET /worlds/{id}/describe` (returns preset, version, human-readable summary).
 - [ ] Drop `run_type` and client-selected modes from Gateway `/strategies` requests; rely on `world_id` and WS governance (`effective_mode`).

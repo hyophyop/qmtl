@@ -118,7 +118,7 @@ Monitor `http://localhost:8000/metrics` during execution or check the printed ou
 
 ## Gateway & DAG Manager 지표
 
-두 서비스 모두 Prometheus 엔드포인트를 노출합니다. DAG Manager 메트릭 서버는 `qmtl service dagmanager metrics`로 시작하세요(기본 포트 8000은 `--port`로 변경 가능).
+두 서비스 모두 Prometheus 엔드포인트를 노출합니다. DAG Manager 메트릭 서버는 `qmtl --admin dagmanager-server metrics`로 시작하세요(기본 포트 8000은 `--port`로 변경 가능).
 서킷 브레이커 활동은 다음 게이지로 추적합니다:
 
 - `dagclient_breaker_open_total` — Gateway gRPC 클라이언트가 오픈될 때마다 증가

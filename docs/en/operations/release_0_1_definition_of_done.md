@@ -36,8 +36,8 @@ This document defines the conditions that must be met to mark QMTL Release 0.1 a
 The commands below are required surfaces for Release 0.1, and each must be runnable at least once.
 
 - Config validation: `uv run qmtl config validate --config <path-to-config> --offline`
-- Start Gateway: `qmtl service gateway --config <path-to-config>`
-- Start DAG Manager: `qmtl service dagmanager server --config <path-to-config>`
+- Start Gateway: `qmtl --admin gateway --config <path-to-config>`
+- Start DAG Manager: `qmtl --admin dagmanager-server server --config <path-to-config>`
 - Run sample strategy (online): `python -m qmtl.examples.general_strategy --gateway-url http://localhost:8000 --world-id demo`
 
 See the [Backend Quickstart](backend_quickstart.md) for the full startup sequence.

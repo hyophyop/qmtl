@@ -12,10 +12,12 @@ from qmtl.services.worldservice.shared_schemas import ActivationEnvelope, Decisi
 from qmtl.runtime.sdk.submit import (
     AutoReturnsConfig,
     PrecheckResult,
+    ResolvedSubmitContext,
     WsEvalResult,
     _build_submit_result_from_validation,
     _derive_returns_with_auto,
     _metrics_only_enabled,
+    _resolve_submit_context,
     submit,
     submit_async,
 )
@@ -237,6 +239,21 @@ class TestSubmitResult:
     def test_submit_requires_nonempty_world(self):
         with pytest.raises(ValueError):
             submit(SimpleStrategy, world="   ")
+
+    def test_resolve_submit_context_separates_public_defaults(self, monkeypatch):
+        monkeypatch.setenv("QMTL_DEFAULT_WORLD", "env_world")
+        monkeypatch.setenv("QMTL_DEFAULT_PRESET", "moderate")
+        monkeypatch.delenv("QMTL_GATEWAY_URL", raising=False)
+        monkeypatch.delenv("GATEWAY_URL", raising=False)
+
+        context = _resolve_submit_context(world=None, preset=None)
+
+        assert context == ResolvedSubmitContext(
+            world="env_world",
+            preset="moderate",
+            gateway_url="http://localhost:8000",
+            execution_domain="backtest",
+        )
 
     def test_ws_eval_overrides_validation_fields_and_preserves_precheck(self):
         class DummyMetrics:

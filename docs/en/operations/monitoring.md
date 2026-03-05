@@ -118,7 +118,7 @@ Monitor `http://localhost:8000/metrics` during execution or check the printed ou
 
 ## Gateway & DAG Manager Metrics
 
-Both services expose a Prometheus endpoint. Start the DAG Manager metrics server with `qmtl service dagmanager metrics` (use `--port` to change the default 8000).
+Both services expose a Prometheus endpoint. Start the DAG Manager metrics server with `qmtl --admin dagmanager-server metrics` (use `--port` to change the default 8000).
 Circuit breaker activity is tracked via gauges:
 
 - `dagclient_breaker_open_total` — increments each time the Gateway's gRPC client trips open.

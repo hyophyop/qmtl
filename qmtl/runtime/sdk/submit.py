@@ -315,6 +315,16 @@ ENV_DEFAULT_WORLD = "QMTL_DEFAULT_WORLD"
 ENV_DEFAULT_PRESET = "QMTL_DEFAULT_PRESET"
 
 
+@dataclass(frozen=True)
+class ResolvedSubmitContext:
+    """Author-facing defaults resolved before orchestration begins."""
+
+    world: str
+    preset: str
+    gateway_url: str
+    execution_domain: str
+
+
 def _get_gateway_url(world: str | None = None) -> str:
     """Get gateway URL from environment or use default."""
     explicit = os.environ.get(ENV_GATEWAY_URL)
@@ -375,6 +385,23 @@ def _world_id_candidates(world_id: str) -> tuple[str, ...]:
 def _get_default_preset() -> str:
     """Get default preset from environment or use default."""
     return os.environ.get(ENV_DEFAULT_PRESET, DEFAULT_PRESET)
+
+
+def _resolve_submit_context(
+    *,
+    world: str | None,
+    preset: str | None,
+) -> ResolvedSubmitContext:
+    """Resolve public submit defaults before entering orchestration stages."""
+
+    resolved_world = _normalize_world_id(world or _get_default_world())
+    resolved_preset = preset or _get_default_preset()
+    return ResolvedSubmitContext(
+        world=resolved_world,
+        preset=resolved_preset,
+        gateway_url=_get_gateway_url(resolved_world),
+        execution_domain=DEFAULT_SUBMIT_EXECUTION_DOMAIN,
+    )
 
 
 def _policy_to_human_readable(policy: Any) -> str:
@@ -755,10 +782,11 @@ async def submit_async(
     
     >>> result = await Runner.submit_async(MyStrategy, world="prod")
     """
-    resolved_world = _normalize_world_id(world or _get_default_world())
-    resolved_preset = preset or _get_default_preset()
-    gateway_url = _get_gateway_url(resolved_world)
-    execution_domain = DEFAULT_SUBMIT_EXECUTION_DOMAIN
+    submit_context = _resolve_submit_context(world=world, preset=preset)
+    resolved_world = submit_context.world
+    resolved_preset = submit_context.preset
+    gateway_url = submit_context.gateway_url
+    execution_domain = submit_context.execution_domain
     services = get_global_services()
     strategy, strategy_class_name = _strategy_from_input(strategy_cls)
     world_ctx: WorldContext | None = None

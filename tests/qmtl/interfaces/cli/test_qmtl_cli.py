@@ -29,3 +29,12 @@ def test_qmtl_admin_help_lists_operator_commands():
     text = _output(result)
     for cmd in ("gw", "gateway", "dagmanager-server", "taglint"):
         assert cmd in text
+
+
+def test_qmtl_admin_help_via_admin_flag():
+    """Admin help should also work via `--admin --help`."""
+    result = _run_cli("--admin", "--help")
+    assert result.returncode == 0
+    text = _output(result)
+    for cmd in ("gw", "gateway", "dagmanager-server", "taglint"):
+        assert cmd in text

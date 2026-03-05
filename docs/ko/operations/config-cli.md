@@ -44,9 +44,9 @@ dagmanager:
 # 먼저 검증합니다.
 uv run qmtl config validate --config qmtl/examples/qmtl.yml --offline
 
-# 동일한 YAML로 서비스 실행.
-qmtl service gateway --config qmtl/examples/qmtl.yml
-qmtl service dagmanager server --config qmtl/examples/qmtl.yml
+# 동일한 YAML로 operator 서비스 실행.
+qmtl --admin gateway --config qmtl/examples/qmtl.yml
+qmtl --admin dagmanager-server server --config qmtl/examples/qmtl.yml
 ```
 
 구성 파일을 찾지 못하면 서비스는 경고를 로그에 남기고 내장 기본값으로 폴백하므로, 시작 시 잘못된 경로를 감지할 수 있습니다.

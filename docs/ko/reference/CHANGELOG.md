@@ -25,6 +25,7 @@ last_modified: 2026-01-10
 **CLI 변경:**
 - **플랫 CLI 구조**: `qmtl submit`, `qmtl status`, `qmtl world`, `qmtl init`가 기존 4단계 계층을 대체합니다.
 - **레거시 명령 제거**: `qmtl service sdk`, `qmtl tools sdk`, `qmtl project init`는 더 이상 제공되지 않으며 v2 명령을 사용해야 합니다.
+- **운영자 표면 분리**: 서비스 관리 흐름은 공개 author 명령이 아니라 명시적 `qmtl --admin ...` 명령을 사용합니다.
 - **설정 단순화**: 복잡한 `gating_policy` YAML 대신 preset 기반 설정(`sandbox | conservative | moderate | aggressive`)을 사용합니다.
 
 ### ✨ New Features

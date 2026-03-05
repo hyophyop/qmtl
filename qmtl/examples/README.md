@@ -1,7 +1,17 @@
-# QMTL Strategy Project
+# QMTL Example Assets
 
-This README serves as a template for projects created with `qmtl project init`.
-It outlines basic setup and testing instructions.
+This directory contains repository example assets used for reference and tests.
+It is not a user-facing scaffold.
+
+The public strategy-author scaffold is now:
+
+```bash
+qmtl init <path>
+```
+
+That scaffold centers on `strategies/my_strategy.py` plus `qmtl submit`.
+Treat the files here as example modules you can read or adapt, not as an
+alternate project layout.
 
 ## Setup
 
@@ -10,21 +20,13 @@ uv venv
 uv pip install -e qmtl[dev]
 ```
 
-## Running
+## Using with the public scaffold
 
-Run strategies against a Gateway-connected WorldService. The Gateway will
-propagate activation envelopes that include the new freeze/drain flags, so
-orders remain gated off until WorldService promotes the world into a runnable
-execution domain:
+Create a project with `qmtl init <path>`, edit `strategies/my_strategy.py`, and
+submit it through the public CLI:
 
 ```bash
-python strategies/my_strategy.py --world-id demo --gateway-url http://localhost:8000
-```
-
-For quick offline execution, omit the flags:
-
-```bash
-python strategies/my_strategy.py
+qmtl submit --output json
 ```
 
 ### WorldService gating quickstart
@@ -51,10 +53,8 @@ Run the test suite in parallel and treat warnings as errors:
 uv run -m pytest -W error -n auto
 ```
 
-## Directory Layout
+## Layout
 
-- `nodes/` – node processor implementations.
-- `dags/` – strategy DAG definitions.
-- `tests/` – unit tests for nodes and DAGs.
-
-Customize this file with project-specific details.
+- `strategies/` contains example strategy modules used by docs and tests.
+- `scripts/` contains helper/demo scripts for local operator workflows.
+- `docs/` contains reference notes for example flows such as world gating.

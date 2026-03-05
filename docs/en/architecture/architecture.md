@@ -676,6 +676,6 @@ The golden-signal To-Be is materialised in the dashboards/SLOs documented in `..
 - Policy bundles should declare `share_policy`, edge overrides, and risk limits
   explicitly so promotion pipelines remain auditable.
 - Keep layer templates loosely coupled and document changes in
-  [layered_template_system.md](layered_template_system.md).
+  the public `qmtl init` scaffold and strategy workflow guides.
 
 {{ nav_links() }}

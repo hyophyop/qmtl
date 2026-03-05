@@ -16,9 +16,12 @@ Core Loop paved road only: world-driven `Runner.submit`, WS envelopes as SSOT, a
 ```bash
 uv venv
 uv pip install -e .[dev]
-qmtl project init --path my_qmtl_project --preset minimal --with-sample-data
+qmtl init my_qmtl_project
 cd my_qmtl_project
 ```
+
+- `qmtl init` is the public strategy-author scaffold path.
+- For fast local iteration, edit `strategies/my_strategy.py` and submit it with `qmtl submit`.
 
 ## 1. Strategy skeleton
 

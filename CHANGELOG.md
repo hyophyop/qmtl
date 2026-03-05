@@ -14,6 +14,7 @@ This release implements the QMTL Simplification Proposal, fundamentally restruct
 **CLI Changes:**
 - **Flat CLI structure**: `qmtl submit`, `qmtl status`, `qmtl world`, `qmtl init` replace the old 4-level hierarchy.
 - **Legacy commands removed**: `qmtl service sdk`, `qmtl tools sdk`, `qmtl project init` are no longer available; use v2 commands exclusively.
+- **Operator surface**: service-management flows use explicit `qmtl --admin ...` commands rather than public author commands.
 - **Simplified configuration**: Complex gating_policy YAML replaced with preset-based config (`sandbox | conservative | moderate | aggressive`).
 
 ### ✨ New Features
