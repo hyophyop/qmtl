@@ -11,12 +11,14 @@ from qmtl.services.worldservice.shared_schemas import ActivationEnvelope, Decisi
 
 from qmtl.runtime.sdk.submit import (
     AutoReturnsConfig,
+    PreparedSubmitSession,
     PrecheckResult,
     ResolvedSubmitContext,
     WsEvalResult,
     _build_submit_result_from_validation,
     _derive_returns_with_auto,
     _metrics_only_enabled,
+    _prepare_submit_session,
     _resolve_submit_context,
     submit,
     submit_async,
@@ -254,6 +256,50 @@ class TestSubmitResult:
             gateway_url="http://localhost:8000",
             execution_domain="backtest",
         )
+
+    def test_prepare_submit_session_sets_compute_context_for_class(self):
+        session = _prepare_submit_session(
+            SimpleStrategy,
+            world_id="prepared_world",
+            execution_domain="backtest",
+        )
+
+        assert session == PreparedSubmitSession(
+            strategy=session.strategy,
+            strategy_class_name="SimpleStrategy",
+            compute_context=session.compute_context,
+        )
+        assert session.compute_context.world_id == "prepared_world"
+        assert session.compute_context.execution_domain == "backtest"
+        assert getattr(session.strategy, "compute_context") == {
+            "world_id": "prepared_world",
+            "execution_domain": "backtest",
+        }
+
+    def test_prepare_submit_session_accepts_strategy_instance(self):
+        strategy = SimpleStrategy()
+
+        session = _prepare_submit_session(
+            strategy,
+            world_id="instance_world",
+            execution_domain="shadow",
+        )
+
+        assert session.strategy is strategy
+        assert session.strategy_class_name == "SimpleStrategy"
+        assert session.compute_context.world_id == "instance_world"
+        assert session.compute_context.execution_domain == "shadow"
+        assert getattr(strategy, "compute_context") == {
+            "world_id": "instance_world",
+            "execution_domain": "shadow",
+        }
+
+    def test_submit_sync_uses_shared_default_resolution(self, monkeypatch):
+        monkeypatch.setenv("QMTL_DEFAULT_WORLD", "sync_default_world")
+
+        result = submit(SimpleStrategy)
+
+        assert result.world == "sync_default_world"
 
     def test_ws_eval_overrides_validation_fields_and_preserves_precheck(self):
         class DummyMetrics:

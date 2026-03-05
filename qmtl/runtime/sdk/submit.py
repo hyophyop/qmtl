@@ -325,6 +325,15 @@ class ResolvedSubmitContext:
     execution_domain: str
 
 
+@dataclass(frozen=True)
+class PreparedSubmitSession:
+    """Prepared strategy/session state before orchestration stages start."""
+
+    strategy: "Strategy"
+    strategy_class_name: str
+    compute_context: "ComputeContext"
+
+
 def _get_gateway_url(world: str | None = None) -> str:
     """Get gateway URL from environment or use default."""
     explicit = os.environ.get(ENV_GATEWAY_URL)
@@ -401,6 +410,33 @@ def _resolve_submit_context(
         preset=resolved_preset,
         gateway_url=_get_gateway_url(resolved_world),
         execution_domain=DEFAULT_SUBMIT_EXECUTION_DOMAIN,
+    )
+
+
+def _prepare_submit_session(
+    strategy_cls: type["Strategy"] | "Strategy",
+    *,
+    world_id: str,
+    execution_domain: str,
+) -> PreparedSubmitSession:
+    """Prepare the author-facing strategy/session state before orchestration."""
+
+    strategy, strategy_class_name = _strategy_from_input(strategy_cls)
+
+    from qmtl.foundation.common.compute_key import ComputeContext
+
+    compute_context = ComputeContext(
+        world_id=world_id,
+        execution_domain=execution_domain,
+    )
+    setattr(strategy, "compute_context", {
+        "world_id": world_id,
+        "execution_domain": execution_domain,
+    })
+    return PreparedSubmitSession(
+        strategy=strategy,
+        strategy_class_name=strategy_class_name,
+        compute_context=compute_context,
     )
 
 
@@ -788,21 +824,18 @@ async def submit_async(
     gateway_url = submit_context.gateway_url
     execution_domain = submit_context.execution_domain
     services = get_global_services()
-    strategy, strategy_class_name = _strategy_from_input(strategy_cls)
-    world_ctx: WorldContext | None = None
-    gateway_available = False
-
-    from qmtl.foundation.common.compute_key import ComputeContext
-    compute_context = ComputeContext(
+    session = _prepare_submit_session(
+        strategy_cls,
         world_id=resolved_world,
         execution_domain=execution_domain,
     )
+    strategy = session.strategy
+    strategy_class_name = session.strategy_class_name
+    compute_context = session.compute_context
+    world_ctx: WorldContext | None = None
+    gateway_available = False
 
     context_override: dict[str, Any] | None = None
-    setattr(strategy, "compute_context", {
-        "world_id": resolved_world,
-        "execution_domain": execution_domain,
-    })
 
     try:
         strategy.on_start()
@@ -2049,7 +2082,7 @@ def submit(
     """
     return _run_coroutine_blocking(submit_async(
         strategy_cls,
-        world=_normalize_world_id(world or _get_default_world()),
+        world=world,
         preset=preset,
         preset_mode=preset_mode,
         preset_version=preset_version,
