@@ -2,7 +2,7 @@
 title: "스키마 — Decision/Activation & Events"
 tags: [reference, schemas]
 author: "QMTL Team"
-last_modified: 2025-08-29
+last_modified: 2026-03-06
 ---
 
 {{ nav_links() }}
@@ -65,8 +65,10 @@ validate_schema(df, "bar")
 
 `qmtl.yml` 의 `connectors.schema_registry_url`(또는 레거시 `QMTL_SCHEMA_REGISTRY_URL`)을 설정하면 외부 스키마 레지스트리를 통해 `schema_id` 를 해석할 수 있습니다. `qmtl/foundation/schema/registry.py` 에 경량 인메모리 클라이언트가 제공되며, 프로덕션 배포에서는 Confluent 또는 Redpanda 클라이언트로 교체할 수 있습니다.
 
-## ControlBus CloudEvents — Protobuf 마이그레이션 경로
+## ControlBus 이벤트 인코딩
 
-ControlBus는 현재 JSON을 지원합니다. `qmtl/services/gateway/controlbus_codec.py` 에 있는 플레이스홀더 코덱을 통해 CloudEvents-over-Protobuf 마이그레이션 경로가 제공되며, `content_type=application/cloudevents+proto` 헤더를 첨부하면서 호환성을 위해 JSON 페이로드를 유지합니다. 소비자는 헤더 기반 라우팅과 디코딩을 수행하고, 모든 소비자가 새 헤더를 인식할 때까지 듀얼 퍼블리싱으로 롤아웃할 수 있습니다.
+Gateway의 공개 ControlBus 계약은 JSON 전용입니다. 이벤트는 UTF-8 JSON
+객체로 교환되며, 공개 스키마 표면에는 CloudEvents-over-Protobuf 변형이나
+`application/cloudevents+proto` 기반 콘텐츠 협상 경로가 포함되지 않습니다.
 
 {{ nav_links() }}

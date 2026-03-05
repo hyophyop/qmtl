@@ -5,7 +5,6 @@ import contextlib
 import hashlib
 import json
 import logging
-import typing
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol
 
@@ -15,7 +14,7 @@ from qmtl.foundation.common.tagquery import MatchMode
 from qmtl.services.observability import add_span_attributes, build_observability_fields
 from .ws import WebSocketHub
 from . import metrics as gw_metrics
-from .controlbus_codec import decode as decode_cb, PROTO_CONTENT_TYPE
+from .controlbus_codec import decode as decode_cb
 from .event_models import RebalancingPlannedData, SentinelWeightData
 from .controlbus_ack import ActivationAckProducer
 from .world_payloads import augment_activation_payload
@@ -207,8 +206,8 @@ class ControlBusConsumer:
 
     def _parse_kafka_message(self, message: Any) -> ControlBusMessage:
         headers = self._decode_headers(message.headers)
-        event = self._decode_event(message.value, headers.get("content_type"))
-        data = self._extract_data(event, headers.get("content_type"))
+        event = self._decode_event(message.value)
+        data = self._extract_data(event)
         etag = (data.get("etag") or headers.get("etag") or "")
         run_id = (data.get("run_id") or headers.get("run_id") or "")
         timestamp_ms = getattr(message, "timestamp", None)
@@ -235,22 +234,13 @@ class ControlBusConsumer:
         }
 
     @staticmethod
-    def _decode_event(raw_value: Any, content_type: str | None) -> dict[str, Any]:
-        if content_type == PROTO_CONTENT_TYPE:
-            payload = raw_value if isinstance(raw_value, (bytes, bytearray)) else str(raw_value).encode()
-            return decode_cb(payload)
-
-        try:
-            if isinstance(raw_value, (bytes, bytearray)):
-                return typing.cast(dict[str, Any], json.loads(raw_value.decode()))
-            return typing.cast(dict[str, Any], json.loads(raw_value))
-        except Exception:  # pragma: no cover - malformed message
-            return {}
+    def _decode_event(raw_value: Any) -> dict[str, Any]:
+        if isinstance(raw_value, (bytes, bytearray, str)):
+            return decode_cb(raw_value)
+        return decode_cb(str(raw_value))
 
     @staticmethod
-    def _extract_data(event: dict[str, Any], content_type: str | None) -> dict[str, Any]:
-        if content_type == PROTO_CONTENT_TYPE:
-            return event
+    def _extract_data(event: dict[str, Any]) -> dict[str, Any]:
         nested = event.get("data", event)
         return nested if isinstance(nested, dict) else event
 

@@ -1,7 +1,7 @@
 ---
 title: "리밸런싱 실행 어댑터"
 tags: [operations, rebalancing]
-last_modified: 2025-11-04
+last_modified: 2026-03-06
 ---
 
 # 리밸런싱 실행 어댑터
@@ -46,11 +46,13 @@ for payload in orders:
     - `per_strategy=true|false` (기본 false)
     - `shared_account=true|false` (기본 false, 전월드 넷팅 시 `orders_global` 포함)
     - `submit=true|false` (기본 false, Commit Log 경로로 배치 전송)
-  - 응답: `{ orders_per_world: { world_id: [order_dict...] }, orders_global?: [order_dict...], orders_per_strategy?: [ {world_id, order} ... ] }`
+  - 응답: `{ orders_per_world: { world_id: [order_dict...] }, overlay_deltas?: [symbol_delta...], orders_global?: [order_dict...], orders_per_strategy?: [ {world_id, order} ... ] }`
 
 모드 선택
 - 요청 바디에 `mode`를 지정하세요(`scaling` 기본).
-- `overlay`는 `overlay.instrument_by_world` + `overlay.price_by_symbol`이 필요하며 `overlay_deltas`를 반환합니다. `hybrid`는 미구현이며 HTTP 501을 반환합니다.
+- `overlay`는 `overlay.instrument_by_world` + `overlay.price_by_symbol`이 필요하며, `/rebalancing/execute`에서 `overlay_deltas`를 해당 월드의 실행 주문으로 다시 매핑하고 원본 `overlay_deltas`도 응답에 함께 남깁니다.
+- `hybrid`는 plan/apply/execute 공개 표면 모두에서 미구현이며 HTTP 501을 반환합니다.
+- 오버레이 실행에서는 하나의 실행 심볼이 정확히 하나의 월드에만 매핑되어야 합니다. 같은 오버레이 심볼을 여러 월드가 재사용하면 Gateway가 단일 월드 배치로 라우팅할 수 없어 HTTP 422로 거부합니다.
 
 공유계정 모드가 아닌 경우에는 **월드별** `per_world` 결과만 실행하고, `global_deltas`는 분석용으로만 사용하세요. `shared_account=true` 인 경우 Gateway는 `scope="global"` 배치를 `per_world` 배치와 함께 기록해 다운스트림 소비자가 원하는 집계 레벨을 선택할 수 있습니다.
 

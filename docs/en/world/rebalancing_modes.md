@@ -1,7 +1,7 @@
 ---
 title: "Rebalancing Modes: Scaling vs Overlay"
 tags: [world, rebalancing]
-last_modified: 2025-11-04
+last_modified: 2026-03-06
 ---
 
 # Rebalancing Modes: Scaling vs Overlay
@@ -36,7 +36,10 @@ Status
 - Overlay is supported when `overlay.instrument_by_world` and `overlay.price_by_symbol` are provided. Requests missing config return HTTP 422. Hybrid remains disabled and returns HTTP 501.
 
 Gateway execution
-- `POST /rebalancing/execute` honors `mode` and `shared_account`. Overlay plans include `overlay_deltas` (per-world overlay trades). Hybrid is not implemented and raises HTTP 501.
+- `POST /rebalancing/execute` honors `mode` and `shared_account`.
+- Overlay plans expose `overlay_deltas`, and the Gateway maps them back into executable per-world orders while preserving `overlay_deltas` for inspection.
+- Overlay execution assumes `overlay.instrument_by_world` maps each execution symbol to a single world. Duplicate overlay symbols across worlds are rejected with HTTP 422 on the Gateway execution surface.
+- Hybrid remains unavailable and returns HTTP 501 on the public execution surface.
 
 Pluggability
 - Scaling engine is active (`MultiWorldProportionalRebalancer`).

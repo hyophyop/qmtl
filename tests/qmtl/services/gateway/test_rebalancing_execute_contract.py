@@ -119,6 +119,58 @@ async def test_execute_contract_v2_plan(gateway_app_factory):
 
 
 @pytest.mark.asyncio
+async def test_execute_contract_overlay_plan_uses_overlay_deltas(gateway_app_factory):
+    """Gateway should translate overlay deltas into per-world execution orders."""
+
+    plan_fixture = {
+        "schema_version": 2,
+        "per_world": {},
+        "global_deltas": [],
+        "overlay_deltas": [
+            {"symbol": "BTCUSDT_PERP", "delta_qty": 0.5, "venue": None},
+        ],
+    }
+
+    payload = {
+        **_default_payload(),
+        "mode": "overlay",
+        "overlay": {
+            "instrument_by_world": {"w1": "BTCUSDT_PERP"},
+            "price_by_symbol": {"BTCUSDT_PERP": 100_000.0},
+            "min_order_notional": 10.0,
+        },
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/rebalancing/plan":
+            body = json.loads(request.content.decode())
+            assert body["mode"] == "overlay"
+            return httpx.Response(200, json=plan_fixture)
+        raise AssertionError(f"Unexpected path {request.url.path}")
+
+    async with gateway_app_factory(
+        handler,
+        app_kwargs={"rebalance_schema_version": 2},
+    ) as ctx:
+        resp = await ctx.client.post("/rebalancing/execute", json=payload)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["overlay_deltas"] == plan_fixture["overlay_deltas"]
+    assert body["orders_per_world"] == {
+        "w1": [
+            {
+                "symbol": "BTCUSDT_PERP",
+                "quantity": 0.5,
+                "side": "buy",
+                "time_in_force": "GTC",
+            }
+        ]
+    }
+    assert "orders_global" not in body
+
+
+@pytest.mark.asyncio
 async def test_execute_contract_reports_downgraded_version_on_fallback(
     gateway_app_factory,
 ):
@@ -164,3 +216,39 @@ async def test_execute_contract_reports_downgraded_version_on_fallback(
     assert payload["alpha_metrics_capable"] is False
     assert observed_versions == [2, None]
 
+
+@pytest.mark.asyncio
+async def test_execute_contract_overlay_mode_returns_per_world_orders(gateway_app_factory):
+    plan_fixture = {
+        "schema_version": 2,
+        "per_world": {},
+        "global_deltas": [],
+        "overlay_deltas": [
+            {"symbol": "ES_PERP", "delta_qty": 3.0, "venue": "cme"},
+        ],
+    }
+
+    payload = _default_payload()
+    payload["mode"] = "overlay"
+    payload["overlay"] = {
+        "instrument_by_world": {"w1": "ES_PERP"},
+        "price_by_symbol": {"ES_PERP": 5000.0},
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/rebalancing/plan":
+            return httpx.Response(200, json=plan_fixture)
+        if request.method == "GET" and request.url.path == "/health":
+            return httpx.Response(200, json={"status": "ok"})
+        raise AssertionError(f"Unexpected path {request.url.path}")
+
+    async with gateway_app_factory(
+        handler,
+        app_kwargs={"rebalance_schema_version": 2, "alpha_metrics_capable": True},
+    ) as ctx:
+        resp = await ctx.client.post("/rebalancing/execute", json=payload)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["orders_per_world"]["w1"][0]["symbol"] == "ES_PERP"
+    assert body["overlay_deltas"][0]["symbol"] == "ES_PERP"

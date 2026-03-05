@@ -1,7 +1,7 @@
 ---
 title: "리밸런싱 모드: 스케일링 vs 오버레이"
 tags: [world, rebalancing]
-last_modified: 2025-11-04
+last_modified: 2026-03-06
 ---
 
 # 리밸런싱 모드: 스케일링 vs 오버레이
@@ -36,7 +36,10 @@ QMTL에서의 선택
 - 오버레이는 `overlay.instrument_by_world`, `overlay.price_by_symbol`이 함께 전달될 때 동작합니다. 구성값이 없으면 HTTP 422를 반환합니다. 하이브리드는 여전히 미구현이며 HTTP 501을 반환합니다.
 
 게이트웨이 실행
-- `POST /rebalancing/execute`는 `mode`와 `shared_account` 플래그에 따라 동작합니다. 오버레이 플랜에는 월드별 오버레이 주문(`overlay_deltas`)이 포함됩니다. 하이브리드는 미구현이며 HTTP 501을 반환합니다.
+- `POST /rebalancing/execute`는 `mode`와 `shared_account` 플래그에 따라 동작합니다.
+- 오버레이 플랜의 `overlay_deltas`는 Gateway에서 실행 가능한 월드별 주문으로 다시 매핑되며, 점검용으로 원본 `overlay_deltas`도 함께 유지됩니다.
+- 오버레이 실행은 `overlay.instrument_by_world`가 각 실행 심볼을 하나의 월드에만 매핑한다고 가정합니다. 동일한 오버레이 심볼을 여러 월드가 공유하면 Gateway 실행 표면에서 HTTP 422로 거부됩니다.
+- 하이브리드는 공개 실행 표면에서 계속 미구현이며 HTTP 501을 반환합니다.
 
 모듈 교체(플러그형)
 - 스케일링 엔진은 활성화되어 있습니다(`MultiWorldProportionalRebalancer`).
