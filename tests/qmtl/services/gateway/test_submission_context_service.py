@@ -164,7 +164,7 @@ async def test_build_without_worlds() -> None:
 
 
 @pytest.mark.asyncio
-async def test_build_falls_back_to_world_id_and_records_deprecation() -> None:
+async def test_build_ignores_legacy_world_id_field() -> None:
     service = ComputeContextService()
     payload = StrategySubmit(
         dag_json='{"schema_version": "v1", "nodes": []}',
@@ -173,12 +173,9 @@ async def test_build_falls_back_to_world_id_and_records_deprecation() -> None:
         node_ids_crc32=0,
     )
 
-    counter = gw_metrics.strategy_submit_deprecated_world_id_total
-    counter._value.set(0)
     strategy_ctx = await service.build(payload)
 
-    assert strategy_ctx.worlds_list() == ["legacy-world"]
-    assert counter._value.get() == 1
+    assert strategy_ctx.worlds_list() == []
 
 
 @pytest.mark.asyncio

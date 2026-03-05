@@ -45,6 +45,7 @@ def _payload_for(node: dict) -> StrategySubmit:
     return StrategySubmit(
         dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
         meta=None,
+        world_ids=["world-main"],
         node_ids_crc32=crc32_of_list([node.get("node_id", "")]),
     )
 
@@ -137,7 +138,7 @@ async def test_legacy_node_id_rejected(client_and_redis):
     payload = StrategySubmit(
         dag_json=base64.b64encode(json.dumps({"schema_version": "v1", "nodes": [node]}).encode()).decode(),
         meta=None,
-        world_id="w1",
+        world_ids=["world-main"],
         node_ids_crc32=crc32_of_list([legacy_like]),
     )
     resp = client.post("/strategies", json=payload.model_dump())
@@ -178,6 +179,7 @@ async def test_sentinel_inserted(client_and_redis):
     payload = StrategySubmit(
         dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
         meta=None,
+        world_ids=["world-main"],
         node_ids_crc32=crc32_of_list([]),
     )
     resp = client.post("/strategies", json=payload.model_dump())
@@ -200,6 +202,7 @@ async def test_sentinel_skip(fake_redis):
         payload = StrategySubmit(
             dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
             meta=None,
+            world_ids=["world-main"],
             node_ids_crc32=crc32_of_list([]),
         )
         resp = client.post("/strategies", json=payload.model_dump())

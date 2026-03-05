@@ -40,6 +40,7 @@ async def test_ingest_and_status(app):
             payload = StrategySubmit(
                 dag_json=json.dumps({"schema_version": "v1", "nodes": []}),
                 meta={"user": "alice"},
+                world_ids=["world-main"],
                 node_ids_crc32=crc32_of_list([]),
             )
             resp = await client.post("/strategies", json=payload.model_dump())
@@ -49,3 +50,19 @@ async def test_ingest_and_status(app):
             resp = await client.get(f"/strategies/{sid}/status")
             assert resp.status_code == 200
             assert resp.json()["status"] == "queued"
+
+
+@pytest.mark.asyncio
+async def test_ingest_rejects_legacy_world_id_payload(app):
+    async with httpx.ASGITransport(app=app) as transport:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            payload = StrategySubmit(
+                dag_json=json.dumps({"schema_version": "v1", "nodes": []}),
+                meta={"user": "alice"},
+                world_id="legacy-world",
+                node_ids_crc32=crc32_of_list([]),
+            )
+            resp = await client.post("/strategies", json=payload.model_dump())
+
+    assert resp.status_code == 422
+    assert resp.json()["detail"]["code"] == "E_WORLD_ID_DEPRECATED"

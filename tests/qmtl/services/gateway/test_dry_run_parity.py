@@ -88,6 +88,7 @@ def _payload_for(dag: dict) -> StrategySubmit:
     return StrategySubmit(
         dag_json=base64.b64encode(json.dumps(dag).encode()).decode(),
         meta=None,
+        world_ids=["world-main"],
         node_ids_crc32=node_ids_crc32(dag.get("nodes", [])),
     )
 

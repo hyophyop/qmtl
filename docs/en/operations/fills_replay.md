@@ -1,6 +1,7 @@
 # Fill Replay Runbook
 
-This runbook captures the current status of fill replay in Gateway.
+This runbook records why fill replay is currently excluded from Gateway's
+public surface.
 
 ## Security
 
@@ -10,11 +11,11 @@ request.
 
 ## Current Behavior
 
-The current build exposes only a placeholder `GET /fills/replay` endpoint. It
-returns `202 Accepted` with `"replay not implemented in this build"` and does
-not republish historical fills.
+The current build does not expose `GET /fills/replay`. Replay delivery is not
+yet a supported public contract, so the placeholder route was removed instead
+of advertising a partial implementation.
 
 ## Future Implementation Note
 
 When replay delivery is implemented, this runbook should be updated with the
-final request contract and operational validation steps.
+final request contract, security model, and operational validation steps.

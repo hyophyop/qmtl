@@ -56,6 +56,7 @@ def test_latency_metric_recorded(app):
         payload = StrategySubmit(
             dag_json=json.dumps({"schema_version": "v1", "nodes": []}),
             meta=None,
+            world_ids=["world-main"],
             node_ids_crc32=crc32_of_list([]),
         )
         client.post("/strategies", json=payload.model_dump())
@@ -75,6 +76,7 @@ def test_lost_requests_counter(monkeypatch, fake_redis):
         payload = StrategySubmit(
             dag_json=json.dumps({"schema_version": "v1", "nodes": []}),
             meta=None,
+            world_ids=["world-main"],
             node_ids_crc32=crc32_of_list([]),
         )
         resp = client.post("/strategies", json=payload.model_dump())

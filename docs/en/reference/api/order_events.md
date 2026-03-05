@@ -137,8 +137,8 @@ The Gateway exposes a `/fills` endpoint for broker callbacks. Authentication and
 
 ### Replay Endpoint
 
-The current Gateway implementation exposes only a placeholder
-`GET /fills/replay` endpoint; replay delivery is not implemented yet. The route
-returns `202 Accepted` with the message `"replay not implemented in this build"`.
+The current build does not expose a public `GET /fills/replay` endpoint.
+Replay delivery is not a supported public contract yet, so it is kept out of
+the public promise until the implementation is ready.
 
 {{ nav_links() }}

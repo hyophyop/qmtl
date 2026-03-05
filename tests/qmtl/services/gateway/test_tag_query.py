@@ -177,6 +177,7 @@ def test_submit_tag_query_node(client):
     payload = {
         "dag_json": base64.b64encode(json.dumps(dag_json).encode()).decode(),
         "meta": None,
+        "world_ids": ["world-main"],
         "node_ids_crc32": node_ids_crc32([node]),
     }
     resp = c.post("/strategies", json=payload)
@@ -187,7 +188,7 @@ def test_submit_tag_query_node(client):
             {"queue": "q2", "global": False},
         ]
     }
-    assert dag.called_with == (["t1"], 60, "any", None, "backtest")
+    assert dag.called_with == (["t1"], 60, "any", "world-main", "backtest")
 
 
 def test_submit_tag_query_uses_match_mode_from_params_when_field_missing(client):
@@ -208,11 +209,12 @@ def test_submit_tag_query_uses_match_mode_from_params_when_field_missing(client)
     payload = {
         "dag_json": base64.b64encode(json.dumps(dag_json).encode()).decode(),
         "meta": None,
+        "world_ids": ["world-main"],
         "node_ids_crc32": node_ids_crc32([node]),
     }
     resp = c.post("/strategies", json=payload)
     assert resp.status_code == 202
-    assert dag.called_with == (["t1"], 60, "all", None, "backtest")
+    assert dag.called_with == (["t1"], 60, "all", "world-main", "backtest")
 
 
 def test_submit_tag_query_node_shadow_domain(client):
@@ -282,6 +284,7 @@ def test_multiple_tag_query_nodes_handle_errors(fake_redis):
             payload = {
                 "dag_json": base64.b64encode(json.dumps(dag_json).encode()).decode(),
                 "meta": None,
+                "world_ids": ["world-main"],
                 "node_ids_crc32": node_ids_crc32([good_node, bad_node]),
             }
             resp = c.post("/strategies", json=payload)
