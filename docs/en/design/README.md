@@ -20,6 +20,10 @@ The goal is not just to “save ideas”, but to make them **actionable and refl
   - Spike notes, drafts/sketches, past proposals, and ideas not yet adopted live here.
   - Content may be outdated or partially applicable; when linking, explicitly label it as “icebox (reference-only)”, and promote adopted parts into architecture/code.
 
+In the published information architecture, individual `icebox/*` drafts are not
+exposed directly. Readers should enter through the [Icebox index](icebox.md),
+while the underlying draft files stay off-nav by default.
+
 ## Lifecycle (post-implementation cleanup)
 
 Design docs are **working documents for implementation**. Once implementation is complete:
@@ -33,6 +37,7 @@ Design docs are **working documents for implementation**. Once implementation is
 
 - When you link `design/icebox/*`, annotate the link text or sentence with **“icebox (reference-only, not an active work item)”**.
 - For normative decisions/invariants/operational contracts, move the final form into `docs/en/architecture/` or code/tests to keep a single SSOT.
+- If a draft does not yet have a `ko`/`en` pair, keep it in `not_in_nav` until the mirrored path exists and is ready for promotion.
 
 ## i18n
 

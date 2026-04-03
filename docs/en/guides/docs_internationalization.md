@@ -24,7 +24,13 @@ This project publishes multilingual docs using MkDocs Material and the `mkdocs-s
   - `uv run mkdocs build`
 - This validates both locales and catches missing or incorrect links.
 
-4) Manage message catalogs (CLI translations)
+4) Keep locale-incomplete drafts off-nav
+
+- Reference-only drafts such as `design/icebox/*` should not be promoted into the official nav until the mirrored `ko`/`en` pair exists.
+- List those pages in `mkdocs.yml` under `not_in_nav` so they are treated as intentionally unpublished rather than accidental navigation debt.
+- Promote them into nav only after the pair is ready for the public information architecture.
+
+5) Manage message catalogs (CLI translations)
 
 - Install dev deps: `uv pip install -e .[dev]`
 - Extract messages: `uv run pybabel extract -F babel.cfg -o qmtl/locale/qmtl.pot .`
@@ -38,6 +44,7 @@ Our static link checker intentionally validates only the canonical (default) loc
 
 - It reads the i18n configuration from `mkdocs.yml` and skips non‑default locales.
 - Archived docs are also skipped.
+- Intentionally off-nav drafts listed under `not_in_nav` are treated as explicit exceptions, not missing navigation entries.
 
 Run it locally:
 

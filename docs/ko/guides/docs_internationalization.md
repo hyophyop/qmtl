@@ -31,7 +31,13 @@ last_modified: 2025-08-21
   - `uv run mkdocs build`
 - 두 로케일을 모두 검증하며 누락되거나 잘못된 링크를 조기에 발견할 수 있습니다.
 
-4) 메시지 카탈로그(클라이언트 문자열)를 관리합니다.
+4) locale 미완료 초안은 off-nav로 유지합니다.
+
+- `design/icebox/*` 같은 참고용 초안이나 번역이 덜 된 문서는 공식 nav에 바로 올리지 않습니다.
+- 이런 문서는 `mkdocs.yml`의 `not_in_nav`에 명시해 의도된 비공개 문서로 분류합니다.
+- ko/en 쌍이 준비되고 공개 정보 구조에 포함시킬 준비가 되면 그때 nav로 승격합니다.
+
+5) 메시지 카탈로그(클라이언트 문자열)를 관리합니다.
 
 - 개발 의존성 설치: `uv pip install -e .[dev]`
 - 메시지 추출: `uv run pybabel extract -F babel.cfg -o qmtl/locale/qmtl.pot .`
@@ -46,6 +52,7 @@ last_modified: 2025-08-21
 
 - `mkdocs.yml`의 i18n 구성을 읽어 비기본 로케일은 건너뜁니다.
 - 보관(archive)된 문서도 제외됩니다.
+- `not_in_nav`에 등록된 off-nav 초안도 “의도된 비공개 문서”로 간주하고, nav 누락 경고 없이 관리합니다.
 
 로컬 실행:
 

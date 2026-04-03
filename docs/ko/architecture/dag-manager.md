@@ -144,7 +144,7 @@ CREATE INDEX compute_buffering_since IF NOT EXISTS FOR (c:ComputeNode) ON (c.buf
 - TagQuery 불변식 위반: TagQueryNode에서 재계산 불일치가 감지되면 Gateway가 `tagquery_nodeid_mismatch_total`을 증가시키고(베스트 에포트) SDK/Runner가 캐시를 무효화하도록 유도한다.
 - 도메인 격리: `cross_context_cache_hit_total`(§1.4)을 DAG Manager/SDK 공통 메트릭으로 필수화한다. 값이 0 초과이면 캐시 재사용을 차단하고(정책) 알람으로 승격한다.
 
-TODO (#1784/#1786): DAG Manager 측의 NodeID 재계산 드리프트/지연(히스토그램) 및 TagQuery 스펙 해시/해결 큐 카디널리티 로깅·메트릭은 별도 작업으로 추가한다.
+NodeID 재계산 드리프트/지연(히스토그램) 및 TagQuery 스펙 해시/해결 큐 카디널리티 메트릭의 추가 구현은 이슈 `#1784`, `#1786`에서 추적한다. 현재 규범 계약은 이 관측 훅의 존재 여부와 무관하게 유효하다.
 
 ### 1.4 도메인 범위 ComputeKey (신규)
 

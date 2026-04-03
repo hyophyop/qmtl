@@ -258,7 +258,8 @@ These can start as conventions before they become tooling inputs.
   - Moved Gateway/DAG Manager/ControlBus/Risk Signal Hub runtime procedures into `operations/` pages.
 - In progress
   - Slimming the top normative specs (`architecture.md`, `gateway.md`, `dag-manager.md`) further so CLI, rollout, and config procedures stay in operations pages.
-  - Reorganizing nav around `Architecture / Product Contracts / Operations / Design / Archive`, while moving intentionally unpublished pages to explicit `not_in_nav` entries.
+  - Reorganizing nav around `Architecture / Product Contracts / Operations / Design / Archive`, with the Design section exposing an [Icebox index](../design/icebox.md) instead of individual draft pages.
+  - Moving intentionally unpublished pages to explicit `not_in_nav` entries.
   - Keeping locale-incomplete material off-nav until the `ko` and `en` pair exists, then promoting only the documents that are ready for the official information architecture.
 - Remaining
   - Move more examples/appendices/operational detail out of large normative pages.
