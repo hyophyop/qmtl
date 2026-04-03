@@ -1024,4 +1024,4 @@ from qmtl.runtime.io import NautilusPresetUnavailableError
 - [Nautilus Trader Documentation](https://nautilustrader.io/)
 - [Nautilus DataCatalog API](https://docs.nautilustrader.io/api_reference/persistence.html)
 - [QMTL Core Loop Architecture](../architecture/architecture.md)
-- [World Data Preset 규약](../world/world.md#62-데이터-preset-onramp)
+- [World Data Preset 규약](../world/world_data_preset.md#62-데이터-preset-onramp)

@@ -2,7 +2,7 @@
 title: "ControlBus — Internal Control Bus (Opaque to SDK)"
 tags: [architecture, events, control]
 author: "QMTL Team"
-last_modified: 2026-02-06
+last_modified: 2026-04-03
 spec_version: v1.0
 ---
 
@@ -11,7 +11,9 @@ spec_version: v1.0
 # ControlBus — Internal Control Bus
 
 Related: [WorldService](worldservice.md)  
-Related: [ACK/Gap Resync RFC (Draft)](ack_resync_rfc.md)
+Related: [ACK/Gap Resync RFC (Draft)](../design/ack_resync_rfc.md)  
+Related: [ControlBus Runtime and Incident Handling](../operations/controlbus_operations.md)  
+Related: [ControlBus/Queue Standards](../operations/controlbus_queue_standards.md)
 
 ControlBus distributes control‑plane updates (not data) from core services to Gateways. It is an internal component and not a public API; SDKs never connect directly in the default deployment. All control events are versioned envelopes and include `type` and `version` fields.
 
@@ -29,9 +31,9 @@ Non‑Goals
 !!! note "Design intent"
 - ControlBus is opaque to SDKs by default. Clients consume control events only via the Gateway’s tokenized WebSocket bridge (`/events/subscribe`). This keeps the bus private, centralizes authN/Z, and allows initial snapshot/state_hash reconciliation without exposing internal topics.
 
-!!! warning "Deployment profiles"
-- **prod**: ControlBus is mandatory. Gateway, WorldService, and DAG Manager fail fast if brokers/topics are missing or if the Kafka client is unavailable.
-- **dev**: ControlBus may be disabled for local runs. Publishers/consumers emit warnings and skip I/O, meaning no control events will be produced or consumed.
+!!! warning "Runtime and deployment"
+- dev/prod behavior, broker/topic requirements, and lag/ACK/gap incident handling live in [ControlBus Runtime and Incident Handling](../operations/controlbus_operations.md).
+- Topics, consumer groups, retry/DLQ defaults, and rehearsal standards follow [ControlBus/Queue Standards](../operations/controlbus_queue_standards.md).
 
 ---
 
@@ -159,7 +161,7 @@ PolicyUpdated (versioned)
 - If `requires_ack=true` but `sequence` is missing or not an integer, Gateway drops the message (increments `event_relay_dropped_total`) and publishes no ACK.
 - For sequence gaps (`sequence > next_sequence`), Gateway buffers the message and defers both relay and ACK. If the gap remains open longer than `activation_gap_timeout_ms` (default 3000 ms), Gateway forces resequencing to the earliest buffered sequence and resumes ordered replay from there.
 - Forced resequencing is a fail-safe liveness mechanism, not proof of semantic convergence. WorldService/operations tooling SHOULD still trigger snapshot/state_hash reconciliation and decide alert/pause/rollback policy externally.
-- In the current implementation, apply completion is not hard-blocked on ACK stream convergence. Baseline operational guidance is tracked in [ACK/Gap Resync RFC (Draft)](ack_resync_rfc.md).
+- In the current implementation, apply completion is not hard-blocked on ACK stream convergence. Baseline operational guidance is tracked in [ACK/Gap Resync RFC (Draft)](../design/ack_resync_rfc.md).
 
 ---
 
@@ -178,8 +180,8 @@ Metrics
 - Gateway (WebSocket fan-out): `event_fanout_total`, `ws_dropped_subscribers_total`, `ws_connections_total`
 - DAG Manager (queue lag): `queue_lag_seconds`, `queue_lag_threshold_seconds`
 
-Runbooks
-- Recreate consumer groups, increase partitions per world count, backfill via HTTP reconcile endpoints at Gateway/WorldService/DAG Manager
+Operational procedures
+- Consumer-group recreation, partition scaling, and reconcile/backfill checklists are maintained in [ControlBus Runtime and Incident Handling](../operations/controlbus_operations.md) and [ControlBus/Queue Standards](../operations/controlbus_queue_standards.md).
 
 ---
 

@@ -25,9 +25,8 @@ CORE_LOOP_DOCS: tuple[str, ...] = (
     "worldservice.md",
     "controlbus.md",
     "dag-manager.md",
-    "ack_resync_rfc.md",
 )
-OPTIONAL_ARCH_DOCS: tuple[str, ...] = ("ack_resync_rfc.md",)
+OPTIONAL_ARCH_DOCS: tuple[str, ...] = ()
 
 # Require explicit counterpart only when a document uses substantial normative
 # markers. This avoids false positives in descriptive docs while still catching

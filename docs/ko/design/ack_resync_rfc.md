@@ -1,6 +1,6 @@
 ---
 title: "ACK/Gap Resync RFC (초안)"
-tags: [architecture, worldservice, controlbus, rfc]
+tags: [design, worldservice, controlbus, rfc]
 author: "QMTL Team"
 last_modified: 2026-02-06
 status: draft
@@ -22,7 +22,7 @@ Core Loop의 2-Phase Apply(`Freeze/Drain -> Switch -> Unfreeze`)에서 `Activati
 
 ## 2. 현재 상태(구현 기준)
 
-관련 문서: [WorldService](worldservice.md), [ControlBus](controlbus.md), [Architecture](architecture.md)
+관련 문서: [WorldService](../architecture/worldservice.md), [ControlBus](../architecture/controlbus.md), [Architecture](../architecture/architecture.md)
 
 - WorldService는 activation 이벤트에 `phase`, `requires_ack`, `sequence`를 포함해 발행합니다.
 - Gateway는 `(world_id, run_id)`별 `sequence` 선형 재생을 강제하며, `control.activation.ack`로 ACK를 게시합니다.

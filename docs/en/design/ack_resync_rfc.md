@@ -1,6 +1,6 @@
 ---
 title: "ACK/Gap Resync RFC (Draft)"
-tags: [architecture, worldservice, controlbus, rfc]
+tags: [design, worldservice, controlbus, rfc]
 author: "QMTL Team"
 last_modified: 2026-02-06
 status: draft
@@ -22,7 +22,7 @@ This ambiguity can cause drift in freeze release timing, order-gate behavior, an
 
 ## 2. Current State (Implementation-Aligned)
 
-Related docs: [WorldService](worldservice.md), [ControlBus](controlbus.md), [Architecture](architecture.md)
+Related docs: [WorldService](../architecture/worldservice.md), [ControlBus](../architecture/controlbus.md), [Architecture](../architecture/architecture.md)
 
 - WorldService emits activation events with `phase`, `requires_ack`, and `sequence`.
 - Gateway enforces per-`(world_id, run_id)` linear replay and publishes ACKs to `control.activation.ack`.

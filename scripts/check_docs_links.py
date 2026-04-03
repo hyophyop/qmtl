@@ -14,7 +14,6 @@ EN_CORE_ARCH_DOCS = {
     "worldservice.md",
     "controlbus.md",
     "dag-manager.md",
-    "ack_resync_rfc.md",
 }
 
 

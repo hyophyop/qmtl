@@ -2,7 +2,7 @@
 title: "Architecture Glossary"
 tags: [architecture, glossary]
 author: "QMTL Team"
-last_modified: 2025-11-22
+last_modified: 2026-03-06
 ---
 
 {{ nav_links() }}
@@ -13,6 +13,7 @@ last_modified: 2025-11-22
 
 - Purpose: Collect and define core architectural terms used across QMTL (DecisionEnvelope, ExecutionDomain, GSG/WVG, etc.) in one place.
 - Core Loop position: Serves as a reference dictionary that ties together the concepts appearing at each Core Loop stage, so other design docs can assume a shared vocabulary.
+- Design review criteria: For future feature additions and structural changes, treat this glossary together with [QMTL Design Principles](design_principles.md), [QMTL Capability Map](capability_map.md), [QMTL Semantic Types](semantic_types.md), and [QMTL Decision Algebra](decision_algebra.md) as normative references.
 - DecisionEnvelope: World decision result containing `world_id`, `policy_version`, `effective_mode`, `reason`, `as_of`, `ttl`, `etag`.
 - effective_mode: Policy output string in DecisionEnvelope. Values: `validate | compute-only | paper | live | shadow`. Consumers MUST map to an ExecutionDomain for compute/routing; see mapping below.
 - execution_domain: Derived field emitted by Gateway/SDK after mapping `effective_mode` (`backtest | dryrun | live | shadow`). Persisted on envelopes relayed to SDKs. Caller-supplied `meta.execution_domain` is only a hint; the authoritative value derives from WS `effective_mode`. Runner/SDK retain `shadow` (no backtest downgrade) while hard-blocking order publish.
@@ -34,6 +35,23 @@ last_modified: 2025-11-22
 - WorldNodeRef: `(world_id, node_id, execution_domain)` scoped record storing world- and domain-local `status`, `last_eval_key`, and annotations.
 - DecisionsRequest: API payload replacing the per-world strategy set; contains an ordered list of unique, non-empty strategy identifiers persisted by WorldService.
 - SSOT boundary: DAG Manager owns GSG only; WorldService owns WVG only. Gateway proxies/caches; it is not an SSOT.
+
+## Capability / Semantic / Decision Terms
+
+- capability: An independent functional unit in the QMTL Core. Observation, feature extraction, labeling, inference, decision, execution planning, execution state, and risk/policy belong here. Strategy archetypes should be explained only as compositions of capabilities.
+- profile: A documented example of capability composition. Profiles such as `directional` or `ML-driven MM` are useful for explanation and onboarding, but are not first-class axes of the Core design.
+- CausalStream: A stream containing only information available up to the current point in time. This is the default input type for live decision paths and inference.
+- DelayedStream: A stream containing future information or ex-post interpretation. It may be used for training and evaluation, but it must not directly feed live decision paths.
+- ImmutableArtifact: A reproducible, read-only output such as a feature artifact, label artifact, dataset snapshot, or trained model reference.
+- MutableExecutionState: Mutable world/domain-scoped state during execution, including open orders, open quotes, fills, inventory, and portfolio.
+- DecisionValue: A family of values expressing execution intent, including score, direction, position target, order intent, and quote intent.
+- CommandValue: A value requesting real action from an external system, such as order submission, cancel/replace, or rebalance apply.
+- ScoreDecision: A score or confidence expression before final execution shaping.
+- DirectionDecision: A directional judgment such as long/short/flat or buy/sell/hold.
+- PositionTargetDecision: A desired target position or target weight.
+- OrderIntentDecision: An order-granularity execution intent.
+- QuoteIntentDecision: An execution intent over a two-sided or multi-quote set. Market making typically centers its planner around this decision subtype.
+- planner: The layer that transforms a DecisionValue into an executable plan. The core difference between directional and market-making strategies should appear as a planner-contract difference rather than an archetype branch.
 
 ## Execution Domain & Isolation
 

@@ -1,16 +1,14 @@
 ---
-title: "QMTL Gateway - Comprehensive Technical Specification"
+title: "QMTL Gateway - Control-Plane Ingress and Proxy Boundary"
 tags: []
 author: "QMTL Team"
-last_modified: 2025-09-22
+last_modified: 2026-04-03
 spec_version: v1.2
 ---
 
 {{ nav_links() }}
 
-# QMTL Gateway - Comprehensive Technical Specification
-
-*Research-Driven Draft v1.2 - 2025-06-10*
+# QMTL Gateway - Control-Plane Ingress and Proxy Boundary
 
 ## S0-A. Core Loop Alignment
 
@@ -21,32 +19,25 @@ spec_version: v1.2
 ## Related Documents
 - [Architecture Overview](README.md)
 - [QMTL Architecture](architecture.md)
+- [Core Loop Contract](../contracts/core_loop.md)
+- [World Lifecycle Contract](../contracts/world_lifecycle.md)
 - [DAG Manager](dag-manager.md)
 - [WorldService](worldservice.md)
 - [ControlBus](controlbus.md)
 - [Lean Brokerage Model](lean_brokerage_model.md)
+- [QMTL Implementation Traceability](implementation_traceability.md)
+- [Gateway Runtime and Deployment Profiles](../operations/gateway_runtime.md)
 
 Additional references
 - Operations: [Risk Management](../operations/risk_management.md), [Timing Controls](../operations/timing_controls.md)
 - Reference: [Brokerage API](../reference/api/brokerage.md), [Commit-Log Design](../reference/commit_log.md), [World/Activation API](../reference/api_world.md)
 
-!!! note "Deployment profile"
-    With `profile: dev`, some backends run in “local fallback/disabled” mode:
-
-    - If `gateway.redis_dsn` is empty, Gateway uses an in-memory Redis shim.
-    - If `gateway.controlbus_brokers`/`gateway.controlbus_topics` are empty, the ControlBus consumer is disabled.
-    - If `gateway.commitlog_bootstrap`/`gateway.commitlog_topic` are empty, the Commit-Log writer/consumer are disabled.
-
-    With `profile: prod`, missing `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_brokers`/`gateway.controlbus_topics`, or `gateway.commitlog_bootstrap`/`gateway.commitlog_topic` stops Gateway before it starts.
+!!! note "Runtime and deployment"
+    dev/prod profiles, preflight validation, and incident-handling rules live in [Gateway Runtime and Deployment Profiles](../operations/gateway_runtime.md).
 
 !!! note "Risk Signal Hub integration"
-    - Gateway acts only as a producer that pushes post-rebalance/fill portfolio snapshots (weights, covariance_ref/matrix, as_of) to the hub.
-    - Configuration: inject tokens and the inline/offload criteria via the `risk_hub` block in `qmtl.yml`. In the dev profile, only inline + fakeredis are used and offload (blob/file/S3) is disabled. Redis/S3 offload is used only in the prod profile.
-    - The consumer role (VaR/ES calculation, stress re-simulation) is handled on the WorldService side via hub events/queries; Gateway does not read the hub directly.
-    - ControlBus/queue routing remains consistent with the existing activation/decision streams, and hub events are subscribed to by WorldService and the exit engine.
-
-> This extended edition enlarges the previous document by approx. 75 % and adopts an explicit, graduate-level rigor. All threat models, formal API contracts, latency distributions, and CI/CD semantics are fully enumerated.
-> Legend: **Sx** = Section, **Rx** = Requirement, **Ax** = Assumption.
+    - Gateway is producer-only for post-rebalance/fill portfolio snapshots pushed into the hub.
+    - Hub storage, tokens, offload thresholds, and freshness operations are covered in the [Risk Signal Hub Runbook](../operations/risk_signal_hub_runbook.md).
 
 ---
 
@@ -65,16 +56,7 @@ Gateway sits at the **operational boundary** between *ephemeral* strategy submis
 **Ax-2** Neo4j causal cluster exposes single-leader consistency; read replicas may lag.
 **Ax-3** Gateway constructs and forwards a compute context `{ world_id, execution_domain, as_of, partition }` to downstream services. The SDK does not choose this context; Gateway derives it from WorldService decisions (and, where applicable, submission metadata). DAG Manager uses it to derive a Domain-Scoped ComputeKey; WorldService uses it to authorize/apply domain policies. The canonical implementation of this contract lives in `qmtl/foundation/common/compute_context.py` and is wrapped by `StrategyComputeContext` (`qmtl/services/gateway/submission/context_service.py`) which owns commit-log serialization, downgrade tracking, and Redis mapping for ingestion flows.
 
-**User-facing design intent:** Gateway is the place where the QMTL core value
-“focus only on strategy logic; the system handles optimisation and returns”
-is enforced at the network boundary.
-- SDK users submit via `Runner.submit(MyStrategy)` or simple REST calls; Gateway
-derives the full compute context and hides WorldService/DAG Manager complexity
-behind that interface.
-- When adding endpoints or metadata, first check whether the **strategy
-author’s submit flow becomes more complex**; prefer defaults, inference, and
-policy presets over exposing raw backend configuration.
-- Avoid keeping old and new paths alive for long purely for compatibility; at any point in time there should be a single **canonical endpoint surface**, with compatibility layers removed after a defined migration window.
+**Boundary rule:** Gateway should keep the submit surface as simple as possible while absorbing compute-context construction and control-plane orchestration behind internal services. If the public surface needs to change, first check whether the existing contracts ([Core Loop Contract](../contracts/core_loop.md), [migration guide](../guides/migration_bc_removal.md)) already provide a cleaner path.
 
 ### Non-Goals
 - Gateway does not compute world policy decisions and is not an SSOT for worlds or queues.
@@ -165,8 +147,8 @@ paths:
 Clients SHOULD specify ``match_mode`` to control tag matching behavior. When
 omitted, Gateway defaults to ``any`` for backward compatibility.
 
-!!! note "Additional endpoints (current implementation)"
-    The OpenAPI excerpt below includes only the core paths. The current implementation also exposes the following routes; whether each is public or internal depends on the deployment profile and auth/ACL policy (evidence: `qmtl/services/gateway/routes/**`).
+!!! note "Additional endpoints"
+    The OpenAPI excerpt below includes only the core paths. The full route inventory and current public surface are tracked through the reference docs and the implementation (`qmtl/services/gateway/routes/**`).
 
     - Strategies: ``POST /strategies/dry-run``, ``POST /strategies/{strategy_id}/history``
     - Events/schemas: ``GET /events/jwks``, ``GET /events/schema`` (WebSocket subscriptions are separate)
@@ -261,7 +243,7 @@ Clarifications
 - TagQueryNode canonicalization: do not include the dynamically resolved upstream queue set in `dependencies`. Instead, capture the query spec in `params_canon` (normalized `query_tags` sorted, `match_mode`, and `interval`). Runtime queue discovery and growth are delivered via ControlBus -> SDK TagQueryManager; NodeID remains stable across discoveries.
 - Gateway rejects any node submission missing `node_type`, `code_hash`, `config_hash`, `schema_hash`, or `schema_compat_id` with `E_NODE_ID_FIELDS` and returns `E_NODE_ID_MISMATCH` when the provided `node_id` does not equal the canonical `compute_node_id()` output. For `node_ids_crc32` (CRC32) mismatches, Gateway returns `E_CHECKSUM_MISMATCH`. If both `schema_compat_id` and legacy `schema_id` are present and differ, Gateway rejects with `E_SCHEMA_COMPAT_MISMATCH`. All errors include actionable hints so SDK clients can regenerate DAGs with the BLAKE3 contract.
 
-Immediately after ingest, Gateway inserts a `VersionSentinel` node into the DAG so that rollbacks and canary traffic control can be orchestrated without strategy code changes. This behaviour is enabled by default and controlled by the ``insert_sentinel`` configuration field; it may be disabled with the ``--no-sentinel`` CLI flag.
+Immediately after ingest, Gateway inserts a `VersionSentinel` node into the DAG so that rollbacks and canary traffic control can be orchestrated without strategy code changes. The runtime configuration surface for enabling or disabling this is documented in [Gateway Runtime and Deployment Profiles](../operations/gateway_runtime.md).
 
 !!! note "Design intent"
 - TagQuery canonicalization keeps `NodeID` stable; dynamic queue discovery is a runtime concern (ControlBus -> SDK TagQueryManager), not part of canonical hashing.
@@ -287,41 +269,9 @@ Rebalancing plans from WorldService are delivered on the `rebalancing_planned` C
 * **Local DAG fallback queue** - If DAG Manager is unavailable, submitted strategy IDs are buffered in memory and flushed to the Redis queue once the service recovers.
 * **Sentinel weight application latency** - After `traffic_weight` updates, Gateway measures the time until it applies the ratio locally and exports the skew via the `sentinel_skew_seconds` metric.
 
-### Gateway CLI Options
+### Operational surface
 
-Run the Gateway service from the explicit operator/admin surface. The ``--config`` flag is optional:
-
-```bash
-# start with built-in defaults
-qmtl --admin gateway
-
-# specify a configuration file
-qmtl --admin gateway --config qmtl/examples/qmtl.yml
-```
-
-When provided, the command reads the ``gateway`` section of
-``qmtl/examples/qmtl.yml`` for all server parameters. Omitting ``--config``
-starts the service with built-in defaults that use SQLite and an in-memory
-Redis substitute. The sample file illustrates how to set ``redis_dsn`` to point
-to a real cluster. If ``redis_dsn`` is omitted, Gateway automatically uses the
-in-memory substitute. See the file for a fully annotated configuration template.
-Setting ``insert_sentinel: false`` disables automatic ``VersionSentinel`` insertion.
-
-Available flags:
-
-- ``--config`` - optional path to configuration file.
-- ``--no-sentinel`` - disable automatic ``VersionSentinel`` insertion.
-- ``--allow-live`` - disable the live trading guard requiring ``X-Allow-Live: true``.
-
-### Configuration validation flow
-
-`qmtl config validate` orchestrates the `qmtl.foundation.config_validation` helpers in three stages to keep each dependency check concise.
-
-1. **Schema validation (`schema`)** – `validate_config_structure` walks the `UnifiedConfig` dataclass definitions, ensuring every section key is present and typed correctly. Errors mention readable descriptions such as `list[str]` so operators can quickly identify the offending field.
-2. **Gateway connectivity (`gateway`)** – dedicated helpers like `_validate_gateway_redis`, `_validate_gateway_database`, `_check_controlbus`, and `_validate_gateway_worldservice` sequentially verify Redis, the configured database backend, ControlBus topics, and the proxied WorldService. Passing `--offline` converts these network-bound checks into warnings rather than outbound requests.
-3. **DAG Manager connectivity (`dagmanager`)** – `_validate_dagmanager_neo4j`, `_validate_dagmanager_kafka`, and `_validate_dagmanager_controlbus` independently cover Neo4j, Kafka, and ControlBus connectivity, keeping each helper's cyclomatic complexity beneath the Radon B target.
-
-Each stage emits `ValidationIssue` payloads that are rendered as a CLI table and, when requested, JSON (`--json`). Any error-level severity causes the command to exit with code 1 so automation picks up failing environments.
+Gateway startup commands, config-file handling, `qmtl config validate`, and testing-only live-guard overrides are operational rules documented in [Gateway Runtime and Deployment Profiles](../operations/gateway_runtime.md) and [Config CLI](../operations/config-cli.md).
 
 ---
 
@@ -350,11 +300,10 @@ Gateway remains the single public boundary for SDKs. It proxies WorldService end
 - `/status` exposes circuit breaker states for dependencies, including WorldService.
 
 - Strategy submission and worlds:
-  - Clients SHOULD send `world_ids[]` (multiple). `world_id` (single) is deprecated; Gateway still accepts it as a fallback (`world_ids=[world_id]`) and emits a deprecation warning/metric. Gateway upserts a **WorldStrategyBinding (WSB)** for each world and ensures the corresponding `WorldNodeRef(root)` exists in the WVG. Execution mode is still determined solely by WorldService decisions.
+  - Clients SHOULD send `world_ids[]` (multiple). The legacy single-field `world_id` is accepted only as a transitional input and normalized to `world_ids=[world_id]`. Migration details live in [Migration: Removing Legacy Modes and Backward Compatibility](../guides/migration_bc_removal.md). Gateway upserts a **WorldStrategyBinding (WSB)** for each world and ensures the corresponding `WorldNodeRef(root)` exists in the WVG. Execution mode is still determined solely by WorldService decisions.
   - When `gateway.worldservice_url` is set (or a `WorldServiceClient` is injected), the submission helper mirrors each binding to WorldService via `POST /worlds/{world_id}/bindings`. Duplicate bindings return HTTP 409 and are treated as success; transient errors are logged but do not block ingestion.
   - Gateway maps `DecisionEnvelope.effective_mode` to an ExecutionDomain for compute/context and writes it to envelopes it relays: `validate -> backtest (orders gated OFF by default)`, `compute-only -> backtest`, `paper/sim -> dryrun`, `live -> live`. The same mapping is applied to proxied ActivationEnvelope payloads so clients receive an explicit `execution_domain` even though WorldService omits it. `shadow` is reserved and must be explicitly requested by operators. SDK/Runner treats this mapping as input only.
   - Gateway forwards a compute context `{ world_id, execution_domain, as_of (if backtest), partition }` with diff/ingest requests so DAG Manager derives a Domain-Scoped ComputeKey and isolates caches per domain. When a caller does not supply backtest metadata, Gateway either derives the context from WS or omits optional fields; DAG Manager then applies safe defaults and context-scoped isolation.
-  - The HTTP `/strategies` flow is implemented by the composable services in `qmtl/services/gateway/submission/` (see `SubmissionPipeline`). Each stage-DAG decoding/validation, node identity verification, compute-context normalization, diff execution, and TagQuery fallback-has focused coverage so future changes only affect the relevant module.
   - Backtest/dryrun submissions MUST include `as_of` (dataset commit) and MAY include `dataset_fingerprint`; when absent Gateway rejects or falls back to compute-only mode to avoid mixing datasets.
 
 ### Event Stream Descriptor
@@ -393,16 +342,12 @@ Token refresh
   - Reconnect with provided ``fallback_url``; SDK may periodically reconcile via HTTP
 - Live guard: Gateway rejects live trading unless consent is given.
   - When enabled, callers must include header ``X-Allow-Live: true``.
-  - Starting Gateway with ``--allow-live`` disables the guard for testing.
+  - Testing-only overrides are documented in [Gateway Runtime and Deployment Profiles](../operations/gateway_runtime.md).
 - 2-Phase apply handshake: during `Freeze/Drain`, Gateway MUST gate all order publications (OrderPublishNode outputs are suppressed). Gateway unblocks only after an `ActivationUpdated` event reflecting `freeze=false` post-switch.
 - Identity propagation: Gateway forwards caller identity (JWT subject/claims) to WorldService; WorldService logs it in audit records.
 
 See also: World API Reference (reference/api_world.md) and Schemas (reference/schemas.md).
 
+Implementation coverage, current module decomposition, and test assets continue to be tracked in [QMTL Implementation Traceability](implementation_traceability.md) and the Gateway runtime docs.
+
 {{ nav_links() }}
-- Status (2025-09):
-  - Partition key is defined in `qmtl/services/dagmanager/kafka_admin.py:partition_key(node_id, interval, bucket)` and used by the commit-log writer.
-  - Transactional commit-log writer/consumer are implemented (`qmtl/services/gateway/commit_log.py`, `qmtl/services/gateway/commit_log_consumer.py`) with deduplication and metrics.
-  - OwnershipManager coordinates Kafka ownership with Postgres advisory locks fallback (`qmtl/services/gateway/ownership.py`). Kafka partition ownership is implemented by `KafkaPartitionOwnership` (wired via `gateway.ownership` config), and `owner_reassign_total` is recorded on handoff.
-  - The “skip local execution when queues are globally owned” behaviour is implemented on the SDK side when applying queue mappings (e.g., filtering out `global=true` entries for TagQueryNode). Gateway `worker.py` is not the canonical implementation of this policy (see `qmtl/runtime/sdk/tag_manager_service.py`).
-  - Chaos/soak style dedup tests exist under `tests/qmtl/services/gateway/test_commit_log_soak.py`.

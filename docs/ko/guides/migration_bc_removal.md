@@ -58,6 +58,8 @@ qmtl --admin gateway --config qmtl.yml
 }
 ```
 
+복수 월드 제출이 필요한 경우에는 `world_ids` 배열을 사용합니다. 단일 `world_id` 입력은 전이 호환 입력으로만 허용되고, Gateway가 `world_ids=[world_id]`로 정규화합니다.
+
 ## Brokerage 임포트
 
 **변경 전**
@@ -79,6 +81,7 @@ from qmtl.runtime.brokerage import PerShareFeeModel, VolumeShareSlippageModel
 - [ ] 월드 정책은 `qmtl world create --policy <preset>` 또는 `POST /worlds/{id}/policies`(preset/override 지원)로 설정
 - [ ] `qmtl world info` 또는 `GET /worlds/{id}/describe`로 적용 정책 확인 (preset, version, human-readable 포함)
 - [ ] Gateway `/strategies` 요청에서 `run_type`/클라이언트 모드 선택 제거 후 `world_id` + WS 거버넌스(`effective_mode`)를 사용
+- [ ] Gateway `/strategies` 다중 월드 경로는 `world_ids[]`를 기본으로 사용하고, 단일 `world_id` 입력 의존성을 제거
 - [ ] 브로커리지 헬퍼는 `qmtl.runtime.brokerage`에서 임포트(`.simple` 경로 사용 금지)
 
 {{ nav_links() }}

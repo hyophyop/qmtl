@@ -1,55 +1,52 @@
 ---
-title: "QMTL Advanced Architecture and Implementation Blueprint"
+title: "QMTL Normative Architecture"
 tags:
   - architecture
   - design
 author: "QMTL Team"
-last_modified: 2026-02-06
+last_modified: 2026-04-03
 spec_version: v1.0
 ---
 
 {{ nav_links() }}
 
-# QMTL Advanced Architecture and Implementation Blueprint
-
-!!! warning
-    Legacy code samples that use `Runner.run`/`Runner.offline` are obsolete. Use `Runner.submit(..., world=...)` instead; the architecture remains the same, but the entrypoint is now submit-only.
+# QMTL Normative Architecture
 
 ## Related Documents
 - [Architecture Overview](README.md)
+- [QMTL Design Principles](design_principles.md)
+- [QMTL Capability Map](capability_map.md)
+- [QMTL Semantic Types](semantic_types.md)
+- [QMTL Decision Algebra](decision_algebra.md)
+- [QMTL Implementation Traceability](implementation_traceability.md)
+- [Core Loop Contract](../contracts/core_loop.md)
+- [World Lifecycle Contract](../contracts/world_lifecycle.md)
 - [Gateway](gateway.md)
 - [DAG Manager](dag-manager.md)
 - [Lean Brokerage Model](lean_brokerage_model.md)
 - [WorldService](worldservice.md)
+- [World Allocation and Rebalancing Contract](rebalancing_contract.md)
 - [Core Loop Automation](core_loop_world_automation.md)
 - [ControlBus](controlbus.md)
-- [ACK/Gap Resync RFC (Draft)](ack_resync_rfc.md)
+- [ACK/Gap Resync RFC (Draft)](../design/ack_resync_rfc.md)
 - [Exchange Node Sets](exchange_node_sets.md)
 - Risk Signal Hub: [Risk Signal Hub Architecture](risk_signal_hub.md)
 - Core Loop contract tests: `tests/e2e/core_loop/README.md`
 
----
+This page covers only QMTL’s **service boundaries, invariants, and domain contracts**.
 
-Bootstrap workflows and operational validation steps live in
-[Backend Quickstart](../operations/backend_quickstart.md#fast-start-validate-and-launch).
-
----
-
-## Deployment profiles
-
-- **dev**: Default for local development. Some backends run in in-memory fallback or disabled mode. For example: DAG Manager falls back to in-memory graph/queue managers when `dagmanager.neo4j_dsn`/`dagmanager.kafka_dsn` are empty; WorldService uses an in-memory activation store when `worldservice.server.redis` is empty. Gateway uses an in-memory Redis shim when `gateway.redis_dsn` is empty, and disables features when `gateway.controlbus_brokers`/`gateway.controlbus_topics` or `gateway.commitlog_bootstrap`/`gateway.commitlog_topic` are empty.
-- **prod**: Requires persistent backends across the stack. Missing `gateway.redis_dsn`, `gateway.database_backend=postgres` + `gateway.database_dsn`, `gateway.controlbus_brokers` + `gateway.controlbus_topics`, `gateway.commitlog_bootstrap` + `gateway.commitlog_topic`, `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, `dagmanager.controlbus_dsn`/`dagmanager.controlbus_queue_topic`, `worldservice.server.redis`, or `worldservice.server.controlbus_brokers` + `worldservice.server.controlbus_topic` causes startup to fail.
-
-`qmtl config validate --target all` reports errors (not warnings) when `profile: prod` omits required DSNs, and the Gateway CLI enforces the same rule to prevent mixed modes (partial in-memory fallbacks).
+- Bootstrap, deployment, config validation, and runbooks live in the [operations layer](../operations/README.md).
+- Legacy cleanup and the transition to a submit-only surface live in [Migration: Removing Legacy Modes and Backward Compatibility](../guides/migration_bc_removal.md).
+- The current implementation scope and `partial/implemented` status live in [QMTL Implementation Traceability](implementation_traceability.md).
 
 <a id="core-loop-summary"></a>
 ## Core Loop decisions (incorporated)
 
-- Single entrypoint: all submissions use `Runner.submit(..., world=...)`; there is no client-side `mode`. Stages (backtest/paper/live) are managed by world policy and WorldService. (`qmtl/runtime/sdk/submit.py`)
-- WS as SSOT: SubmitResult exposes WorldService decision/activation envelopes as the source of truth, with local precheck kept separate. (`qmtl/services/worldservice/shared_schemas.py`, Core Loop contract tests)
-- Default-safe: when WS decisions are missing or stale, executions downgrade to backtest/compute-only and mark safe_mode. (`qmtl/runtime/sdk/execution_context.py`, `tests/e2e/core_loop/test_compute_context_contract.py`)
-- Data on-ramp: world presets drive Seamless auto-wiring by default, verified by the Core Loop contract suite. (`qmtl/runtime/sdk/world_data.py`, `tests/e2e/core_loop/`)
-- ACK/resync baseline: `requires_ack` currently means Gateway ControlBus receipt acknowledgement (single-stage ACK). Sequence gaps/divergence converge through `state_hash` + HTTP reconcile paths. Timeout and auto-recovery policy details are tracked in the [ACK/Gap Resync RFC (Draft)](ack_resync_rfc.md).
+The product-facing Core Loop contract is now split out into dedicated contract pages.
+
+- The strategy-author golden path lives in [Core Loop Contract](../contracts/core_loop.md).
+- Stage transitions and promotion handoff live in [World Lifecycle Contract](../contracts/world_lifecycle.md).
+- This page explains the **internal architecture that upholds those contracts**.
 
 ### Default-Safe Principle
 
@@ -72,19 +69,34 @@ multi-strategy environments.
 At the architectural level, the core design value of QMTL can be stated in a
 single sentence:
 
-> **“Focus only on strategy logic; the system handles optimisation and returns.”**
+> **“Focus on strategy logic; the system owns orchestration, policy, and safe automation.”**
 
 All components described in this document (Gateway, DAG Manager, WorldService,
 SDK/Runner, etc.) share the following intent:
-- Strategy authors focus on **strategy DAGs, world selection, and execution mode**
-  while the system layers own stage decisions, queue creation/scaling, ExecutionDomain handling,
-  2‑Phase apply, feature artifact management, and risk/timing gating.
-- Internal layers are allowed to be complex, but the **external interface is
-  designed around `Write strategy → Submit → (Auto evaluate/deploy) → Check
-  contribution`** as the primary user flow.
-- When introducing new features, the default bias is “have the system decide
-  automatically and offer overrides only when necessary” rather than pushing
-  more configuration choices onto users.
+- Strategy authors focus on **strategy DAGs and world selection**, while system layers own stage decisions, queue creation/scaling, ExecutionDomain handling, feature-artifact management, and risk/timing gating.
+- Internal layers may be complex, but the external surface should remain centered on a single submission path and read-only result surfaces.
+- New features should default toward automatic system decisions with explicit overrides only where necessary.
+
+### 0-A. Design Review Criteria (Normative)
+
+This document describes the current architecture, but future feature additions and
+design changes should be judged first against the following documents:
+
+- [QMTL Design Principles](design_principles.md): first-class rules for extension
+- [QMTL Capability Map](capability_map.md): capability-centered structure rather than archetype-centered structure
+- [QMTL Semantic Types](semantic_types.md): legality and isolation axes
+- [QMTL Decision Algebra](decision_algebra.md): shared decision family and planner boundaries
+
+The following rules are treated as **normative design criteria** for future work:
+
+- New features should be explained as capability composition, not as archetype-specific exceptions.
+- Restrictions should be expressed in semantic types, not in feature or product names.
+- Combinations such as `ML + MM` should remain ordinary composition paths, not special cases.
+- Profiles are examples for explanation and onboarding, not first-class axes of the Core.
+
+If future documentation or implementation begins to accumulate combination-specific
+branches, revisit the capability boundaries and semantic contracts before extending
+the implementation further.
 
 !!! note "Supported execution modes"
     The Core Loop and execution model described in this document **always assume a stack that includes WorldService and Gateway**.  
@@ -95,53 +107,18 @@ SDK/Runner, etc.) share the following intent:
 
 ### 0.1 Core Loop: Strategy Lifecycle
 
-From the user’s perspective, QMTL’s **Core Loop** is:
+The product-facing Core Loop narrative now lives in [Core Loop Contract](../contracts/core_loop.md) and [World Lifecycle Contract](../contracts/world_lifecycle.md).
 
-> Implement strategy → Submit → (system backtests/evaluates/deploys inside a world) → Observe world performance → Refine strategy
+The only summary preserved here is:
 
-- Strategy code only expresses “signal logic + required data”, while data supply/backfill/market replay are handled by the Seamless/DataPlane.
-- A single `Runner.submit(..., world=...)` call warms up history, runs a replay‑style backtest, computes metrics, evaluates policies (WorldService), and surfaces activation/allocations at the world level.
-- Users stay focused on the “submit → observe → improve” loop for their worlds.
+- submissions converge on `Runner.submit(..., world=...)`
+- stage and world-policy outcomes are managed across the Gateway/WorldService boundary
+- data on-ramp and replay/backtest are owned by the data plane and SDK orchestration
+- allocation/rebalancing is a separate control-plane contract documented in [World Allocation and Rebalancing Contract](rebalancing_contract.md)
 
-#### 0.1.1 Backtest & Market Replay
+### Legacy and Migration
 
-- `HistoryWarmupService` and `Pipeline` handle `StreamInput` history loading and replay.
-- Seamless/QuestDB/CCXT and other sources are integrated into the v2 data plane; worlds that declare `world.data.presets[]` let Runner/CLI auto‑wire a Seamless provider and StreamInputs from the world + preset. The default on‑ramp needs only `world` (and optionally a data preset) for market‑style replay; worlds without presets still follow the manual wiring described in the design docs.
-
-#### 0.1.2 Data Supply Automation
-
-- `SeamlessDataProvider v2` abstracts cache→storage→backfill→live and enforces SLAs/conformance/schema checks.
-- When a world is specified, Runner/CLI defaults to a Seamless provider consistent with that world’s config/preset and auto‑injects it into StreamInputs so users think in terms of **data presets/fingerprints**, not low‑level data plumbing.
-
-#### 0.1.3 Auto Evaluation → Tradable Transition
-
-- `ValidationPipeline` computes Sharpe/MDD/linearity metrics only, and `auto_returns` pre‑processing lets Runner.submit derive returns when explicit series are missing before delegating policy evaluation to WorldService.
-- WorldService `/worlds/{world_id}/evaluate` outputs (active/weight/contribution) map directly into Runner/CLI results, while local `ValidationPipeline` output is shown only in `precheck` so WS remains the SSOT for `status/weight/rank/contribution`.
-
-#### 0.1.4 World‑Level Capital Allocation
-
-- WorldService computes world and cross‑world allocation plans through `/allocations` and its internal rebalancing engine, and Runner.submit/CLI surface the latest snapshot for the submitted world (world/strategy shares, etag/updated_at, staleness hints) as read‑only context.
-- The Core Loop treats evaluation/activation vs. allocation as a **two‑step standard flow**:  
-  1) `Runner.submit(..., world=...)` → WS evaluation/activation, and  
-  2) allocation/rebalancing via `/allocations`, `/rebalancing/plan`, and `/rebalancing/apply` (`qmtl world allocations|rebalance-*`).  
-  Apply/rebalancing stays as an auditable operational step with `run_id`/`etag` tracking (`qmtl world apply <id> --run-id <id> [--plan-file ...]`).
-
-### Core Principle: Simplicity > Backward Compatibility
-
-!!! danger "Breaking Change Principle"
-    **Do not keep legacy solely to preserve backward compatibility.**
-    
-    Keeping old and new APIs/config side-by-side for compatibility:
-    - Doubles documentation surface ("old way" vs "new way")
-    - Accumulates branches and flags in the codebase
-    - Confuses new users on "which path is canonical"
-    - Ultimately negates the simplification goal itself
-    
-    **Losing simplicity is more harmful than breaking backward compatibility.**
-
-In practice:
-- For major changes (e.g., Runner API, ExecutionDomain semantics, world policy schema), ship **explicit migration guides and helper tools**, but avoid long-lived runtime flags or compatibility modes.
-- Docs, examples, and CLI should always point to a single “current” path; regularly prune dual paths so “old vs new” flows do not coexist indefinitely.
+This page assumes only the current, supported surfaces. Legacy-removal policy and concrete migration checklists are maintained in [Migration: Removing Legacy Modes and Backward Compatibility](../guides/migration_bc_removal.md).
 
 ---
 
@@ -345,9 +322,10 @@ examples are catalogued under [operations/](../operations/README.md) and
   downstream consumers.
 - **ComputeKey interplay:** When runtime cache hits occur, the ComputeKey scope
   enforces domain isolation; feature artifacts are treated strictly as inputs.
-- **SDK implementation:** `qmtl.runtime.sdk.feature_store` records artifacts for
-  backtest/dryrun domains and exposes `CacheView.feature_artifacts()` for live
-  or shadow domains to consume them read-only.
+- **Implementation note:** The currently shipped store/adaptor set is tracked in
+  [QMTL Implementation Traceability](implementation_traceability.md). The
+  normative contract here is only that backtest/dryrun may write artifacts,
+  while live/shadow consume them read-only.
 - **CLI/backfill guidance:** Pin `cache.feature_artifact_dir` for local replays
   and limit `cache.feature_artifact_write_domains` to keep replay and promotion
   pipelines isolated.
@@ -420,6 +398,10 @@ examples are catalogued under [operations/](../operations/README.md) and
    Major schema changes bump `schema_compat_id`. Minor changes reuse the same
    compatibility ID and rely on buffer modes or controlled recompute windows.
 
+### 3.2 Runtime reliability and determinism
+
+Operational reliability proposals, determinism checklists, and observability/runbook links are maintained in [Architecture Runtime Reliability](../reference/architecture_runtime_reliability.md). This architecture page stays focused on service boundaries and invariants.
+
 ---
 
 ## 4. Eval Keys, World Bindings, and Propagation
@@ -485,108 +467,9 @@ emit world-scoped labels.
 
 ---
 
-## Appendix: General strategy example (Runner API)
+### 4.4 Examples and data on-ramp
 
-The following sample aligns with the core architectural rules: user-defined
-compute functions operate on a read-only `CacheView`, nodes reference each
-other directly inside the DAG, and all warmup/period/interval constraints are
-respected.
-
-```python
-from qmtl.runtime.sdk import Strategy, Node, StreamInput, Runner
-import polars as pl
-
-# Strategy definition
-class GeneralStrategy(Strategy):
-    def setup(self):
-        price_stream = StreamInput(
-            interval="60s",    # 1-minute bars
-            period=30           # require the last 30 bars
-        )
-
-        def generate_signal(view) -> pl.DataFrame:
-            price = view.as_frame(price_stream, 60, columns=["close"]).validate_columns(["close"])
-            momentum = price.frame.get_column("close").pct_change().rolling_mean(window_size=5)
-            signal = (momentum > 0).cast(pl.Int64)
-            return pl.DataFrame({"signal": signal})
-
-        signal_node = Node(
-            input=price_stream,
-            compute_fn=generate_signal,
-            name="momentum_signal"
-        )
-
-        self.add_nodes([price_stream, signal_node])
-
-## Seamless Data Provider (SDK)
-
-Runner submit calls resolve the world-configured Seamless preset by default and
-inject the provider into StreamInput resolution paths. Strategy code remains
-focused on node logic, while data on-ramp details stay in world/preset config.
-
-# World-driven execution entry point
-if __name__ == "__main__":
-    Runner.submit(GeneralStrategy, world="general_demo")
-```
-
----
-
-### Appendix: Tag Query strategy example (automatic multi-upstream selection)
-
-This example assumes existing hourly RSI/MFI indicator nodes tagged with
-`["ta-indicator"]`. `TagQueryNode` pulls all matching streams into the strategy
-and computes a correlation matrix.
-
-```python
-from qmtl.runtime.sdk import Strategy, Node, Runner, TagQueryNode, MatchMode
-import polars as pl
-
-# User-defined correlation helper
-def calc_corr(view) -> pl.DataFrame:
-    aligned = view.align_frames([(node_id, 3600) for node_id in view], window=24)
-    frames = [frame.frame for frame in aligned if not frame.frame.is_empty()]
-    if not frames:
-        return pl.DataFrame()
-
-    corr = pl.concat(frames, how="horizontal").corr()
-    return corr
-
-class CorrelationStrategy(Strategy):
-    def setup(self):
-        # TagQueryNode: automatically resolves upstreams matching the tag/interval
-        indicators = TagQueryNode(
-            query_tags=["ta-indicator"],  # match existing RSI, MFI, etc.
-            interval="1h",               # hourly bars
-            period=24,                    # keep the last 24 hours
-            match_mode=MatchMode.ANY,     # OR-matching by default
-            compute_fn=calc_corr          # compute correlation directly
-        )
-
-        corr_node = Node(
-            input=indicators,
-            compute_fn=calc_corr,
-            name="indicator_corr"
-        )
-
-        self.add_nodes([indicators, corr_node])
-
-        # match_mode=MatchMode.ANY matches queues with any tag; MatchMode.ALL
-        # restricts to queues containing all tags.
-
-# Live execution example (world-driven)
-if __name__ == "__main__":
-    Runner.submit(CorrelationStrategy, world="corr_demo")
-```
-
-## Appendix: Cross-market strategy example (Cross-Market Lag Strategy)
-
-Cross-market lag variants follow the same world-driven submit pattern and use
-the same activation/decision envelopes; only upstream market selection and lag
-window parameters differ.
-
-In live runs, Gateway/SDK consume world decisions and activation envelopes as
-read-only SSOT signals. Order publication stays gated until world policy and
-activation state explicitly allow it.
+Strategy examples, Seamless data on-ramp notes, TagQuery examples, and cross-market examples now live in [QMTL Architecture Examples](architecture_examples.md). The world-owned data wiring contract is defined separately in [World Data Preset Contract](../world/world_data_preset.md).
 
 ---
 
@@ -629,53 +512,11 @@ points-in-time, and provides a durable audit trail.
 
 ---
 
-## 7. Determinism & Operational Checklist
+## 7. Supplemental references
 
-1. **Gateway <-> SDK CRC validation** - Enforce mutual `crc32` checks of NodeIDs.
-2. **NodeCache guardrails & GC** - Evict slices beyond `period x interval` and
-   maintain zero-copy Arrow transfers.
-3. **Kafka topic creation retries** - Follow the `CREATE_TOPICS -> VERIFY ->
-   WAIT -> BACKOFF` loop and inspect broker metadata for near-name collisions.
-4. **Sentinel traffic shift verification** - Ensure Gateway and SDK converge on
-   updated weights within 5 seconds (`sentinel_skew_seconds` metric).
-5. **TagQueryNode expansion** - Emit `tagquery.upsert` CloudEvents and let
-   `TagQueryManager` refresh buffers automatically.
-6. **Minor-schema buffering** - Reuse nodes for `schema_minor_change` but force a
-   full recompute after 7 days.
-7. **GSG canonicalisation & SSA DAG lint** - Convert DAGs to canonical JSON + SSA
-   form and verify regenerated NodeIDs.
-8. **Golden-signal SLO/alerts** - Maintain Prometheus rules for
-   `diff_duration_ms_p95`, `nodecache_resident_bytes`, and `sentinel_gap_count`,
-   and track submit→activation SLOs through the Core Loop golden-signal
-   dashboard/SLOs (`../operations/core_loop_golden_signals.md`, T5 P1‑M2 delivered).
-9. **Failure playbooks** - Cross-link runbooks and dashboards for Neo4j failures,
-   Kafka metadata corruption, and Redis AOF loss.
-10. **Four-stage CI/CD gate** - Pre-merge SSA lint + fast backtests, 24h canary,
-    50% promotion, single-command rollback.
-11. **NodeID world exclusion** - Static/dynamic validation that NodeID inputs do
-    not include `world_id`; identical code/params/dependencies must yield the
-    same NodeID across worlds.
-12. **TagQueryNode stability** - Confirm NodeID remains unchanged before/after
-    discovering additional queues when query specs are identical.
-
-Meeting all items marks the QMTL v0.9 "Determinism" milestone.
-The golden-signal To-Be is materialised in the dashboards/SLOs documented in `../operations/core_loop_golden_signals.md`.
-
-### Observability & runbook
-- Gateway metrics: `nodeid_checksum_mismatch_total{source="dag"}`, `nodeid_missing_fields_total{field,node_type}`, `nodeid_mismatch_total{node_type}`, `tagquery_nodeid_mismatch_total`.
-- Runbook: follow `docs/en/operations/determinism.md` for NodeID CRC/TagQuery mismatches; if the counters rise, regenerate DAG node_ids and re-run the Core Loop contract suite (`tests/e2e/core_loop`).
-
----
-
-## 8. Additional Guidance
-
-- Promotions must pin `dataset_fingerprint` in policies and EvalKeys; missing
-  fingerprints downgrade or reject applies.
-- `observability.slo.cross_context_cache_hit` MUST remain zero; violations halt
-  execution until remediated.
-- Policy bundles should declare `share_policy`, edge overrides, and risk limits
-  explicitly so promotion pipelines remain auditable.
-- Keep layer templates loosely coupled and document changes in
-  the public `qmtl init` scaffold and strategy workflow guides.
+- [Architecture Runtime Reliability](../reference/architecture_runtime_reliability.md): determinism checklist, runtime reliability proposals, observability links
+- [QMTL Architecture Examples](architecture_examples.md): strategy examples and data on-ramp examples
+- [World Event Stream Runtime](world_eventstream_runtime.md): activation/queue/policy fan-out boundary
+- [ACK/Gap Resync RFC (Draft)](../design/ack_resync_rfc.md): ACK/gap resync design discussion
 
 {{ nav_links() }}
