@@ -10,14 +10,18 @@ last_modified: 2025-12-15
 # Core Loop × WorldService — Campaign Automation and Promotion Governance
 
 !!! abstract "Summary"
-    The Core Loop converges on “submit strategy + world, then the world manages stages (backtest → paper(dryrun) → live)”.  
-    Callers use `Runner.submit(strategy, world=...)` only; stage/promotion/governance is decided by **WorldService policy**.  
-    Evaluation inputs (especially realized returns and portfolio snapshots) are anchored to the `risk_signal_hub` SSOT.
+    This document describes the **backend automation contract** behind the Core Loop.  
+    The user-facing golden path lives in [Core Loop Contract](../contracts/core_loop.md) and [World Lifecycle Contract](../contracts/world_lifecycle.md).  
+    This page focuses on how WorldService owns stage/promotion/governance and how evaluation inputs anchor to the `risk_signal_hub` SSOT.
 
 Related documents:
+- Product surface: [contracts/core_loop.md](../contracts/core_loop.md)
+- World stage contract: [contracts/world_lifecycle.md](../contracts/world_lifecycle.md)
 - System blueprint: [architecture/architecture.md](architecture.md)
 - WorldService: [architecture/worldservice.md](worldservice.md)
 - Risk Signal Hub: [architecture/risk_signal_hub.md](risk_signal_hub.md)
+- Operational approval/rollback: [operations/activation.md](../operations/activation.md)
+- Governance operations: [operations/world_validation_governance.md](../operations/world_validation_governance.md)
 - Evaluation runs & metrics API (icebox, reference-only): [design/worldservice_evaluation_runs_and_metrics_api.md](../design/icebox/worldservice_evaluation_runs_and_metrics_api.md)
 - Strategy/node distillation (icebox, reference-only): [design/strategy_distillation.md](../design/icebox/strategy_distillation.md)
 - (Archive) Step-by-step roadmap: [archive/core_loop_world_roadmap.md](../archive/core_loop_world_roadmap.md)
@@ -25,6 +29,8 @@ Related documents:
 ---
 
 ## 1. System boundary and flow
+
+This page prioritizes **service boundaries and backend contracts** over onboarding-oriented explanations.
 
 ```mermaid
 flowchart LR
@@ -52,6 +58,8 @@ flowchart LR
   - When WS decisions are missing or stale, downgrade to compute-only (backtest).
   - With `allow_live=false`, live transitions (activation/apply) are never permitted.
 
+The product-facing submission/result contract is split into [Core Loop Contract](../contracts/core_loop.md).
+
 ---
 
 ## 3. Evaluation runs and metric sourcing (Phase 2–4 core)
@@ -77,6 +85,8 @@ WorldService tracks “submit/evaluate/validate/promotion-candidate” via **Eva
 
 ## 4. Campaign orchestration (Phase 4)
 
+Concept ID: `CTRL-CAMPAIGN-TICK`
+
 Campaigns are “loops that fill observation windows and compute promotion candidates”.
 
 - Policy (summary):
@@ -92,6 +102,8 @@ Campaigns are “loops that fill observation windows and compute promotion candi
 
 ## 5. Live promotion governance (Phase 5)
 
+Concept ID: `CTRL-LIVE-PROMOTION-GOVERNANCE`
+
 Live promotion is primarily an operator/governance step, fixed per world policy.
 
 - Policy example:
@@ -100,3 +112,5 @@ Live promotion is primarily an operator/governance step, fixed per world policy.
   - Even with `auto_apply`, paper(dryrun) observation and validation gates are **not skipped**.
 - Fail-closed (required):
   - If the `risk_signal_hub` snapshot is missing/expired/stale, promotion is blocked and the blocking reason is recorded.
+
+Operator procedures and approval flows live in [World Activation Runbook](../operations/activation.md) and [World Validation Governance](../operations/world_validation_governance.md).

@@ -2,7 +2,7 @@
 title: "WorldService - World Policy, Decisions, and Activation"
 tags: [architecture, world, policy]
 author: "QMTL Team"
-last_modified: 2026-02-06
+last_modified: 2026-04-03
 spec_version: v1.0
 ---
 
@@ -10,8 +10,12 @@ spec_version: v1.0
 
 # WorldService - World Policy, Decisions, and Activation
 
+Related: [Core Loop Contract](../contracts/core_loop.md)  
+Related: [World Lifecycle Contract](../contracts/world_lifecycle.md)  
+Related: [World Allocation and Rebalancing Contract](rebalancing_contract.md)  
 Related: [Core Loop × WorldService — Campaign Automation and Promotion Governance](core_loop_world_automation.md)  
-Related: [ACK/Gap Resync RFC (Draft)](ack_resync_rfc.md)
+Related: [World Activation Runbook](../operations/activation.md)  
+Related: [ACK/Gap Resync RFC (Draft)](../design/ack_resync_rfc.md)
 
 ## 0. Role & Scope
 
@@ -24,32 +28,27 @@ WorldService is the system of record (SSOT) for Worlds. It owns:
 - Audit & RBAC: every policy/update/decision/apply event is logged and authorized
 - Events: emits activation/policy updates to the internal ControlBus
 
-!!! note "Deployment profile"
-    With `profile: dev`, WorldService uses an in-memory activation store when Redis is not configured. With `profile: prod`, missing `worldservice.server.redis` fails fast before startup; in-memory mode is not allowed.
-
 !!! note "Risk Signal Hub integration"
-    - WorldService receives and stores portfolio/risk snapshots via the `/risk-hub/*` router, and the ExtendedValidation/stress/live workers perform VaR/ES and stress calculations via hub queries/events.
-    - Dev profile: uses only in-memory/SQLite + fakeredis cache; covariance and similar artifacts are inline (ref offload disabled).
-    - Prod profile: uses Postgres `risk_snapshots` + Redis cache, and can enable S3/Redis blob offload via hub settings when needed.
-    - Gateway only pushes snapshots to the hub; the hub consumers are WorldService (and the exit engine).
+    WorldService is the control-plane consumer of portfolio/risk snapshots from the Risk Signal Hub. See [Risk Signal Hub](risk_signal_hub.md) and the [Risk Signal Hub Runbook](../operations/risk_signal_hub_runbook.md) for topology and operational details.
+
+Operational rules:
+- Deployment profiles, Redis requirements, and pre-start validation steps live in [Backend Quickstart](../operations/backend_quickstart.md) and [Deployment Path Decision](../operations/deployment_path.md).
+- Current policy-engine implementation coverage and `partial/implemented` status live in [QMTL Implementation Traceability](implementation_traceability.md).
 
 !!! warning "Default-safe"
 - Do not default to live when inputs are missing or ambiguous; downgrade to compute-only (backtest) if `execution_domain` is empty or omitted. WS API calls must not persist live by default.
 - With `allow_live=false` (default), activation/domain switches must not move to live even if operators request it. Only promote when policy validation passes (required signals, hysteresis, dataset_fingerprint anchored).
 - When clients omit `execution_domain`, world nodes and validation caches are stored under `backtest` by default. Explicitly set the intended domain in API payloads to avoid accidental live scope.
 
-!!! note "Policy engine implementation status"
-    The current `/worlds/{world_id}/decide` endpoint decides `effective_mode` and TTL/reasons only based on the world’s `allow_live` flag, the presence of bindings/decisions, and history metadata (dataset_fingerprint, coverage, etc.). The finer-grained scoring/hysteresis/required signal sets (StrategySeries-based) and domain-specific edge override integrations described in the policy docs are not implemented yet. When the WorldService policy engine is ready, we will integrate that evaluation logic and SSOT into this path.
-
 !!! note "Design intent"
 - WS produces `effective_mode` (policy string); Gateway maps it to `execution_domain` and propagates via a shared compute context. SDK/Runner do not choose modes and treat the mapped domain as input only. Stale/unknown decisions default to compute-only with order gates OFF.
 - Submission `meta.execution_domain` values are treated only as hints; the authoritative domain always derives from the WS `effective_mode`.
 
-QMTL’s core value — **“focus only on strategy logic; the system handles optimisation and returns”** — is realised in WorldService as follows:
-- Strategy authors only submit strategies to worlds; **validation, promotion/demotion, weight adjustments, and risk constraints** are enforced automatically by WS policies.
-- From a world-portfolio perspective, only strategies that are classified as `valid` are admitted so that **world-level risk-adjusted returns do not degrade**, aiming as closely as possible at monotonic improvement.
-- SDK/Runner and Gateway act purely as consumers of WS decision envelopes; user interfaces do not require operators to understand or control ExecutionDomain details or the apply protocol to benefit from world decisions.
-- When evolving policies/schemas, avoid keeping old and new fields or modes indefinitely for compatibility; after a defined migration window, converge on a single “current” policy model (prioritising simplicity over backward compatibility).
+The WorldService surface assumes the following boundaries.
+- Strategy authors focus on submission and result interpretation; WS owns policy evaluation and activation control.
+- WS provides the authoritative world-level decision and activation state.
+- Live promotion and capital application remain separate operational governance steps.
+- Policy/schema transitions prefer explicit migration windows and convergence to a single model over indefinite dual-surface compatibility.
 
 Non-goals:
 - Strategy ingest, DAG diff, queue/tag discovery (owned by Gateway/DAG Manager). Order I/O is not handled here.
@@ -75,8 +74,8 @@ Related: [Core Loop × WorldService — Campaign Automation and Promotion Govern
 
 #### World-Level Allocation / Rebalancing
 
-- `/allocations`, `/rebalancing/plan`, and `/rebalancing/apply` compute and record world and cross-world allocation plans; Runner.submit/CLI surface the latest snapshot (world/strategy totals, etag/updated_at, staleness) for the submitted world as read-only context and hint users to refresh with `qmtl world allocations -w <id>` when missing or stale.
-- The submission/evaluation loop and the world allocation loop are a **standard two-step flow** with WS as SSOT for evaluation/activation/allocation and apply/rebalancing remaining an auditable, operator-led step (`qmtl world apply <id> --run-id <id> [--plan-file ...]`) anchored by run_id/etag tracking.
+- The detailed rebalancing control-plane rules now live in [World Allocation and Rebalancing Contract](rebalancing_contract.md).
+- This document keeps only the architectural boundary: submit/CLI surface the latest allocation snapshot as **read-only context**, and WorldService remains the SSOT for the plan/apply path.
 
 ---
 
@@ -208,7 +207,7 @@ Field semantics and precedence
 - On ControlBus relays, Gateway augments outbound payloads before WebSocket fan-out using the same mapping/safe-mode rules as activation HTTP/bootstrap paths.
 - ControlBus fan-out injects `phase` (`freeze|unfreeze`), `requires_ack`, and `sequence` via [`ActivationEventPublisher.update_activation_state`]({{ code_url('qmtl/services/worldservice/activation.py#L58') }}). `sequence` is produced per run by [`ApplyRunState.next_sequence()`]({{ code_url('qmtl/services/worldservice/run_state.py#L47') }}).
 - `requires_ack=true` currently means Gateway MUST apply the event in-order and publish `ActivationAck` on `control.activation.ack` for that `sequence` (SHALL). This is transport/apply acknowledgement at Gateway, not an end-to-end confirmation from every downstream SDK/WebSocket client.
-- Gateway MUST NOT apply later events (especially Unfreeze) or reopen order gates before prior required sequences converge (SHALL). Gap timeout/auto-recovery policy is tracked in [ACK/Gap Resync RFC (Draft)](ack_resync_rfc.md).
+- Gateway MUST NOT apply later events (especially Unfreeze) or reopen order gates before prior required sequences converge (SHALL). Gap timeout/auto-recovery policy is tracked in [ACK/Gap Resync RFC (Draft)](../design/ack_resync_rfc.md).
 
 Idempotency: consumers must treat older etag/run_id as no-ops. Unknown or expired decisions/activations should default to "inactive/safe".
 
@@ -310,67 +309,39 @@ gating_policy:
 
 ---
 
-## 5. Allocation & Rebalancing APIs (normative)
+## 5. Allocation & Rebalancing Control Surface
 
-WorldService exposes two surfaces for coordinated world allocation changes. All flows operate in `mode='scaling'` by default; `overlay` is supported with overlay config and `hybrid` remains unimplemented (HTTP 501).
+WorldService remains the SSOT for allocation snapshots, rebalancing plan/apply state,
+and ControlBus fan-out, but the detailed normative surface now lives in the
+[World Allocation and Rebalancing Contract](rebalancing_contract.md).
 
-### 5-A. `POST /allocations` — world allocation upsert
+Architectural boundaries preserved here:
 
-- **Input schema:** [`AllocationUpsertRequest`]({{ code_url('qmtl/services/worldservice/schemas.py#L278') }}). Required fields: `run_id`, `total_equity`, `world_allocations{world_id→ratio}`, and current `positions[]`. Optional knobs include per-world strategy totals (`strategy_alloc_*`), `min_trade_notional`, and symbol lot sizes (`lot_size_by_symbol`).【F:qmtl/services/worldservice/schemas.py†L248-L314】
-- **Validation:** `world_allocations` must be non-empty and ratios must remain within [0,1]. Values outside the band raise 422; unsupported modes raise 501.【F:qmtl/services/worldservice/services.py†L184-L207】
-- **Core Loop surface:** Runner.submit/CLI query `GET /allocations?world_id=...` for the submitted world to display the **applied world/strategy totals**. Failures are ignored; this is a discovery surface, not an execution trigger.
-- **run_id idempotency:** The request body (excluding `run_id`/`execute`/`etag`) is hashed to derive a deterministic `etag`. Reusing a `run_id` with a different payload triggers HTTP 409; matching payloads reuse the stored plan and execution state.【F:qmtl/services/worldservice/services.py†L129-L166】【F:qmtl/services/worldservice/services.py†L207-L236】
-- **Plan computation:** `MultiWorldProportionalRebalancer` applies world- and strategy-level scaling to produce `per_world` and `global_deltas`. When strategy totals are omitted, it infers weights from current exposure to operate in “scale-only” mode.【F:qmtl/services/worldservice/rebalancing/multi.py†L1-L111】【F:qmtl/services/worldservice/rebalancing/rule_based.py†L1-L74】
-- **Persistence & events:** Successful upserts persist the request/plan snapshot and update stored world/strategy allocations. WorldService then emits `rebalancing_planned` ControlBus events (per world) containing `scale_world`, `scale_by_strategy`, and `deltas`, allowing Gateway to broadcast and measure the rebalance.【F:qmtl/services/worldservice/services.py†L237-L311】【F:qmtl/services/worldservice/controlbus_producer.py†L96-L109】
-- **External execution:** When `execute=true` and a rebalance executor is configured, WorldService forwards a normalized `MultiWorldRebalanceRequest` to the executor and stores the response in `execution_response`. Missing executors yield 503; execution failures surface as 502. A successful run marks `executed=true`.【F:qmtl/services/worldservice/services.py†L167-L318】
-- **Response:** [`AllocationUpsertResponse`]({{ code_url('qmtl/services/worldservice/schemas.py#L295') }}) returns the computed plan together with `run_id`, `etag`, `executed`, and the optional executor payload.【F:qmtl/services/worldservice/services.py†L212-L235】【F:qmtl/services/worldservice/services.py†L312-L318】
+- WorldService is the authoritative source for the allocation snapshots surfaced by submit/CLI.
+- `/allocations`, `/rebalancing/plan`, and `/rebalancing/apply` share the same run_id/etag audit lineage.
+- Schema-version negotiation, alpha-metrics handshakes, and `rebalancing_planned` fan-out belong to the same control-plane contract.
 
-### 5-B. `POST /rebalancing/plan`
+For the detailed API schema, idempotency rules, and rollout procedures, see:
 
-- Accepts the same [`MultiWorldRebalanceRequest`]({{ code_url('qmtl/services/worldservice/schemas.py#L236') }}) and runs `MultiWorldProportionalRebalancer`. Requests using `hybrid` return 501. Overlay requests emit `overlay_deltas` alongside the per-world scaling/deltas plus aggregated `global_deltas` for analysis.【F:qmtl/services/worldservice/routers/rebalancing.py†L21-L82】
-- The endpoint is stateless—no persistence or audit logging—so operators can preview or simulate plans safely.
-
-### 5-C. `POST /rebalancing/apply`
-
-- Mirrors `/rebalancing/plan` for computation, then serializes the per-world plan and global deltas into the audit store (best effort). When a ControlBus is configured, it publishes `rebalancing_planned` events per world.【F:qmtl/services/worldservice/routers/rebalancing.py†L84-L154】【F:qmtl/services/worldservice/storage/persistent.py†L850-L864】
-- `/rebalancing/apply` does not mutate stored allocations. `/allocations` or an external executor perform the actual account changes; this endpoint marks the “approved plan” for observability and audit.
-
-### 5-D. Schema version & alpha metrics handshake
-
-- `/rebalancing/plan` and `/rebalancing/apply` now negotiate a `schema_version` and, when enabled, surface an `alpha_metrics` envelope alongside the per-world plan/global deltas. WorldService exposes the `compat_rebalance_v2` and `alpha_metrics_required` switches through `create_app()` and `WorldServiceServerConfig`, letting operators opt into schema v2 or enforce it per deployment (`compat_rebalance_v2`/`alpha_metrics_required` defaults, toggles, and request gating live in `api.py` and `config.py`). When v2 is disabled the endpoints reply with `schema_version=1` and no metrics; when v2 runs they emit `schema_version=2` plus an `AlphaMetricsEnvelope` even if it is empty so downstream consumers always have a stable dictionary to parse (`AlphaMetricsEnvelope` includes `per_world` and `per_strategy` maps of `alpha_performance` stats). Requests are blocked up front if `alpha_metrics_required` is true and `schema_version<2`, ensuring clients that depend on the richer envelope can fail fast before planning begins.【F:qmtl/services/worldservice/api.py#L119-L210】【F:qmtl/services/worldservice/config.py#L25-L108】【F:qmtl/services/worldservice/routers/rebalancing.py#L54-L187】【F:qmtl/services/worldservice/schemas.py#L245-L308】
-- Each `alpha_metrics` map uses `alpha_performance.<metric>` keys (e.g., `alpha_performance.sharpe`, `alpha_performance.max_drawdown`) and defaults to `0.0` when actual data is unavailable, so Gateway/SDK parsers can consume it without extra guards.【F:qmtl/services/worldservice/alpha_metrics.py#L1-L52】
-- ControlBus `rebalancing_planned` events carry the negotiated `schema_version` plus the same `alpha_metrics` envelope, giving the Gateway's ControlBus consumer a stable signal to relay the `alpha_performance` metrics (`docs/operations/rebalancing_schema_coordination.md` tracks the coordination steps for Gateway (#1512) and SDK (#1511) before enabling v2).【F:qmtl/services/worldservice/controlbus_producer.py#L27-L52】【docs/operations/rebalancing_schema_coordination.md】
-
-### 5-E. ControlBus integration & metrics
-
-- Gateway’s ControlBus consumer relays `rebalancing_planned` events over the WebSocket `rebalancing` topic and updates Prometheus counters/gauges: `rebalance_plans_observed_total`, `rebalance_plan_last_delta_count`, `rebalance_plan_execution_attempts_total`, `rebalance_plan_execution_failures_total`. These metrics expose plan frequency and execution health.【F:qmtl/services/gateway/controlbus_consumer.py†L223-L276】【F:qmtl/services/gateway/metrics.py†L216-L592】
+- [World Allocation and Rebalancing Contract](rebalancing_contract.md)
+- [Rebalancing Execution Adapter](../operations/rebalancing_execution.md)
+- [WS↔Gateway↔SDK Rebalancing Coordination Checklist](../operations/rebalancing_schema_coordination.md)
 
 ---
 
 ## 6. Security & RBAC
 
-- Auth: service-to-service tokens (mTLS/JWT); user tokens at Gateway -> propagated to WS
-- World-scope RBAC enforced at WS; Gateway only proxies
-- Audit: all write ops and evaluations are logged with correlation_id
-
-Clock Discipline
-- Decisions depend on time. WS uses a monotonic server clock and enforces NTP health. Maximum tolerated client skew should be documented (e.g., <= 2s).
+- Authentication, world-scoped authorization, and write-path audit are enforced at the WorldService boundary. Gateway is only a proxy here.
+- Decision and apply paths assume monotonic server time and healthy NTP.
+- The operator procedures for overrides and applies live in the [World Activation Runbook](../operations/activation.md) and [World Validation Governance](../operations/world_validation_governance.md).
 
 ---
 
 ## 7. Observability & SLOs
 
-Metrics (current implementation)
-- Apply: `world_apply_run_total`, `world_apply_failure_total`
-- Allocation snapshots: `world_allocation_snapshot_total`, `world_allocation_snapshot_stale_total`, `world_allocation_snapshot_stale_ratio`
-- Risk Hub processing: `risk_hub_snapshot_processed_total`, `risk_hub_snapshot_failed_total`, `risk_hub_snapshot_processing_latency_seconds`
-- Validation event processing: `validation_event_processed_total`, `validation_event_failed_total`, `validation_event_processing_latency_seconds`
-- Workers: `extended_validation_run_total`, `extended_validation_run_latency_seconds`, `live_monitoring_run_total`
-- Domain isolation: `cross_context_cache_hit_total` (target=0; violation blocks promotions)
-
-Alerts
-- Decision failures, explicit status polling failures, stale activation cache at Gateway
-- cross_context_cache_hit_total > 0 (CRIT): investigate domain mixing before re-enabling apply
+- WorldService owns the metric sources for apply, allocation snapshots, validation workers, Risk Hub consumption, and domain isolation.
+- Operational alerts, dashboards, and SLO thresholds are maintained in [Monitoring and Alerting](../operations/monitoring.md).
+- Rebalancing execution and fan-out metrics are interpreted together with the [Rebalancing Execution Adapter](../operations/rebalancing_execution.md).
 
 ---
 
@@ -380,6 +351,8 @@ Alerts
 - Redis loss: reconstruct activation by replaying activation/apply `WorldAuditLog` entries; orders remain gated until consistency is restored.
 - Policy parse errors: reject version; keep prior default.
 
+Step-by-step recovery and operator checklists live in the [World Activation Runbook](../operations/activation.md) and [Monitoring and Alerting](../operations/monitoring.md).
+
 ---
 
 ## 9. Integration & Events
@@ -387,6 +360,7 @@ Alerts
 - Gateway: proxy `/worlds/*`, cache decisions with TTL, enforce `--allow-live` guard
 - DAG Manager: no dependency for decisions; only for queue/graph metadata
 - ControlBus: WS publishes ActivationUpdated/PolicyUpdated; Gateway subscribes and relays via WS to SDK. Activation relays are augmented (`execution_domain`/`compute_context`) before fan-out; `/events/subscribe` bootstrap activation frames also use the augmentation path.
+- Campaign tick and live-promotion governance are covered separately in [Core Loop × WorldService — Campaign Automation and Promotion Governance](core_loop_world_automation.md).
 
 Runner & SDK Integration (clarification)
 - SDK/Runner do not expose execution modes. Callers provide only `world_id` when starting a strategy; Runner adheres to WorldService decisions and activation events.
@@ -397,8 +371,7 @@ Runner & SDK Integration (clarification)
 
 ## 10. Testing & Validation
 
-- Contract tests for envelopes (Decision/Activation) using the JSON Schemas (reference/schemas.md).
-- Idempotency tests: duplicate/out-of-order event handling based on `etag`/`run_id`.
-- WS reconcile tests: initial snapshot vs. `state_hash` divergence handling and HTTP fallback.
+- Representative envelope, activation, and rebalancing test evidence is tracked in [QMTL Implementation Traceability](implementation_traceability.md).
+- Operational validation workflows follow [End-to-End Testing](../operations/e2e_testing.md) and the smoke steps in [Backend Quickstart](../operations/backend_quickstart.md).
 
 {{ nav_links() }}

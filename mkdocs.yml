@@ -6,6 +6,10 @@ nav:
       - Core Concepts: getting-started/concepts.md
       - Quickstart: getting-started/quickstart.md
       - User Workflow: getting-started/workflow.md
+  - Product Contracts:
+      - Overview: contracts/README.md
+      - Core Loop Contract: contracts/core_loop.md
+      - World Lifecycle Contract: contracts/world_lifecycle.md
   - Maintenance:
       - Linearity & Alpha Metrics Complexity Plan: maintenance/metrics/linearity_and_alpha_metrics_complexity.md
       - Engineering Notes:
@@ -15,13 +19,22 @@ nav:
   - Architecture:
       - Overview: architecture/README.md
       - Glossary: architecture/glossary.md
+      - Design Foundations:
+          - Documentation System: architecture/documentation_system.md
+          - Design Principles: architecture/design_principles.md
+          - Capability Map: architecture/capability_map.md
+          - Semantic Types: architecture/semantic_types.md
+          - Decision Algebra: architecture/decision_algebra.md
+          - Implementation Traceability: architecture/implementation_traceability.md
       - Architecture & World ID Flow: architecture/architecture.md
+      - Architecture Examples: architecture/architecture_examples.md
       - Control Plane:
           - Gateway: architecture/gateway.md
           - DAG Manager: architecture/dag-manager.md
           - WorldService: architecture/worldservice.md
+          - World Allocation & Rebalancing Contract: architecture/rebalancing_contract.md
           - ControlBus: architecture/controlbus.md
-          - ACK/Gap Resync RFC: architecture/ack_resync_rfc.md
+          - World Event Stream Runtime: architecture/world_eventstream_runtime.md
       - Data Plane:
           - Seamless Data Provider v2: architecture/seamless_data_provider_v2.md
           - CCXT × Seamless Integrated (High + Codex): architecture/ccxt-seamless-integrated.md
@@ -75,6 +88,14 @@ nav:
       - Backend Quickstart: operations/backend_quickstart.md
       - Deployment Path: operations/deployment_path.md
       - Config CLI: operations/config-cli.md
+      - Service Runtime:
+          - Gateway Runtime: operations/gateway_runtime.md
+          - DAG Manager Runtime: operations/dag_manager_runtime.md
+          - ControlBus Operations: operations/controlbus_operations.md
+      - Supplemental Runbooks:
+          - Fill Replay Runbook: operations/fills_replay.md
+          - WS-Only Resilience & Recovery: operations/ws_resilience.md
+          - Neo4j Schema Initialization: operations/neo4j_migration.md
       - Docker & Compose: operations/docker.md
       - Backfill: operations/backfill.md
       - Canary Rollout: operations/canary_rollout.md
@@ -109,6 +130,8 @@ nav:
   - Design:
       - Design Guide: design/README.md
       - Labeling Contract: design/labeling_contract.md
+      - Control-Plane RFCs:
+          - ACK/Gap Resync RFC: design/ack_resync_rfc.md
       - QMTL UI: design/icebox/qmtl_ui.md
       - Strategy Distillation: design/icebox/strategy_distillation.md
       - World Validation Architecture: design/icebox/world_validation_architecture.md
@@ -135,6 +158,7 @@ nav:
       - Report CLI: reference/report_cli.md
       - Lean-like Features: reference/lean_like_features.md
       - Commit Log: reference/commit_log.md
+      - Architecture Runtime Reliability: reference/architecture_runtime_reliability.md
       - Brokerage Assumptions: reference/brokerage_assumptions.md
       - Bracket Order Helper: reference/bracket_order.md
       - APIs:
@@ -149,6 +173,11 @@ nav:
       - Changelog: reference/CHANGELOG.md
   - World:
       - Spec: world/world.md
+      - Runtime Integration: world/world_runtime_integration.md
+      - Data Preset Contract: world/world_data_preset.md
+      - Order Gate: world/world_order_gate.md
+      - World Registry: world/world_registry.md
+      - Rollout & Ops: world/world_rollout_and_ops.md
       - Policy Engine: world/policy_engine.md
       - Centralized Rebalancing: world/rebalancing.md
       - Modes: world/rebalancing_modes.md
@@ -158,6 +187,25 @@ nav:
       - Document Skeleton: templates/template.md
       - Backend Stack Config: templates/backend_stack.md
       - Local Stack Config: templates/local_stack.md
+not_in_nav: |
+  */architecture/rpc_adapters.md
+  */architecture/sdk_layers.md
+  */architecture/seamless_data_provider_modularity.md
+  */archive/auto_returns_unified_design.md
+  */archive/core_loop_world_roadmap.md
+  */archive/rewrite_architecture_docs.md
+  */archive/risk_signal_hub.md
+  */design/exit_engine_overview.md
+  */design/model_risk_management_framework.md
+  */design/nautilus_catalog_integration.md
+  */design/world_validation_architecture.md
+  */design/world_validation_v1_implementation_plan.md
+  */design/icebox/operon_followup_spike.md
+  */design/icebox/sr_data_consistency_sketch.md
+  */design/icebox/sr_integration_proposal.md
+  */guides/nautilus_catalog_integration.md
+  */maintenance/radon_c_remediation_plan.md
+  */maintenance/metrics/2025-11-14.md
 plugins:
   - i18n:
       docs_structure: folder
@@ -172,6 +220,7 @@ plugins:
           nav_translations:
             Home: 홈
             "Getting Started": "시작하기"
+            "Product Contracts": "제품 계약"
             "Core Concepts": "핵심 개념"
             "Quickstart": "빠른 시작"
             "User Workflow": "사용자 워크플로"
@@ -192,6 +241,19 @@ plugins:
             "Exchange Node Sets": "거래소 노드 세트"
             "Execution Nodes": "실행 노드"
             "Execution State": "실행 상태"
+            "Documentation System": "문서 체계"
+            "Implementation Traceability": "구현 추적성"
+            "Core Loop Contract": "Core Loop 계약"
+            "World Lifecycle Contract": "월드 라이프사이클 계약"
+            "World Allocation & Rebalancing Contract": "월드 할당 및 리밸런싱 계약"
+            "Service Runtime": "서비스 런타임"
+            "Supplemental Runbooks": "보조 런북"
+            "Gateway Runtime": "Gateway 런타임"
+            "DAG Manager Runtime": "DAG Manager 런타임"
+            "ControlBus Operations": "ControlBus 운영"
+            "Fill Replay Runbook": "Fill Replay 런북"
+            "WS-Only Resilience & Recovery": "WS 전용 복원력 및 복구"
+            "Neo4j Schema Initialization": "Neo4j 스키마 초기화"
             "Risk Signal Hub": "리스크 시그널 허브"
             Risk: 리스크
             "RPC Adapters Command/Facade Plan": "RPC 어댑터 Command/Facade 설계안"
@@ -222,10 +284,19 @@ plugins:
             "Validation Report": "Validation Report"
             "Core Loop Automation": "Core Loop 자동화"
             "ACK/Gap Resync RFC": "ACK/Gap Resync RFC"
+            "Architecture Examples": "아키텍처 예시"
+            "World Event Stream Runtime": "월드 이벤트 스트림 런타임"
+            "Architecture Runtime Reliability": "아키텍처 런타임 신뢰성"
+            "Runtime Integration": "런타임 통합"
+            "Data Preset Contract": "데이터 preset 계약"
+            "Order Gate": "주문 게이트"
+            "World Registry": "월드 레지스트리"
+            "Rollout & Ops": "롤아웃 및 운영"
             "Release 0.1 Definition of Done": "Release 0.1 완료 기준(DoD)"
             "Rebalancing Schema Coordination": "리밸런싱 스키마 조율"
             Design: 설계
             "Design Guide": "설계 문서 안내"
+            "Control-Plane RFCs": "제어 플레인 RFC"
             QMTL UI: QMTL UI
             "World Validation Architecture": "World 검증 계층 설계"
             "Model Risk Management Framework": "모델 리스크 관리 프레임워크"

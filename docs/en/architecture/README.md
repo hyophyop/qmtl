@@ -4,7 +4,7 @@ tags:
   - architecture
   - overview
 author: "QMTL Team"
-last_modified: 2025-12-15
+last_modified: 2026-04-03
 ---
 
 {{ nav_links() }}
@@ -20,15 +20,31 @@ See also: Architecture Glossary (../architecture/glossary.md) for canonical term
 
 ## Doc Map
 
+Adjacent layers:
+
+- [Product Contracts](../contracts/README.md): the minimum surface contract for strategy authors and higher-level clients.
+- [Operations](../operations/README.md): approval, deployment, observability, and rollback procedures.
+
 ### Overview
 - [Architecture Overview](architecture.md): High-level system blueprint and Core Loop alignment.
+- [Architecture Examples](architecture_examples.md): Strategy and data on-ramp examples split out of the normative spec.
 - [Glossary](glossary.md): Canonical terms such as DecisionEnvelope and ExecutionDomain.
+
+### Design foundations
+- [QMTL Documentation System and Layer Separation](documentation_system.md): Information architecture for separating norms, product contracts, operations, and implementation status.
+- [QMTL Design Principles](design_principles.md): First-class rules for future feature additions and design changes.
+- [QMTL Capability Map](capability_map.md): Capability-centered structure instead of archetype-centered structure.
+- [QMTL Semantic Types](semantic_types.md): Semantic legality and isolation rules.
+- [QMTL Decision Algebra](decision_algebra.md): Shared decision family and planner boundaries.
+- [QMTL Implementation Traceability](implementation_traceability.md): Mapping between normative concepts and current code/test evidence.
 
 ### Control plane
 - [Gateway](gateway.md): Public ingress, proxy/caching, and stream relay.
 - [DAG Manager](dag-manager.md): Graph/node/queue SSOT, diffs, and orchestration.
-- [WorldService](worldservice.md): World policy, decisions, activation, allocations/rebalancing.
+- [WorldService](worldservice.md): World policy, decisions, activation, and WVG SSOT.
+- [World Allocation and Rebalancing Contract](rebalancing_contract.md): dedicated normative contract for the allocation/rebalancing control surface.
 - [ControlBus](controlbus.md): Internal control-plane event fabric (Activation/Queue/Policy).
+- [World Event Stream Runtime](world_eventstream_runtime.md): Gateway-facing fan-out boundary for activation/queue/policy events.
 
 ### Data plane
 - [Seamless Data Provider v2](seamless_data_provider_v2.md): Conformance, backfill, SLAs, observability.
@@ -49,6 +65,9 @@ See also: Architecture Glossary (../architecture/glossary.md) for canonical term
 - [SDK Layering](../maintenance/engineering/sdk_layers.md): SDK dependency layering guide.
 - [Seamless Data Provider Modularization](../maintenance/engineering/seamless_data_provider_modularity.md): SDP refactor/module-boundary memo.
 - [RPC Adapter Command/Facade Design](../maintenance/engineering/rpc_adapters.md): Adapter complexity reduction patterns.
+
+### Reference appendices
+- [Architecture Runtime Reliability](../reference/architecture_runtime_reliability.md): determinism checklist and operational reliability companion.
 
 ## Architectural Layers at a Glance
 
@@ -77,5 +96,8 @@ playbooks:
 
 - [Backend Quickstart](../operations/backend_quickstart.md#fast-start-validate-and-launch)
 - [Operations Config CLI](../operations/config-cli.md)
+- [Gateway Runtime and Deployment Profiles](../operations/gateway_runtime.md)
+- [DAG Manager Runtime and Deployment Profiles](../operations/dag_manager_runtime.md)
+- [ControlBus Runtime and Incident Handling](../operations/controlbus_operations.md)
 
 {{ nav_links() }}

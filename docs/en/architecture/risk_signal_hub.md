@@ -2,7 +2,7 @@
 title: "Risk Signal Hub — Portfolio/Risk Snapshot SSOT"
 tags: [architecture, risk, hub, world]
 author: "QMTL Team"
-last_modified: 2025-12-15
+last_modified: 2026-04-03
 ---
 
 {{ nav_links() }}
@@ -14,6 +14,8 @@ last_modified: 2025-12-15
     WorldService, Exit Engine, and monitoring consumers read from the hub API/events to compute Var/ES, stress, and exit signals, and to monitor freshness/missing data.
 
 Related documents:
+- [Gateway](gateway.md)
+- [WorldService](worldservice.md)
 - Archive (initial design): [archive/risk_signal_hub.md](../archive/risk_signal_hub.md)
 - Validation architecture (icebox, reference): [design/world_validation_architecture.md](../design/icebox/world_validation_architecture.md)
 - Operations runbook: [operations/risk_signal_hub_runbook.md](../operations/risk_signal_hub_runbook.md)
@@ -36,11 +38,10 @@ flowchart LR
 
 ---
 
-## 2. Config/Deployment Profiles
+## 2. Runtime and deployment boundary
 
-- **dev**: Inline + fakeredis/in-memory cache only (covariance offload disabled). No persistent blob/file/S3 in dev; focus on functionality/minimal verification.
-- **prod**: Postgres `risk_snapshots` + Redis cache; optional S3/Redis blob offload. ControlBus events required.
-- The `risk_hub` block in `qmtl.yml` injects the same token/inline thresholds/blob store config into both Gateway (producer) and WS (consumer) to avoid drift.
+- dev/prod storage profiles, tokens, blob-offload configuration, and freshness checks are managed operationally in the [Risk Signal Hub Runbook](../operations/risk_signal_hub_runbook.md).
+- This document stays focused on what the hub standardizes and which services read and write it.
 
 ---
 
@@ -50,7 +51,7 @@ flowchart LR
 - Optional: `covariance` (inline when small) or `covariance_ref`, `realized_returns` or `realized_returns_ref`, `stress`, `constraints`, `ttl_sec`, `provenance`, `hash`
 - Validation: weight sum > 0 and within 1.0±1e-3, ISO `as_of`, TTL expiration excludes stale snapshots from cache/lookups.
 
-### 3.1 v1 Contract Defaults
+### 3.1 v1 Contract
 
 - `X-Actor` and `X-Stage` headers are required and stored as `provenance.actor/stage`.
 - TTL default: `ttl_sec=900` (15m). Max: `ttl_sec <= 86400` (422 otherwise).
@@ -89,11 +90,10 @@ flowchart LR
 
 ---
 
-## 5. Security and Operations
+## 5. Operational links
 
-- Auth: Hub router bearer token (`risk_hub.token`) shared only with Gateway producers.
-- Observability: `risk_hub_snapshot_lag_seconds`, `risk_hub_snapshot_missing_total` metrics and Alertmanager rules (RiskHubSnapshotStale/Missing).
-- Background workers: ControlBus consumer example `scripts/risk_hub_worker.py`; health checker `scripts/risk_hub_monitor.py`.
+- Auth, token sharing, freshness alerts, and worker procedures are covered in the [Risk Signal Hub Runbook](../operations/risk_signal_hub_runbook.md).
+- Global dashboards and alert routing live in [Monitoring and Alerting](../operations/monitoring.md) and [World Validation Observability](../operations/world_validation_observability.md).
 
 ---
 

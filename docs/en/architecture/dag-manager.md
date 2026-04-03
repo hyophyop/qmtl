@@ -1,35 +1,30 @@
 ---
-title: "QMTL DAG Manager - Detailed Design (Extended Edition)"
+title: "QMTL DAG Manager - Graph SSOT and Topic Orchestration"
 tags: []
 author: "QMTL Team"
-last_modified: 2025-12-04
+last_modified: 2026-04-03
 spec_version: v1.1
 ---
 
 {{ nav_links() }}
 
-# QMTL DAG Manager - Detailed Design (Extended Edition)
-
-> **Revision 2025-06-04 / v1.1** - Expanded by 75% with production-grade specifications and operating guidance.
+# QMTL DAG Manager - Graph SSOT and Topic Orchestration
 
 ## Related Documents
 - [Architecture Overview](README.md)
 - [QMTL Architecture](architecture.md)
 - [Gateway](gateway.md)
 - [Lean Brokerage Model](lean_brokerage_model.md)
+- [QMTL Implementation Traceability](implementation_traceability.md)
+- [DAG Manager Runtime and Deployment Profiles](../operations/dag_manager_runtime.md)
+- [Neo4j Migrations & Rollback](../operations/neo4j_migrations.md)
 
 Additional references
 - Reference: [Commit-Log Design](../reference/commit_log.md), [TagQuery Specification](../reference/tagquery.md)
 - Operations guides: [Timing Controls](../operations/timing_controls.md)
 
-!!! note "Deployment profile"
-    With `profile: dev`, missing Neo4j/Kafka DSNs fall back to in-memory graph and queue managers. If ControlBus settings are empty, queue-update (ControlBus) event publishing is disabled.
-
-    With `profile: prod`, missing `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, or `dagmanager.controlbus_dsn`/`dagmanager.controlbus_queue_topic` stops the process before startup.
-
-!!! warning "In-memory mode is for development only"
-    - Under `profile: prod`, the `dagmanager` server exits immediately and `qmtl config validate` reports errors when DSNs are absent.
-    - Only `profile: dev` permits the in-memory fallbacks, and validation surfaces them as `warning`. Populate DSNs and set `profile: prod` before promoting to any pre-production or production environment.
+!!! note "Runtime and deployment"
+    dev/prod profiles, Neo4j/Kafka/ControlBus startup requirements, and operator incident checks live in [DAG Manager Runtime and Deployment Profiles](../operations/dag_manager_runtime.md).
 
 ---
 
@@ -41,7 +36,6 @@ Additional references
 | **DAG Diff Engine** | Compare submitted DAGs against the graph to decide node reuse vs. creation and assign topics. | Sec. 2 Diff Algorithm |
 | **Topic Orchestration** | Idempotent topic creation, TTL/GC, and version rollout using reference counting. | Sec. 3, Sec. 4 |
 | **Version Management & Rollback** | Version Sentinel nodes mark graph boundaries for canary splits and controlled rollback. | Sec. 2, Sec. 3-A |
-| **SRE Friendly** | gRPC/HTTP interfaces, metrics, logs, alerts, and an admin CLI for day-two ops. | Sec. 6, Sec. 10 |
 
 > **Design principle:** Tie the compute graph and messaging queues together with immutable IDs to prioritize reproducibility and rollback. Every mutation forks into new nodes and topics; legacy artifacts are retired via TTL and GC.
 > Every SDK `compute_fn` executes with a single read-only `CacheView` returned from `NodeCache.view()`.
@@ -103,6 +97,8 @@ The following schema objects are idempotent and must be re-applied on boot.
 - `CREATE CONSTRAINT compute_node_id IF NOT EXISTS`
 - `CREATE CONSTRAINT queue_topic IF NOT EXISTS`
 - `CREATE CONSTRAINT version_sentinel_version IF NOT EXISTS`
+
+Operator-facing initialize/export/rollback commands are maintained in [Neo4j Migrations & Rollback](../operations/neo4j_migrations.md).
 
 ### 1.3 NodeID Canonicalization
 
@@ -307,132 +303,15 @@ Note: Control updates (queue/tag changes, traffic weights) live on the internal 
 
 ---
 
-## 4. Garbage Collection (Orphan Queue GC) (Extended)
+## 4. Operational Boundaries
 
-* **Policy matrix**
+The following concerns are intentionally owned by operations pages rather than this normative spec:
 
-  | Queue Tag  | TTL  | Grace Period | GC Action |
-  | ---------- | ---- | ------------ | --------- |
-  | `raw`      | 7d   | 1d           | drop      |
-  | `indicator`| 30d  | 3d           | drop      |
-  | `sentinel` | 180d | 30d          | archive to S3 |
+- GC/retention policy, batch sizing, and incident handling: [DAG Manager Runtime and Deployment Profiles](../operations/dag_manager_runtime.md)
+- Monitoring, alerts, and golden signals: [Monitoring](../operations/monitoring.md), [Core Loop Golden Signals](../operations/core_loop_golden_signals.md)
+- Neo4j init/rollback and server configuration: [Neo4j Migrations & Rollback](../operations/neo4j_migrations.md)
+- Canary and rollback procedures: [Canary Rollout](../operations/canary_rollout.md)
 
-* **Archive implementation** - Sentinel queues upload to S3 through `S3ArchiveClient` before deletion.
-* **Dynamic rate limiter** - When `kafka_server_BrokerTopicMetrics_MessagesInPerSec > 80%`, halve the GC batch size.
-
----
-
-## 5. Failure Scenarios & Recovery (Extended)
-
-| Failure                 | Impact                         | Detection Metric                     | Recovery Procedure                          | Alert Channel |
-| ----------------------- | ------------------------------ | ------------------------------------ | ------------------------------------------- | ------------- |
-| Neo4j leader down       | Diff requests rejected         | `raft_leader_is_null`                | Automatic leader election                   | PagerDuty     |
-| Kafka ZK session loss   | Topic creation failure         | `kafka_zookeeper_disconnects`        | Retry with backoff, fallback to admin node  | Slack #ops    |
-| Diff stream stall       | Gateway status polling timeout | `ack_status=timeout`                 | Resume from last ACK offset                 | Opsgenie      |
-
-Each row links to a runbook Markdown file and the relevant Grafana dashboard so incident response remains reproducible.
-
----
-
-## 6. Monitoring & Metrics (Extended)
-
-| Metric                     | Target | Alert Rule                    |
-| -------------------------- | ------ | ----------------------------- |
-| `diff_duration_ms_p95`     | <80 ms | `>200ms for 5m -> WARN`        |
-| `queue_create_error_total` | =0     | `>0 in 15m -> CRIT`            |
-| `sentinel_gap_count`       | <1     | `>=1 -> WARN`                  |
-| `nodecache_resident_bytes` | stable | `>5e9 for 5m -> WARN`          |
-| `orphan_queue_total`       | down      | Upward trend 3h -> inspect GC  |
-| `compute_nodes_total`      | <50k   | `>50k for 10m -> WARN`         |
-| `queues_total`             | <100k  | `>100k for 10m -> WARN`        |
-
-Scale the cluster (Neo4j memory, Kafka brokers) before approaching these limits to protect ingest throughput.
-
----
-
-## 7. Security (Extended)
-
-* **Authn:** mTLS plus JWT assertion. Rotate keys every 12 hours.
-* **Authz:** Neo4j RBAC and Kafka ACLs (`READ_TOPIC`, `WRITE_TOPIC`).
-* **Audit:** Capture every diff request/response via OpenTelemetry traces and hash the payloads.
-
----
-
-## 8. Potential Weaknesses & Mitigations (Extended)
-
-| Weakness               | Level  | Description                       | Mitigation                                                         |
-| ---------------------- | ------ | --------------------------------- | ------------------------------------------------------------------ |
-| Graph bloat            | Medium | Thousands of versions accumulate  | Sentinel TTL + archive, offline compaction                         |
-| Hash collision         | Low    | BLAKE3 collisions are improbable  | Use BLAKE3 XOF (longer digest), domain separation, and audit logs  |
-| Queue name collision   | Low    | Broker lowercase uniqueness limit | Append `_v{n}` suffix                                              |
-| Stats flood            | Medium | `GetQueueStats` abuse             | Rate limit (5/s) and scope authorization                           |
-
----
-
-## 9. Service Level Objectives (SLO)
-
-| SLO ID | Target                     | Measurement        | Window |
-| ------ | -------------------------- | ------------------ | ------ |
-| SLO-1  | Diff p95 <100 ms           | Prometheus histogram | 28d   |
-| SLO-2  | Queue create success 99.9% | success/total      | 30d    |
-| SLO-3  | Sentinel gap = 0           | Gauge              | 90d    |
-
----
-
-## 10. Testing & Validation
-
-* **Unit:** pytest plugins covering hash calculation and schema diff edge cases.
-* **Integration:** Docker Compose (Kafka, Neo4j, Gateway stub) for diff latency and GC batch coverage.
-* **Chaos:** Toxiproxy split-brain testing and network delay injection.
-* **CI/CD Gate:** SSA DAG lint + 20 backtests -> 24h canary -> 50% promotion -> auto deploy.  
-  Use `dagmanager redo-diff --sentinel <id> --rollback` for rollback validation.
-
----
-
-## 11. Admin CLI Snippets (Examples)
-
-```shell
-# Diff example (non-destructive read)
-qmtl --admin dagmanager-server diff --file dag.json
-# queue stats
-qmtl --admin dagmanager-server queue-stats --tag indicator --interval 1h
-# trigger GC for a sentinel
-qmtl --admin dagmanager-server gc --sentinel v1.2.3
-# export schema DDL
-qmtl --admin dagmanager-server export-schema --out schema.cypher
-```
-
-Canary deployment steps live in [`docs/canary_rollout.md`](../operations/canary_rollout.md).
-
----
-
-## 12. Server Configuration File Usage
-
-The `qmtl --admin dagmanager-server server` subcommand accepts a single YAML configuration file. Define every server option in YAML and point to the file with `--config` when needed.
-
-Example:
-
-```yaml
-neo4j_dsn: bolt://db:7687
-neo4j_user: neo4j
-neo4j_password: secret
-kafka_dsn: localhost:9092
-```
-
-The example config `qmtl/examples/qmtl.yml` defaults to in-memory repositories and queues for local development. Filling the DSN fields enables Neo4j and Kafka integrations.
-
-```
-# Run with defaults
-qmtl --admin dagmanager-server server
-
-# Run with YAML configuration
-qmtl --admin dagmanager-server server --config qmtl/examples/qmtl.yml
-```
-
-The command reads the `dagmanager` section in `qmtl/examples/qmtl.yml`. Without `--config`, in-memory repositories and queues are used because no DSNs are provided. The sample file documents each field inline.
-
-Available flags:
-
-- `--config` - optional path to the configuration file.
+Implementation coverage and the currently shipped test/operational assets are tracked in [QMTL Implementation Traceability](implementation_traceability.md).
 
 {{ nav_links() }}

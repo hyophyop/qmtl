@@ -9,7 +9,7 @@ last_modified: 2026-02-06
 
 # World API 레퍼런스 — Gateway 프록시
 
-Gateway는 SDK와 도구를 위해 WorldService 엔드포인트를 프록시합니다. 여기서는 핵심 엔드포인트와 표준 엔벌로프를 정리합니다. 예시는 `docs/ko/world/world.md` 12장을 참고하세요.
+Gateway는 SDK와 도구를 위해 WorldService 엔드포인트를 프록시합니다. 여기서는 핵심 엔드포인트와 표준 엔벌로프를 정리합니다. 레지스트리와 이벤트 스트림 경계는 [월드 레지스트리](../world/world_registry.md), [월드 이벤트 스트림 런타임](../architecture/world_eventstream_runtime.md)에서 다룹니다.
 
 ## 인증
 

@@ -1,35 +1,30 @@
 ---
-title: "QMTL DAG Manager — 상세 설계서 (Extended Edition)"
+title: "QMTL DAG Manager — 그래프 SSOT와 토픽 오케스트레이션"
 tags: []
 author: "QMTL Team"
-last_modified: 2025-12-04
+last_modified: 2026-04-03
 spec_version: v1.1
 ---
 
 {{ nav_links() }}
 
-# QMTL DAG Manager — 상세 설계서 (Extended Edition)
-
-> **Revision 2025‑06‑04 / v1.1**  — 문서 분량 +75% 확장, 실전 운영 기준 세부 스펙 포함
+# QMTL DAG Manager — 그래프 SSOT와 토픽 오케스트레이션
 
 ## 관련 문서
 - [아키텍처 개요](README.md)
 - [QMTL 아키텍처](architecture.md)
 - [게이트웨이](gateway.md)
 - [린 브로커리지 모델](lean_brokerage_model.md)
+- [QMTL 구현 추적성](implementation_traceability.md)
+- [DAG Manager 런타임 및 배포 프로필](../operations/dag_manager_runtime.md)
+- [Neo4j 마이그레이션 & 롤백](../operations/neo4j_migrations.md)
 
 추가 참고
 - 레퍼런스: [Commit‑Log 설계](../reference/commit_log.md), [TagQuery 사양](../reference/tagquery.md)
 - 운영 가이드: [타이밍 컨트롤](../operations/timing_controls.md)
 
-!!! note "배포 프로필"
-    `profile: dev`에서는 Neo4j/Kafka 설정이 비어 있으면 인메모리 그래프/큐 매니저를 사용합니다. ControlBus 설정이 비어 있으면 큐 업데이트(ControlBus) 이벤트 발행이 비활성화됩니다.
-
-    `profile: prod`에서는 `dagmanager.neo4j_dsn`, `dagmanager.kafka_dsn`, `dagmanager.controlbus_dsn`/`dagmanager.controlbus_queue_topic`이 비어 있으면 프로세스가 기동 전에 실패합니다.
-
-!!! warning "인메모리 모드는 개발 전용"
-    - `profile: prod`에서는 `dagmanager` 서버가 즉시 종료되며, 설정 검증(`qmtl config validate`)도 오류를 보고합니다.
-    - `profile: dev`에서만 인메모리 모드를 허용하며, 검증 결과의 심각도는 `warning`으로 표시됩니다. 운영 배포를 준비하려면 DSN을 채우고 프로필을 `prod`로 명시하세요.
+!!! note "런타임과 배포"
+    dev/prod 프로필, Neo4j/Kafka/ControlBus 기동 조건, 장애 대응 포인트는 [DAG Manager 런타임 및 배포 프로필](../operations/dag_manager_runtime.md)에서 운영 규칙으로 관리한다.
 
 ---
 
@@ -41,7 +36,6 @@ spec_version: v1.1
 | **DAG Diff 엔진**                     | 제출 DAG와 Neo4j 그래프 간 구조·해시 비교 → 재사용/신규 노드 판정·토픽 매핑     | §2 Diff 알고리즘 |
 | **토픽 오케스트레이션**                       | Idempotent 토픽 생성·TTL·GC·버전 롤아웃, ref‑count 기반 제거      | §3, §4       |
 | **버전 관리·롤백**                        | Version Sentinel 노드로 그래프 버전 경계 표시 → 카나리아 트래픽 스플릿·롤백  | §2, §3‑A     |
-| **SRE Friendly**                    | gRPC/HTTP 인터페이스, 메트릭·로그·Alert 통합, Admin CLI          | §6, §10      |
 
 > **설계 철학:** “계산 그래프 + 메시징 큐”를 **불변 ID**로 연결해 재현성·롤백 가능성을 최우선. 모든 변형은 새 노드·토픽으로 분기하고, 레거시는 TTL+GC로 안전 제거.
 > SDK 측에서 실행되는 모든 `compute_fn`은 `NodeCache.view()`가 반환하는 read-only `CacheView` 한 개만을 인자로 받는다.
@@ -116,15 +110,7 @@ CREATE INDEX queue_interval IF NOT EXISTS FOR (q:Queue) ON (q.interval);
 CREATE INDEX compute_buffering_since IF NOT EXISTS FOR (c:ComputeNode) ON (c.buffering_since);
 ```
 
-CLI 사용법:
-
-```
-# 스키마 초기화 (idempotent)
-qmtl --admin dagmanager-server neo4j-init --uri bolt://localhost:7687 --user neo4j --password neo4j
-
-# 현재 스키마 내보내기
-qmtl --admin dagmanager-server export-schema --uri bolt://localhost:7687 --user neo4j --password neo4j --out schema.cypher
-```
+운영자의 초기화/내보내기/롤백 커맨드는 [Neo4j 마이그레이션 & 롤백](../operations/neo4j_migrations.md)에서 관리한다.
 ### 1.3 NodeID 생성 규칙
 - NodeID = `blake3:<digest>`이며, 다음의 정규 직렬화 입력을 해시합니다: 
   `(node_type, interval, period, params(분리·정규화), dependencies(node_id 기준 정렬), schema_compat_id, code_hash)`
@@ -316,134 +302,15 @@ sequenceDiagram
 
 참고: 큐/태그 변경, 트래픽 가중치 등 제어 업데이트는 내부 ControlBus에 게시되며, Gateway가 WebSocket으로 SDK에 중계합니다. 별도의 콜백 인터페이스는 제공하지 않습니다.
 
-## 4. Garbage Collection (Orphan Queue GC) (확장)
+## 4. 운영 경계
 
-* **정책 매트릭스:**
+다음 항목은 DAG Manager의 규범 계약 자체가 아니라 운영 문서에서 관리한다.
 
-  | Queue Tag   | TTL  | Grace Period | GC Action  |
-  | ----------- | ---- | ------------ | ---------- |
-| `raw`       | 7d   | 1d           | 삭제       |
-| `indicator` | 30d  | 3d           | 삭제       |
-| `sentinel`  | 180d | 30d          | S3 보관    |
+- GC/보관 정책, 배치 크기, incident 대응: [DAG Manager 런타임 및 배포 프로필](../operations/dag_manager_runtime.md)
+- 관측 지표, 경보, 골든 시그널: [모니터링](../operations/monitoring.md), [Core Loop 골든 시그널](../operations/core_loop_golden_signals.md)
+- Neo4j 초기화/롤백 및 서버 설정: [Neo4j 마이그레이션 & 롤백](../operations/neo4j_migrations.md)
+- 카나리아/롤백 절차: [카나리아 롤아웃](../operations/canary_rollout.md)
 
-* **보관 구현:** 삭제 전에 `S3ArchiveClient`로 센티널 큐를 S3에 업로드합니다.
-
-* **동적 레이트 리미터:** Prometheus `kafka_server_BrokerTopicMetrics_MessagesInPerSec`가 80%를 넘으면 GC 배치 크기를 절반으로 줄입니다.
-
----
-
-## 5. 장애 시나리오 & 복구 (확장)
-
-| 장애                    | 영향              | 탐지 메트릭                        | 복구 절차                                  | 알림         |
-| --------------------- | --------------- | ----------------------------- | -------------------------------------- | ---------- |
-| Neo4j 리더 다운       | Diff 거절         | `raft_leader_is_null`         | 자동 리더 선출                           | PagerDuty |
-| Kafka ZK 세션 손실    | 토픽 생성 실패        | `kafka_zookeeper_disconnects` | 지수형 재시도, 관리자 노드 폴백              | Slack #ops |
-| Diff 스트림 정체      | 게이트웨이 상태 폴링 실패 | `ack_status=timeout`          | 마지막 ACK 오프셋부터 재개                 | Opsgenie  |
----
-
-각 행은 Runbook 마크다운 파일과 대응되는 ID를 가지며, Grafana Dashboard URL과
-교차 링크된다. 이를 통해 "재현 가능 사고 대응" 절차를 문서화한다.
-
-## 6. 관측 & 메트릭 (확장)
-
-| 메트릭                     | 목표   | 알림 규칙                 |
-| -------------------------- | ------ | ------------------------ |
-| `diff_duration_ms_p95`     | <80 ms | `>200ms 5분 지속 → 경고` |
-| `queue_create_error_total` | =0     | `15분 내 >0 → 치명`      |
-| `sentinel_gap_count`       | <1     | `>=1 → 경고`             |
-| `nodecache_resident_bytes` | 안정   | `5e9 5분 초과 → 경고`     |
-| `orphan_queue_total`       | 감소   | `3시간 상승 추세 → GC 점검` |
-| `compute_nodes_total`      | <50k   | `10분 >50k → 경고`       |
-| `queues_total`             | <100k  | `10분 >100k → 경고`      |
-
-이 한계에 근접하기 전에 클러스터 규모를 확장해야 합니다. 예: Neo4j 메모리 증설, Kafka 브로커 추가 등으로 인제스트 처리량을 유지하세요.
-
----
-
-## 7. 보안 (확장)
-
-* **인증(Authn):** mTLS + JWT 어서션, 키 교체 주기 12시간.
-* **인가(Authz):** Neo4j RBAC + Kafka ACL (`READ_TOPIC`, `WRITE_TOPIC`).
-* **감사:** 모든 Diff req/res → OpenTelemetry 트레이스 + 해시.
-
----
-
-## 8. 잠재 취약점 & 완화 (확장)
-
-| 취약점                  | 레벨     | 설명                           | 완화                                       |
-| -------------------- | ------ | ---------------------------- | ---------------------------------------- |
-| 그래프 팽창           | 보통    | 수천 버전 누적                   | Sentinel TTL/보관, 오프라인 컴팩션          |
-| 해시 충돌             | 낮음    | BLAKE3 충돌 가능성 매우 낮음      | BLAKE3 XOF(더 긴 다이제스트) + 도메인 분리 + 감사 로그 강화 |
-| 큐 이름 충돌          | 낮음    | 브로커 소문자 고유성              | `_v{n}` 접미사 추가                         |
-| 통계 과다             | 보통    | GetQueueStats 남용               | 레이트 리밋(5/s), 인가 범위 축소              |
-
----
-
-## 9. Service Level Objectives (SLO)
-
-| SLO ID | 목표                        | 측정             | 윈도우 |
-| ------ | -------------------------- | -------------- | ------ |
-| SLO‑1  | Diff p95 <100 ms           | Prom 히스토그램 | 28d    |
-| SLO‑2  | 큐 생성 성공률 99.9%        | 성공/전체        | 30d    |
-| SLO‑3  | Sentinel gap =0            | 게이지           | 90d    |
-
----
-
-## 10. Testing & Validation
-
-* **Unit:** `pytest plugins` → hash calculation, schema diff edge cases.
-* **Integration:** Docker‑Compose (Kafka, Neo4j, Gateway stub) → Diff latency, GC batch.
-* **Chaos:** Toxiproxy split‑brain, network delay injection.
-* **CI/CD Gate:** SSA DAG Lint와 20종 백테스트 → 24h 카나리아 → 50% 프로모션
-  이후 자동 배포, `dagmanager redo-diff --sentinel <id> --rollback`으로 역방향 롤백.
-
----
-
-## 11. Admin CLI Snippets (예)
-
-```shell
-# Diff 예시(비파괴 읽기)
-qmtl --admin dagmanager-server diff --file dag.json
-# 큐 통계 조회
-qmtl --admin dagmanager-server queue-stats --tag indicator --interval 1h
-# 센티널 GC 트리거
-qmtl --admin dagmanager-server gc --sentinel v1.2.3
-# 스키마 DDL 내보내기
-qmtl --admin dagmanager-server export-schema --out schema.cypher
-```
-
-카나리아 배포 단계는 [`docs/canary_rollout.md`](../operations/canary_rollout.md)를 참고하세요.
-
-## 12. 서버 설정 파일 사용법
-
-`qmtl --admin dagmanager-server server` 서브커맨드는 YAML 형식의 설정 파일 하나만 받는다.
-아래 예시와 같이 모든 서버 옵션을 YAML에 작성하고 필요하다면 ``--config`` 옵션으로 경로를 지정한다.
-
-예시:
-
-```yaml
-neo4j_dsn: bolt://db:7687
-neo4j_user: neo4j
-neo4j_password: secret
-kafka_dsn: localhost:9092
-```
-
-예시 구성 `qmtl/examples/qmtl.yml` 는 로컬 개발을 위해 인메모리 레포지토리와 큐를 기본값으로 사용합니다. DSN 필드를 채우면 Neo4j/Kafka 연동이 활성화됩니다.
-
-```
-# 기본값으로 실행
-qmtl --admin dagmanager-server server
-
-# YAML 설정 파일로 실행
-qmtl --admin dagmanager-server server --config qmtl/examples/qmtl.yml
-```
-
-해당 명령은 `qmtl/examples/qmtl.yml` 의 ``dagmanager`` 섹션을 읽어 서버를 실행한다.
-``--config`` 옵션을 생략하면 DSN이 제공되지 않으므로 메모리 레포지토리와 큐가
-사용된다. 샘플 파일에는 모든 필드를 주석과 함께 설명한다.
-
-사용 가능한 플래그:
-
-- ``--config`` – 구성 파일 경로(선택)
+구현 범위와 현재 테스트/운영 자산은 [QMTL 구현 추적성](implementation_traceability.md)에서 추적한다.
 
 {{ nav_links() }}

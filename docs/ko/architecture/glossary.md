@@ -2,7 +2,7 @@
 title: "아키텍처 용어집"
 tags: [architecture, glossary]
 author: "QMTL Team"
-last_modified: 2025-11-22
+last_modified: 2026-03-06
 ---
 
 {{ nav_links() }}
@@ -13,6 +13,7 @@ last_modified: 2025-11-22
 
 - 목적: QMTL 아키텍처 전반에서 사용하는 핵심 용어(DecisionEnvelope, ExecutionDomain, GSG/WVG 등)를 한 곳에 모아 정의합니다.
 - Core Loop 상 위치: Core Loop 각 단계에서 등장하는 개념을 **일관된 용어로 연결하는 참고 사전** 역할을 하며, 다른 설계 문서를 읽을 때 공통 배경을 제공합니다.
+- 설계 판단 기준: 기능 추가와 구조 변경 시에는 [QMTL 설계 원칙](design_principles.md), [QMTL Capability Map](capability_map.md), [QMTL Semantic Types](semantic_types.md), [QMTL Decision Algebra](decision_algebra.md)를 이 용어집과 함께 읽는 것을 규범으로 간주합니다.
 - DecisionEnvelope: 월드 결정 결과로 `world_id`, `policy_version`, `effective_mode`, `reason`, `as_of`, `ttl`, `etag`를 포함합니다.
 - effective_mode: DecisionEnvelope의 정책 결과 문자열. 값: `validate | compute-only | paper | live | shadow`. 소비자는 계산/라우팅을 위해 ExecutionDomain으로 매핑해야 합니다(아래 규범 참조).
 - execution_domain: Gateway/SDK가 `effective_mode`를 매핑한 파생 필드 (`backtest | dryrun | live | shadow`). SDK로 중계되는 봉투(envelope)에 유지됩니다. 제출자의 `meta.execution_domain`은 힌트이며, 권한 있는 값은 WS `effective_mode`에서만 파생됩니다. Runner/SDK는 `shadow`를 백테스트로 강등하지 않고 유지하되 주문 발행은 하드 차단합니다.
@@ -34,6 +35,23 @@ last_modified: 2025-11-22
 - WorldNodeRef: `(world_id, node_id, execution_domain)` scoped record storing world‑/도메인‑로컬 `status`, `last_eval_key`, and annotations.
 - DecisionsRequest: API payload replacing the per-world strategy set; contains an ordered list of unique, non-empty strategy identifiers persisted by WorldService.
 - SSOT boundary: DAG Manager owns GSG only; WorldService owns WVG only. Gateway proxies/caches; it is not an SSOT.
+
+## Capability / Semantic / Decision 용어
+
+- capability: QMTL 코어가 다루는 독립 기능 단위. 관측, 특징 추출, 라벨링, 추론, 의사결정, 실행 계획, 실행 상태, 위험/정책 등이 이에 속합니다. 전략 archetype은 capability 조합으로만 설명해야 합니다.
+- profile: capability 조합의 문서화된 예시. `directional`, `ML-driven MM` 같은 profile은 온보딩과 설명에는 유용하지만 코어 설계의 1급 축이 아닙니다.
+- CausalStream: 현재 시점까지의 정보만 포함한 스트림. live decision path와 inference 입력의 기본 타입입니다.
+- DelayedStream: 미래 정보 또는 사후 해석을 포함한 스트림. 학습/평가에는 사용할 수 있지만 live decision path에는 직접 연결할 수 없습니다.
+- ImmutableArtifact: 재현 가능한 읽기 전용 산출물. feature artifact, label artifact, dataset snapshot, trained model reference 등이 이에 속합니다.
+- MutableExecutionState: 실행 중 변화하는 world/domain scoped 상태. open orders, open quotes, fills, inventory, portfolio 등이 이에 속합니다.
+- DecisionValue: 실행 의도를 나타내는 값 family. score, direction, position target, order intent, quote intent를 포함합니다.
+- CommandValue: 외부 시스템에 실제 행위를 요청하는 값. order submit, cancel/replace, rebalance apply 등이 이에 속합니다.
+- ScoreDecision: 최종 실행 계획 전 단계의 점수/신뢰도 표현.
+- DirectionDecision: long/short/flat, buy/sell/hold 같은 방향성 판단 표현.
+- PositionTargetDecision: 목표 포지션 또는 목표 비중 표현.
+- OrderIntentDecision: 주문 단위 실행 의도 표현.
+- QuoteIntentDecision: 양방향 또는 다중 quote 집합 형태의 실행 의도 표현. MM은 일반적으로 이 decision subtype을 중심으로 planner를 구성합니다.
+- planner: DecisionValue를 실행 가능한 plan으로 변환하는 계층. Directional 전략과 MM 전략의 핵심 차이는 archetype이 아니라 planner contract 차이로 표현합니다.
 
 ## 실행 도메인과 격리(Execution Domain & Isolation)
 

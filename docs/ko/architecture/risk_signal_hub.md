@@ -2,7 +2,7 @@
 title: "Risk Signal Hub — 포트폴리오/리스크 스냅샷 SSOT"
 tags: [architecture, risk, hub, world]
 author: "QMTL Team"
-last_modified: 2025-12-15
+last_modified: 2026-04-03
 ---
 
 {{ nav_links() }}
@@ -14,6 +14,8 @@ last_modified: 2025-12-15
     WorldService·Exit Engine·모니터링은 허브의 API/이벤트만 소비해 Var/ES·stress·exit 신호를 계산하고, 스냅샷 신선도/결측 여부를 모니터링한다.
 
 관련 문서:
+- [Gateway](gateway.md)
+- [WorldService](worldservice.md)
 - 아카이브(초기 설계): [archive/risk_signal_hub.md](../archive/risk_signal_hub.md)
 - 검증 아키텍처(icebox, 참고용): [design/world_validation_architecture.md](../design/icebox/world_validation_architecture.md)
 - 운영 런북: [operations/risk_signal_hub_runbook.md](../operations/risk_signal_hub_runbook.md)
@@ -36,11 +38,10 @@ flowchart LR
 
 ---
 
-## 2. 구성/배포 프로필
+## 2. 런타임과 배포 경계
 
-- **dev**: inline + fakeredis/인메모리 캐시만 사용(공분산 offload 비활성). 영속 스토리지(file/S3/Redis) 없이 “동작/검증”에 집중한 경량 경로.
-- **prod**: Postgres `risk_snapshots` 테이블 + Redis 캐시, 필요 시 S3/Redis blob offload 활성화. ControlBus 이벤트 필수.
-- `qmtl.yml` `risk_hub` 블록으로 Gateway(생산자)와 WS(소비자) 양쪽에 동일한 토큰/inline 기준/BlobStore 설정을 주입해 설정 드리프트를 방지한다.
+- Risk Signal Hub의 dev/prod 저장소 프로필, 토큰, blob offload, freshness 점검은 [Risk Signal Hub 운영 런북](../operations/risk_signal_hub_runbook.md)에서 운영 규칙으로 관리한다.
+- 이 문서에서는 허브가 어떤 데이터를 표준화하고 어떤 서비스가 읽고 쓰는지만 규범적으로 정의한다.
 
 ---
 
@@ -50,7 +51,7 @@ flowchart LR
 - 선택: `covariance`(작을 때 inline) 또는 `covariance_ref`, `realized_returns` 또는 `realized_returns_ref`, `stress`, `constraints`, `ttl_sec`, `provenance`, `hash`
 - 검증: 가중치 합>0 및 1.0±1e-3, `as_of` ISO, TTL 만료시 캐시/조회에서 제외
 
-### 3.1 v1 계약(운영 기본값)
+### 3.1 v1 계약
 
 - `X-Actor`/`X-Stage` 헤더는 필수이며, `provenance.actor/stage`로 저장된다.
 - TTL 기본값: `ttl_sec=900`(15m). 상한: `ttl_sec <= 86400`(초과 시 422).
@@ -89,11 +90,10 @@ flowchart LR
 
 ---
 
-## 5. 보안/운영
+## 5. 운영 연계
 
-- 인증: Hub 라우터 Bearer 토큰(`risk_hub.token`) — Gateway에만 공유.
-- 가시성: `risk_hub_snapshot_lag_seconds`, `risk_hub_snapshot_missing_total` 메트릭 및 Alertmanager 룰(RiskHubSnapshotStale/Missing).
-- 백그라운드 워커: ControlBus 소비자 예시 `scripts/risk_hub_worker.py`, 헬스 체크 `scripts/risk_hub_monitor.py`.
+- 인증, 토큰 공유, freshness 경보, worker 운영 절차는 [Risk Signal Hub 운영 런북](../operations/risk_signal_hub_runbook.md)에서 다룬다.
+- 전역 대시보드/알림 라우팅은 [모니터링 및 알림](../operations/monitoring.md)과 [World Validation 운영 가시성](../operations/world_validation_observability.md)에서 본다.
 
 ---
 

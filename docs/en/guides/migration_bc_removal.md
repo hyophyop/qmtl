@@ -58,6 +58,8 @@ qmtl --admin gateway --config qmtl.yml
 }
 ```
 
+For multi-world submission, use the `world_ids` array. The single `world_id` input remains only as a transitional compatibility field and Gateway normalizes it to `world_ids=[world_id]`.
+
 ## Brokerage Imports
 
 **Before**
@@ -79,6 +81,7 @@ from qmtl.runtime.brokerage import PerShareFeeModel, VolumeShareSlippageModel
 - [ ] Configure world policy via `qmtl world create --policy <preset>` or `POST /worlds/{id}/policies` (preset + overrides supported).
 - [ ] Inspect world policy via `qmtl world info` or `GET /worlds/{id}/describe` (returns preset, version, human-readable summary).
 - [ ] Drop `run_type` and client-selected modes from Gateway `/strategies` requests; rely on `world_id` and WS governance (`effective_mode`).
+- [ ] Prefer `world_ids[]` for multi-world Gateway `/strategies` requests and remove reliance on the transitional single `world_id` input.
 - [ ] Import brokerage helpers from `qmtl.runtime.brokerage`, not `qmtl.runtime.brokerage.simple`.
 
 {{ nav_links() }}

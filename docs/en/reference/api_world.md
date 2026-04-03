@@ -9,7 +9,7 @@ last_modified: 2026-02-06
 
 # World API Reference — Proxied via Gateway
 
-Gateway proxies WorldService endpoints for SDKs and tools. This page lists the key endpoints and normative envelopes. See also: docs/world/world.md §12 for examples.
+Gateway proxies WorldService endpoints for SDKs and tools. This page lists the key endpoints and normative envelopes. Registry and event-stream boundaries are documented separately in [World Registry](../world/world_registry.md) and [World Event Stream Runtime](../architecture/world_eventstream_runtime.md).
 
 ## Authentication
 

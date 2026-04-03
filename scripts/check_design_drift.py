@@ -27,6 +27,24 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+TRACEABILITY_DOC_STEM = "implementation_traceability"
+TRACEABILITY_SOURCE_DOCS = (
+    ("architecture", "design_principles"),
+    ("architecture", "capability_map"),
+    ("architecture", "semantic_types"),
+    ("architecture", "decision_algebra"),
+    ("contracts", "core_loop"),
+    ("contracts", "world_lifecycle"),
+    ("architecture", "core_loop_world_automation"),
+    ("architecture", "rebalancing_contract"),
+)
+TRACEABILITY_SOURCE_STEMS = tuple(stem for _, stem in TRACEABILITY_SOURCE_DOCS)
+VALID_TRACEABILITY_STATUSES = {
+    "normative-only",
+    "planned",
+    "partial",
+    "implemented",
+}
 
 
 def _find_i18n_config(plugins: object) -> dict[str, object] | None:
@@ -103,6 +121,14 @@ def _architecture_dir(root: Path, locale: str, *, i18n_enabled: bool) -> Path:
     return root / "docs" / "architecture"
 
 
+def _docs_section_dir(
+    root: Path, locale: str, section: str, *, i18n_enabled: bool
+) -> Path:
+    if i18n_enabled:
+        return root / "docs" / locale / section
+    return root / "docs" / section
+
+
 def _read_front_matter(path: Path) -> dict[str, str]:
     """Parse a minimal YAML front-matter block into a dict.
 
@@ -122,6 +148,251 @@ def _read_front_matter(path: Path) -> dict[str, str]:
             key, value = m.group(1), m.group(2).strip()
             out[key] = value
     return out
+
+
+def _extract_concept_ids(path: Path) -> list[str]:
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    matches = re.findall(r"Concept ID:\s*`?([A-Z0-9][A-Z0-9\-]+)`?", text)
+    return matches
+
+
+def _collect_normative_concepts(
+    locale_docs: dict[str, dict[str, Path]]
+) -> tuple[bool, dict[str, dict[str, str]], list[str]]:
+    active = False
+    errors: list[str] = []
+    concepts_by_locale: dict[str, dict[str, str]] = {}
+
+    for locale, docs_by_stem in locale_docs.items():
+        concepts: dict[str, str] = {}
+        for stem in TRACEABILITY_SOURCE_STEMS:
+            path = docs_by_stem.get(stem)
+            if path is None:
+                continue
+            active = True
+            ids = _extract_concept_ids(path)
+            if not ids:
+                errors.append(f"[{locale}] Normative doc {path} is missing Concept ID markers")
+                continue
+            seen_in_doc: set[str] = set()
+            for concept_id in ids:
+                if concept_id in seen_in_doc:
+                    errors.append(
+                        f"[{locale}] Duplicate Concept ID {concept_id!r} found in {path}"
+                    )
+                    continue
+                seen_in_doc.add(concept_id)
+                if concept_id in concepts and concepts[concept_id] != stem:
+                    errors.append(
+                        f"[{locale}] Concept ID {concept_id!r} is declared in both "
+                        f"{concepts[concept_id]!r} and {stem!r}"
+                    )
+                    continue
+                concepts[concept_id] = stem
+        concepts_by_locale[locale] = concepts
+
+    if active and concepts_by_locale:
+        reference_locale, reference_concepts = next(iter(concepts_by_locale.items()))
+        reference_ids = set(reference_concepts)
+        for locale, concepts in concepts_by_locale.items():
+            ids = set(concepts)
+            missing = sorted(reference_ids - ids)
+            extra = sorted(ids - reference_ids)
+            if missing:
+                errors.append(
+                    f"[{locale}] Missing Concept IDs present in {reference_locale}: {', '.join(missing)}"
+                )
+            if extra:
+                errors.append(
+                    f"[{locale}] Extra Concept IDs not present in {reference_locale}: {', '.join(extra)}"
+                )
+            for concept_id in sorted(reference_ids & ids):
+                if concepts[concept_id] != reference_concepts[concept_id]:
+                    errors.append(
+                        f"[{locale}] Concept ID {concept_id!r} maps to {concepts[concept_id]!r}, "
+                        f"but {reference_locale} maps it to {reference_concepts[concept_id]!r}"
+                    )
+    return active, concepts_by_locale, errors
+
+
+def _collect_traceability_source_docs(
+    root: Path, required_locales: tuple[str, ...], *, i18n_enabled: bool
+) -> dict[str, dict[str, Path]]:
+    docs_by_locale: dict[str, dict[str, Path]] = {}
+    for locale in required_locales:
+        docs_by_stem: dict[str, Path] = {}
+        for section, stem in TRACEABILITY_SOURCE_DOCS:
+            path = _docs_section_dir(root, locale, section, i18n_enabled=i18n_enabled) / (
+                f"{stem}.md"
+            )
+            if path.exists():
+                docs_by_stem[stem] = path
+        docs_by_locale[locale] = docs_by_stem
+    return docs_by_locale
+
+
+def _extract_traceability_entries(path: Path) -> list[dict[str, object]]:
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    matches = re.findall(r"```ya?ml\n(.*?)```", text, flags=re.DOTALL)
+    for block in matches:
+        if "traceability:" not in block:
+            continue
+        try:
+            import yaml  # type: ignore
+
+            payload = yaml.safe_load(block) or {}
+        except Exception as exc:
+            raise RuntimeError(f"Failed to parse traceability YAML in {path}: {exc}") from exc
+        entries = payload.get("traceability")
+        if not isinstance(entries, list):
+            raise RuntimeError(
+                f"Traceability YAML in {path} must contain a 'traceability' list"
+            )
+        normalized: list[dict[str, object]] = []
+        for raw in entries:
+            if not isinstance(raw, dict):
+                raise RuntimeError(f"Invalid traceability entry in {path}: {raw!r}")
+            concept_id = str(raw.get("concept_id", "")).strip()
+            source_doc = str(raw.get("source_doc", "")).strip()
+            status = str(raw.get("status", "")).strip()
+            code = raw.get("code") or []
+            tests = raw.get("tests") or []
+            if not isinstance(code, list) or not isinstance(tests, list):
+                raise RuntimeError(
+                    f"Traceability entry {concept_id or '<unknown>'} in {path} must use list-valued code/tests"
+                )
+            normalized.append(
+                {
+                    "concept_id": concept_id,
+                    "source_doc": source_doc,
+                    "status": status,
+                    "code": [str(item).strip() for item in code if str(item).strip()],
+                    "tests": [str(item).strip() for item in tests if str(item).strip()],
+                }
+            )
+        return normalized
+    raise RuntimeError(f"No traceability YAML block found in {path}")
+
+
+def _collect_traceability_docs(
+    root: Path,
+    required_locales: tuple[str, ...],
+    *,
+    i18n_enabled: bool,
+) -> tuple[dict[str, dict[str, dict[str, object]]], list[str]]:
+    docs: dict[str, dict[str, dict[str, object]]] = {}
+    errors: list[str] = []
+    for locale in required_locales:
+        path = _architecture_dir(root, locale, i18n_enabled=i18n_enabled) / (
+            f"{TRACEABILITY_DOC_STEM}.md"
+        )
+        if not path.exists():
+            errors.append(f"[{locale}] Missing traceability doc: {path}")
+            continue
+        try:
+            entries = _extract_traceability_entries(path)
+        except RuntimeError as exc:
+            errors.append(f"[{locale}] {exc}")
+            continue
+        by_id: dict[str, dict[str, object]] = {}
+        for entry in entries:
+            concept_id = str(entry.get("concept_id", "")).strip()
+            if not concept_id:
+                errors.append(f"[{locale}] Traceability doc {path} has an entry without concept_id")
+                continue
+            if concept_id in by_id:
+                errors.append(
+                    f"[{locale}] Duplicate traceability entry for Concept ID {concept_id!r} in {path}"
+                )
+                continue
+            by_id[concept_id] = entry
+        docs[locale] = by_id
+    return docs, errors
+
+
+def _validate_traceability(
+    root: Path,
+    concepts_by_locale: dict[str, dict[str, str]],
+    traceability_docs: dict[str, dict[str, dict[str, object]]],
+) -> tuple[list[str], list[str]]:
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    if not concepts_by_locale:
+        return errors, warnings
+
+    for locale, concepts in concepts_by_locale.items():
+        entries = traceability_docs.get(locale, {})
+        missing = sorted(set(concepts) - set(entries))
+        extra = sorted(set(entries) - set(concepts))
+        if missing:
+            errors.append(
+                f"[{locale}] Missing traceability entries for Concept IDs: {', '.join(missing)}"
+            )
+        if extra:
+            errors.append(
+                f"[{locale}] Traceability entries reference unknown Concept IDs: {', '.join(extra)}"
+            )
+
+        for concept_id, source_stem in sorted(concepts.items()):
+            entry = entries.get(concept_id)
+            if entry is None:
+                continue
+            source_doc = str(entry.get("source_doc", "")).strip()
+            expected_source = f"{source_stem}.md"
+            if source_doc != expected_source:
+                errors.append(
+                    f"[{locale}] Traceability entry {concept_id!r} references source_doc={source_doc!r}, "
+                    f"expected {expected_source!r}"
+                )
+            status = str(entry.get("status", "")).strip()
+            if status not in VALID_TRACEABILITY_STATUSES:
+                errors.append(
+                    f"[{locale}] Traceability entry {concept_id!r} uses invalid status {status!r}"
+                )
+                continue
+
+            code_paths = [Path(p) for p in entry.get("code", [])]  # type: ignore[arg-type]
+            test_paths = [Path(p) for p in entry.get("tests", [])]  # type: ignore[arg-type]
+
+            if status == "implemented":
+                if not code_paths:
+                    errors.append(
+                        f"[{locale}] Implemented Concept ID {concept_id!r} must list at least one code path"
+                    )
+                if not test_paths:
+                    errors.append(
+                        f"[{locale}] Implemented Concept ID {concept_id!r} must list at least one test path"
+                    )
+            if status == "partial" and not code_paths:
+                errors.append(
+                    f"[{locale}] Partial Concept ID {concept_id!r} must list at least one code path"
+                )
+
+            for label, paths in (("code", code_paths), ("test", test_paths)):
+                for rel_path in paths:
+                    abs_path = root / rel_path
+                    if not abs_path.exists():
+                        errors.append(
+                            f"[{locale}] Traceability entry {concept_id!r} references missing {label} path: {rel_path}"
+                        )
+
+    if traceability_docs:
+        reference_locale, reference_entries = next(iter(traceability_docs.items()))
+        reference_ids = set(reference_entries)
+        for locale, entries in traceability_docs.items():
+            ids = set(entries)
+            missing = sorted(reference_ids - ids)
+            extra = sorted(ids - reference_ids)
+            if missing:
+                errors.append(
+                    f"[{locale}] Traceability doc is missing Concept IDs present in {reference_locale}: {', '.join(missing)}"
+                )
+            if extra:
+                errors.append(
+                    f"[{locale}] Traceability doc has extra Concept IDs not present in {reference_locale}: {', '.join(extra)}"
+                )
+    return errors, warnings
 
 
 def _load_arch_spec_versions(root: Path) -> dict[str, str]:
@@ -283,6 +554,25 @@ def check_design_drift(root: Path = ROOT) -> tuple[int, str]:
             root, locale_docs, arch_spec_versions, i18n_enabled=i18n_enabled
         )
     )
+
+    traceability_source_docs = _collect_traceability_source_docs(
+        root, required_locales, i18n_enabled=i18n_enabled
+    )
+    traceability_active, concepts_by_locale, concept_errors = _collect_normative_concepts(
+        traceability_source_docs
+    )
+    errors.extend(concept_errors)
+    if traceability_active:
+        traceability_docs, traceability_errors = _collect_traceability_docs(
+            root, required_locales, i18n_enabled=i18n_enabled
+        )
+        errors.extend(traceability_errors)
+        traceability_doc_errors, traceability_warnings = _validate_traceability(
+            root, concepts_by_locale, traceability_docs
+        )
+        errors.extend(traceability_doc_errors)
+        warnings.extend(traceability_warnings)
+
     strict = os.getenv("DRIFT_STRICT", "0") == "1"
     return _build_result(errors, warnings, strict=strict)
 
