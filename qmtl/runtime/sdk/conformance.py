@@ -504,7 +504,9 @@ class TickConformanceRule:
         """Check for NaN values in specified columns."""
         for col in columns:
             series = df.get_column(col)
-            nan_count = int(series.is_null().sum() + series.is_nan().sum())
+            null_count = int(series.is_null().sum())
+            nan_only_count = int(series.is_nan().sum())
+            nan_count = null_count + nan_only_count
             if nan_count:
                 warnings.append(f"NaN values in {col}: {nan_count} rows")
                 flags[f'nan_{col}'] = int(nan_count)
@@ -618,7 +620,9 @@ class QuoteConformanceRule:
         """Check for NaN values in all expected columns."""
         for col in ['bid', 'ask', 'bid_size', 'ask_size']:
             series = df.get_column(col)
-            nan_count = int(series.is_null().sum() + series.is_nan().sum())
+            null_count = int(series.is_null().sum())
+            nan_only_count = int(series.is_nan().sum())
+            nan_count = null_count + nan_only_count
             if nan_count:
                 warnings.append(f"NaN values in {col}: {nan_count} rows")
                 flags[f'nan_{col}'] = int(nan_count)

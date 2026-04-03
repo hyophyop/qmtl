@@ -110,7 +110,7 @@ def test_world_client_capabilities_are_configured() -> None:
         capabilities=caps,
     )
 
-    assert result is client
+    assert cast(object, result) is client
     assert client.calls == [(2, True)]
 
 
