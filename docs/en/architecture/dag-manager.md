@@ -133,7 +133,7 @@ Operator-facing initialize/export/rollback commands are maintained in [Neo4j Mig
 - TagQuery invariant violations: when TagQueryNode recomputation mismatches are detected, Gateway increments `tagquery_nodeid_mismatch_total` (best-effort) and downstream SDK/Runner should invalidate caches.
 - Domain isolation: enforce `cross_context_cache_hit_total` (Sec.1.4) as a shared DAG Manager/SDK metric. When above zero, block cache reuse and escalate to an alert.
 
-TODO (#1784/#1786): add DAG Manager-side NodeID recompute drift/latency instrumentation and TagQuery spec-hash/resolved-cardinality logging/metrics.
+Follow-up implementation work for DAG Manager-side NodeID recompute drift/latency histograms and TagQuery spec-hash/resolved-cardinality metrics is tracked in issues `#1784` and `#1786`. The normative contract here remains valid even before those observability hooks land.
 
 ### 1.4 VersionSentinel Layout
 

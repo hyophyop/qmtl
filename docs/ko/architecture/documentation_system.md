@@ -263,7 +263,8 @@ Principles
   - `Gateway`/`DAG Manager`/`ControlBus`/`Risk Signal Hub`의 런타임 운영 문맥을 `operations/` 문서로 분리했다.
 - 진행 중
   - 최상위 규범 문서(`architecture.md`, `gateway.md`, `dag-manager.md`)를 더 짧은 normative spec으로 축약하고, CLI/rollout/config 절차는 운영 문서로 이동 중이다.
-  - nav는 `Architecture / Product Contracts / Operations / Design / Archive` 구조로 재정리했고, 공식 nav에 올리지 않을 문서는 `not_in_nav`로 명시해 경고 없이 관리하도록 전환 중이다.
+  - nav는 `Architecture / Product Contracts / Operations / Design / Archive` 구조로 재정리했고, Design 섹션은 개별 icebox 문서 대신 [Icebox 인덱스](../design/icebox.md)를 front door로 사용한다.
+  - 공식 nav에 올리지 않을 문서는 `not_in_nav`로 명시해 경고 없이 관리하도록 전환 중이다.
   - locale 미완료 문서는 ko/en 쌍이 준비될 때까지 off-nav 상태로 유지하고, 운영상 꼭 필요한 문서부터 ko/en 미러를 보강한다.
 - 남은 항목
   - 거대 규범 문서의 예시/부록/운영 세부를 추가로 외부 문서로 밀어내기

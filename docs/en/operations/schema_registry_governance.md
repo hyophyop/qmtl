@@ -48,9 +48,10 @@ Guardrails
 
 ## Strict Mode Audit Log
 
-| Date       | Schema Bundle SHA | Change Request | Validation Window | Notes |
-|------------|------------------|----------------|-------------------|-------|
-| _TBD_      |                  |                |                   |       |
+As of 2026-04-04, no strict-mode promotion has been recorded yet.
+Add concrete rows once the first promotion completes.
+
+| Date | Schema Bundle SHA | Change Request | Validation Window | Notes |
+|------|-------------------|----------------|-------------------|-------|
 
 {{ nav_links() }}
-

@@ -48,8 +48,10 @@ uv run python scripts/schema/audit_log.py \
 
 ## Strict Mode 감사 로그
 
-| Date       | Schema Bundle SHA | Change Request | Validation Window | Notes |
-|------------|------------------|----------------|-------------------|-------|
-| _TBD_      |                  |                |                   |       |
+2026-04-04 기준, 아직 strict-mode 승격 이력이 기록되지 않았습니다.
+첫 번째 승격이 완료되면 아래 형식으로 실제 이력을 추가하세요.
+
+| Date | Schema Bundle SHA | Change Request | Validation Window | Notes |
+|------|-------------------|----------------|-------------------|-------|
 
 {{ nav_links() }}

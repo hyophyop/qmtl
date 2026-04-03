@@ -132,16 +132,7 @@ nav:
       - Labeling Contract: design/labeling_contract.md
       - Control-Plane RFCs:
           - ACK/Gap Resync RFC: design/ack_resync_rfc.md
-      - QMTL UI: design/icebox/qmtl_ui.md
-      - Strategy Distillation: design/icebox/strategy_distillation.md
-      - World Validation Architecture: design/icebox/world_validation_architecture.md
-      - World Validation v1 Implementation Plan: design/icebox/world_validation_v1_implementation_plan.md
-      - World Strategy Weighting v1.5 Design: design/icebox/world_strategy_weighting_v1.5_design.md
-      - Exit Engine Overview: design/icebox/exit_engine_overview.md
-      - Model Risk Management Framework: design/icebox/model_risk_management_framework.md
-      - WorldService Evaluation Runs & Metrics API: design/icebox/worldservice_evaluation_runs_and_metrics_api.md
-      - YAML-Only Configuration Overhaul: design/icebox/yaml_config_overhaul.md
-      - Seamless Materialize/Verify Surface: design/icebox/seamless_materialize_jobs.md
+      - Icebox: design/icebox.md
   - Reference:
       - Overview: reference/README.md
       - FAQ: reference/faq.md
@@ -196,13 +187,11 @@ not_in_nav: |
   */archive/rewrite_architecture_docs.md
   */archive/risk_signal_hub.md
   */design/exit_engine_overview.md
+  */design/icebox/*.md
   */design/model_risk_management_framework.md
   */design/nautilus_catalog_integration.md
   */design/world_validation_architecture.md
   */design/world_validation_v1_implementation_plan.md
-  */design/icebox/operon_followup_spike.md
-  */design/icebox/sr_data_consistency_sketch.md
-  */design/icebox/sr_integration_proposal.md
   */guides/nautilus_catalog_integration.md
   */maintenance/radon_c_remediation_plan.md
   */maintenance/metrics/2025-11-14.md
