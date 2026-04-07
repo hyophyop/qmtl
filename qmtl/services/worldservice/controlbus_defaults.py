@@ -1,10 +1,10 @@
-from __future__ import annotations
-
 """Defaults and naming conventions for ControlBus integrations.
 
 These values are intended to be shared across WorldService producers/consumers
 so that retries/DLQ/idempotency behaviors are consistent by default.
 """
+
+from __future__ import annotations
 
 DEFAULT_CONTROLBUS_TOPIC = "policy"
 

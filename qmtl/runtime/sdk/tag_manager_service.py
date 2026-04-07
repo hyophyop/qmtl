@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Optional
 
 from qmtl.foundation.validation_core import Rule, RuleSet, ValidationResult
-from .tagquery_manager import TagQueryManager
+
 from .node import TagQueryNode
+from .tagquery_manager import TagQueryManager
 
 logger = logging.getLogger(__name__)
 

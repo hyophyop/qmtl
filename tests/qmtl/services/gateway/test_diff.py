@@ -1,11 +1,11 @@
-import asyncio
-import pytest
-import grpc
 from collections import defaultdict
 
-from qmtl.services.gateway.dagmanager_client import DagManagerClient
+import grpc
+import pytest
+
 from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
-from qmtl.services.dagmanager.kafka_admin import partition_key, compute_key
+from qmtl.services.dagmanager.kafka_admin import compute_key, partition_key
+from qmtl.services.gateway.dagmanager_client import DagManagerClient
 
 
 class DummyChannel:

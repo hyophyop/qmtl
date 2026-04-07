@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Mapping as ABCMapping, Sequence as ABCSequence
+from collections.abc import Mapping as ABCMapping
+from collections.abc import Sequence as ABCSequence
 from typing import Any, Callable, Dict, Mapping, Sequence, get_args, get_origin
 
 

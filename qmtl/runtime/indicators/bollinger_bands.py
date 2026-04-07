@@ -1,10 +1,9 @@
 """Bollinger Bands indicator."""
 
-import math
 from statistics import mean, pstdev
 
-from qmtl.runtime.sdk.node import Node
 from qmtl.runtime.sdk.cache_view import CacheView
+from qmtl.runtime.sdk.node import Node
 
 
 def bollinger_bands(source: Node, period: int, multiplier: float = 2.0, *, name: str | None = None) -> Node:

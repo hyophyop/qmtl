@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from qmtl.runtime.sdk import StreamInput, EventRecorderService, QuestDBHistoryProvider
 from qmtl.runtime.io import QuestDBRecorder
+from qmtl.runtime.sdk import EventRecorderService, QuestDBHistoryProvider, StreamInput
 
 
 def test_streaminput_history_provider_is_immutable() -> None:

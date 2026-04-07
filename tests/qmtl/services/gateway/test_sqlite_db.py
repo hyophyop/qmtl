@@ -1,5 +1,3 @@
-import asyncio
-import json
 import pytest
 
 from qmtl.services.gateway.database import SQLiteDatabase

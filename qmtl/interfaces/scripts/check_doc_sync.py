@@ -1,13 +1,12 @@
-from __future__ import annotations
-
 """Shim to expose check_doc_sync under qmtl/scripts for tests.
 
 Delegates to the project-level script at ``scripts/check_doc_sync.py``.
 """
 
-from pathlib import Path
-import importlib.util
+from __future__ import annotations
 
+import importlib.util
+from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = _ROOT / "scripts" / "check_doc_sync.py"

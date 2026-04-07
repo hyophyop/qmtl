@@ -3,14 +3,14 @@ from __future__ import annotations
 import pytest
 
 from qmtl.services.worldservice.rebalancing import (
-    ProportionalRebalancer,
-    RebalanceContext,
-    PositionSlice,
+    GlobalDeltaAggregator,
     MultiWorldProportionalRebalancer,
     MultiWorldRebalanceContext,
-    StrategyAllocationCalculator,
-    GlobalDeltaAggregator,
+    PositionSlice,
+    ProportionalRebalancer,
+    RebalanceContext,
     RebalancePlan,
+    StrategyAllocationCalculator,
     SymbolDelta,
     allocate_strategy_deltas,
 )

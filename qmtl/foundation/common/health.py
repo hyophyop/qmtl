@@ -8,15 +8,16 @@ receive consistent observability across services.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import asyncio
 import socket
 import time
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Literal, MutableMapping
 
 import httpx
-from prometheus_client import CollectorRegistry, REGISTRY as global_registry
+from prometheus_client import REGISTRY as global_registry
+from prometheus_client import CollectorRegistry
 
 from .metrics_factory import (
     get_or_create_counter,

@@ -1,10 +1,10 @@
 import pytest
 
+from qmtl.services.worldservice.blob_store import JsonBlobStore
 from qmtl.services.worldservice.live_monitoring_worker import LiveMonitoringWorker
 from qmtl.services.worldservice.policy_engine import parse_policy
-from qmtl.services.worldservice.risk_hub import RiskSignalHub, PortfolioSnapshot
+from qmtl.services.worldservice.risk_hub import PortfolioSnapshot, RiskSignalHub
 from qmtl.services.worldservice.storage import Storage
-from qmtl.services.worldservice.blob_store import JsonBlobStore
 
 
 @pytest.mark.asyncio

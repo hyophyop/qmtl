@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from qmtl.interfaces.cli.submit import cmd_submit
-from qmtl.interfaces.cli.v2 import COMMANDS, LEGACY_COMMANDS, ADMIN_COMMANDS, main
+from qmtl.interfaces.cli.v2 import ADMIN_COMMANDS, COMMANDS, LEGACY_COMMANDS, main
 from qmtl.runtime.sdk.configuration import reset_runtime_config_cache
 
 

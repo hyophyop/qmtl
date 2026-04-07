@@ -2,9 +2,9 @@ import math
 
 import pytest
 
-from qmtl.runtime.transforms.microstructure import gap_depth_weighted_sum_node
-from qmtl.runtime.sdk.node import SourceNode
 from qmtl.runtime.sdk.cache_view import CacheView
+from qmtl.runtime.sdk.node import SourceNode
+from qmtl.runtime.transforms.microstructure import gap_depth_weighted_sum_node
 
 
 def test_gap_depth_weighted_sum_normal_calculation():

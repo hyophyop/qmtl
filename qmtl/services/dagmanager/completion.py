@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from typing import Dict, Optional
-import asyncio
 
+from .controlbus_producer import ControlBusProducer
 from .diff_service import NodeRepository
 from .kafka_admin import KafkaAdmin
-from .controlbus_producer import ControlBusProducer
 
 
 @dataclass

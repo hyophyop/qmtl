@@ -3,6 +3,7 @@
 import subprocess
 import sys
 
+
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     cmd = [sys.executable, "-m", "qmtl", *args]
     return subprocess.run(cmd, capture_output=True, text=True)

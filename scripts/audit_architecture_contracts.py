@@ -20,7 +20,7 @@ import ast
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Iterator, Mapping
+from typing import Iterable, Mapping
 
 ROOT = Path(__file__).resolve().parents[1]
 

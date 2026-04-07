@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Shared helpers for accessing Prometheus test stores in assertions."""
+
+from __future__ import annotations
 
 from collections.abc import MutableMapping
 from typing import Any, Callable

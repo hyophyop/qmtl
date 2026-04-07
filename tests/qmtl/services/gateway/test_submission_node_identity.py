@@ -5,7 +5,6 @@ import pytest
 from qmtl.services.gateway.submission.node_identity import NodeIdentityValidator
 from tests.qmtl.runtime.sdk.factories import NodeFactory, node_ids_crc32
 
-
 _GATEWAY_ENV_SAMPLE = {
     "AS": "arm64-apple-darwin20.0.0-as",
     "RUST_LOG": "warn",

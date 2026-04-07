@@ -7,11 +7,12 @@ for transparent auto-backfill and live data integration.
 
 import asyncio
 import time
+
 import polars as pl
 
 from qmtl.runtime.io.seamless_provider import EnhancedQuestDBProvider
-from qmtl.runtime.sdk.seamless_data_provider import DataAvailabilityStrategy
 from qmtl.runtime.sdk import build_seamless_assembly
+from qmtl.runtime.sdk.seamless_data_provider import DataAvailabilityStrategy
 
 
 # Example DataFetcher implementation for demonstration

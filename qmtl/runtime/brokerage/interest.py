@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Iterable, Tuple, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Iterable, Tuple, Union
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .cashbook import Cashbook

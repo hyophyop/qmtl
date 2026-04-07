@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+
 import polars as pl
 
+from qmtl.examples.parallel_strategies_example import MA1 as BaseMA1
+from qmtl.examples.parallel_strategies_example import MA2 as BaseMA2
 from qmtl.runtime.io import QuestDBRecorder
-from qmtl.runtime.sdk import Runner, Strategy
-from qmtl.runtime.sdk.node import Node, StreamInput
+from qmtl.runtime.sdk import Runner, metrics
 from qmtl.runtime.sdk.event_service import EventRecorderService
-from qmtl.runtime.sdk import metrics
-from qmtl.examples.parallel_strategies_example import MA1 as BaseMA1, MA2 as BaseMA2
+from qmtl.runtime.sdk.node import Node, StreamInput
 
 
 class MA1(BaseMA1):

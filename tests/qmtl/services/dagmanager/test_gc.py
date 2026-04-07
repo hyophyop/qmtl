@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 
 from qmtl.services.dagmanager.garbage_collector import (
     GarbageCollector,

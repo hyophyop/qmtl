@@ -14,11 +14,21 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 try:
-    from scripts.policy_diff import _extract_metrics, _load_policy, _load_runs, _get_summary_status
+    from scripts.policy_diff import (
+        _extract_metrics,
+        _get_summary_status,
+        _load_policy,
+        _load_runs,
+    )
 except ModuleNotFoundError:  # pragma: no cover
     # When executed as a file (python scripts/policy_snapshot.py), the parent
     # directory is not on sys.path; fall back to local imports.
-    from policy_diff import _extract_metrics, _load_policy, _load_runs, _get_summary_status
+    from policy_diff import (
+        _extract_metrics,
+        _get_summary_status,
+        _load_policy,
+        _load_runs,
+    )
 from qmtl.services.worldservice.policy_engine import Policy, RuleResult, evaluate_policy
 
 

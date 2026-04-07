@@ -1,12 +1,12 @@
-from __future__ import annotations
-
 """Utility for One-Cancels-Other order groups."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
-from .order import Order, Fill, Account
 from .brokerage_model import BrokerageModel
+from .order import Account, Fill, Order
 
 
 @dataclass

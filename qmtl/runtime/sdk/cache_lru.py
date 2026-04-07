@@ -6,7 +6,6 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Callable, Generic, Iterator, TypeVar
 
-
 K = TypeVar("K")
 V = TypeVar("V")
 

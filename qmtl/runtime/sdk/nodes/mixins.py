@@ -6,11 +6,10 @@ from typing import Any, cast
 
 from opentelemetry import trace
 
-from qmtl.foundation.common.compute_key import ComputeContext, DEFAULT_EXECUTION_DOMAIN
+from qmtl.foundation.common.compute_key import DEFAULT_EXECUTION_DOMAIN, ComputeContext
 
 from .. import metrics as sdk_metrics
 from ..exceptions import NodeValidationError
-
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)

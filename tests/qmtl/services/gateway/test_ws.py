@@ -4,10 +4,10 @@ import time
 
 import pytest
 
-from tests.helpers.metrics import mapping_store
+from qmtl.services.dagmanager.kafka_admin import compute_key, partition_key
 from qmtl.services.gateway import metrics
 from qmtl.services.gateway.ws import WebSocketHub
-from qmtl.services.dagmanager.kafka_admin import compute_key, partition_key
+from tests.helpers.metrics import mapping_store
 
 
 class DummyWS:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from asyncio import CancelledError
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Generic, Protocol, TypeVar
+from typing import Any, Callable, Generic, Protocol, TypeVar
 
 TCommandResponse = TypeVar("TCommandResponse", covariant=True)
 TParseInput = TypeVar("TParseInput", contravariant=True)

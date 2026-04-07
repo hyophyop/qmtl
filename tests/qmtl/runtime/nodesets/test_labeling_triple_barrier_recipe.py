@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from qmtl.runtime.labeling.schema import BarrierMode, BarrierSpec, HorizonSpec, LabelOutcome
+from qmtl.runtime.labeling.schema import (
+    BarrierMode,
+    BarrierSpec,
+    HorizonSpec,
+    LabelOutcome,
+)
 from qmtl.runtime.nodesets.recipes import (
     LABELING_TRIPLE_BARRIER_DESCRIPTOR,
     make_labeling_triple_barrier_nodeset,

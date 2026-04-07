@@ -5,8 +5,8 @@ This module combines multiple technical indicators for signal generation.
 
 from __future__ import annotations
 
-from qmtl.runtime.sdk import Strategy, Node
 from qmtl.runtime.indicators import ema, rsi
+from qmtl.runtime.sdk import Node, Strategy
 
 
 class MultiIndicatorStrategy(Strategy):

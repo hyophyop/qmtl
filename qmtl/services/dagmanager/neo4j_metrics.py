@@ -1,10 +1,10 @@
-from __future__ import annotations
-
 """Background tasks to record Neo4j graph counts."""
 
-from dataclasses import dataclass, field
-from typing import Optional, TYPE_CHECKING
+from __future__ import annotations
+
 import asyncio
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:  # pragma: no cover - optional import for typing
     from neo4j import Driver

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import ClassVar
+
 import pytest
 
 from qmtl.runtime.nodesets.base import NodeSet, NodeSetBuilder, NodeSetOptions

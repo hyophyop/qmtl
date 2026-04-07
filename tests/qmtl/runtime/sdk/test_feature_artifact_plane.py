@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from qmtl.foundation.config import CacheConfig, UnifiedConfig
-from qmtl.runtime.sdk import ProcessingNode, StreamInput, Strategy, configuration
+from qmtl.runtime.sdk import ProcessingNode, Strategy, StreamInput, configuration
 from qmtl.runtime.sdk.feature_store import FeatureArtifactPlane, FileSystemFeatureStore
 from qmtl.runtime.sdk.runner import Runner
 

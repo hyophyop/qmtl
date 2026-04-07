@@ -1,34 +1,33 @@
 from __future__ import annotations
 
+import contextlib
 import json
+import logging
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, Optional
 
-import logging
-import contextlib
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from qmtl.foundation.common.tagquery import MatchMode
-
 from qmtl.foundation.common.cloudevents import format_event
+
+from . import metrics as gw_metrics
 from .event_descriptor import (
     EventDescriptorConfig,
     jwks,
     sign_event_token,
     validate_event_token,
 )
+from .event_models import (
+    ActivationUpdatedData,
+    CloudEvent,
+    PolicyUpdatedData,
+    QueueUpdateData,
+    SentinelWeightData,
+    TagQueryUpsertData,
+)
 from .models import EventSubscribeRequest, EventSubscribeResponse
 from .ws import WebSocketHub
-from .event_models import (
-    QueueUpdateData,
-    TagQueryUpsertData,
-    SentinelWeightData,
-    ActivationUpdatedData,
-    PolicyUpdatedData,
-    CloudEvent,
-)
-from . import metrics as gw_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +129,10 @@ def create_event_router(
                     interval_param = websocket.query_params.get("interval")
                     match_param = websocket.query_params.get("match_mode") or "any"
                     if tags_param and interval_param:
-                        from qmtl.foundation.common.tagquery import split_tags, normalize_match_mode
+                        from qmtl.foundation.common.tagquery import (
+                            normalize_match_mode,
+                            split_tags,
+                        )
                         try:
                             interval_int = int(interval_param)
                         except (TypeError, ValueError):

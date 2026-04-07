@@ -1,25 +1,31 @@
-from __future__ import annotations
-
 """Prometheus metrics for Gateway."""
 
+from __future__ import annotations
+
+import time
 from collections import deque
 from collections.abc import MutableMapping, Sequence
 from datetime import datetime, timezone
-from typing import Any, Deque, Mapping, Sequence as Seq, cast
-import time
+from typing import Any, Deque, Mapping, cast
+from typing import Sequence as Seq
 
+from prometheus_client import (
+    REGISTRY as global_registry,
+)
 from prometheus_client import (
     generate_latest,
     start_http_server,
-    REGISTRY as global_registry,
 )
+
+from qmtl.foundation.common import NodeValidationReport
 from qmtl.foundation.common.metrics_factory import (
     get_mapping_store,
     get_or_create_counter,
     get_or_create_gauge,
+)
+from qmtl.foundation.common.metrics_factory import (
     reset_metrics as reset_registered_metrics,
 )
-from qmtl.foundation.common import NodeValidationReport
 
 _e2e_samples: Deque[float] = deque(maxlen=100)
 _worlds_samples: Deque[float] = deque(maxlen=100)

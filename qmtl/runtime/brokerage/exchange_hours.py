@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, date, time
-from typing import Set, Dict
-
+from datetime import date, datetime, time
 from functools import lru_cache
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Set
 
 if TYPE_CHECKING:
     from qmtl.runtime.sdk.timing_controls import MarketHours, MarketSession
@@ -15,7 +13,8 @@ if TYPE_CHECKING:
 
 @lru_cache(maxsize=1)
 def _timing_controls():
-    from qmtl.runtime.sdk.timing_controls import MarketHours as _MarketHours, MarketSession as _MarketSession
+    from qmtl.runtime.sdk.timing_controls import MarketHours as _MarketHours
+    from qmtl.runtime.sdk.timing_controls import MarketSession as _MarketSession
 
     return _MarketHours, _MarketSession
 

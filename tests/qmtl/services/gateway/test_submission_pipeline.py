@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from qmtl.foundation.common.compute_context import ComputeContext
-from typing import Any
 from qmtl.services.gateway.submission import (
     PreparedSubmission,
     StrategyComputeContext,

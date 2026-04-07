@@ -1,9 +1,8 @@
 import logging
-import pytest
 
-from qmtl.runtime.sdk import Strategy, StreamInput, ProcessingNode, TagQueryNode
+from qmtl.runtime.sdk import ProcessingNode, Strategy, StreamInput, TagQueryNode
 from qmtl.runtime.sdk.tag_manager_service import TagManagerService
-from qmtl.services.dagmanager.kafka_admin import partition_key, compute_key
+from qmtl.services.dagmanager.kafka_admin import compute_key, partition_key
 
 
 class _Strat(Strategy):

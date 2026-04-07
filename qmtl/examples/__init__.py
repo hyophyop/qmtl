@@ -7,4 +7,4 @@ sys.modules['qmtl.examples'] = sys.modules[__name__]
 
 from . import dags
 
-__all__: list[str] = []
+__all__: list[str] = ["dags"]

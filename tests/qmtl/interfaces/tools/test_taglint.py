@@ -3,15 +3,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 from qmtl.interfaces.tools.taglint import (
-    REQUIRED_KEYS,
     RECOMMENDED_KEYS,
+    REQUIRED_KEYS,
     apply_fixes,
     load_tags,
     validate_tags,
 )
-
 
 # v2 CLI: 'taglint' is an admin command, invoked via `qmtl --admin taglint`
 TAGLINT_TOKENS = ["--admin", "taglint"]

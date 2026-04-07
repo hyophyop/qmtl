@@ -4,15 +4,26 @@ import asyncio
 import importlib
 import importlib.util
 import logging
-from typing import Any, Optional, Protocol, Dict, Set, cast, Iterable, Callable, TYPE_CHECKING
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Optional,
+    Protocol,
+    Set,
+    cast,
+)
 
-from .database import PostgresDatabase, pg_try_advisory_lock, pg_advisory_unlock
 from . import metrics as gw_metrics
+from .database import PostgresDatabase, pg_advisory_unlock, pg_try_advisory_lock
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checking only
     from qmtl.foundation.config import DeploymentProfile
+
     from .config import GatewayOwnershipConfig
 
 

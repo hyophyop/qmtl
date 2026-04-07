@@ -5,7 +5,6 @@ import pytest
 from qmtl.services.dagmanager.kafka_admin import compute_key
 from qmtl.services.gateway.commit_log import CommitLogWriter
 from qmtl.services.gateway.commit_log_consumer import CommitLogConsumer
-
 from tests.qmtl.services.service_doubles import (
     FakeKafkaMessage,
     RecordingCommitLogConsumerBackend,

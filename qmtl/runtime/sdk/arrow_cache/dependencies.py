@@ -8,6 +8,7 @@ from typing import Any
 
 from .. import configuration
 
+
 def _load_optional_module(name: str) -> Any | None:
     spec = importlib.util.find_spec(name)
     if spec is None:

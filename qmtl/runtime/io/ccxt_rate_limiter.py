@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Process-wide shared rate limiter for CCXT calls.
 
 This module provides a per-exchange limiter to coordinate requests across
@@ -7,10 +5,12 @@ multiple fetchers within a single Python process. For distributed (multi-host)
 coordination, consider extending this with a Redis-backed token bucket.
 """
 
-from dataclasses import dataclass
+from __future__ import annotations
+
 import asyncio
 import time
-from typing import Dict, Any
+from dataclasses import dataclass
+from typing import Any, Dict
 
 from qmtl.runtime.sdk import metrics as sdk_metrics
 from qmtl.runtime.sdk.configuration import get_connectors_config

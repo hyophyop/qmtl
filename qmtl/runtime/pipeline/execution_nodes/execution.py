@@ -3,19 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Any, Mapping, cast
+from typing import cast
 
+from qmtl.runtime.pipeline.order_types import ExecutionFillPayload, SizedOrder
 from qmtl.runtime.sdk.execution_modeling import (
-    ExecutionFill,
     ExecutionModel,
     MarketData,
     OrderSide,
+)
+from qmtl.runtime.sdk.execution_modeling import (
     OrderType as ExecOrderType,
 )
 from qmtl.runtime.sdk.node import CacheView, Node, ProcessingNode
 
 from ._shared import latest_entry
-from qmtl.runtime.pipeline.order_types import ExecutionFillPayload, SizedOrder
 
 
 class ExecutionNode(ProcessingNode):

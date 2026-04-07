@@ -1,9 +1,9 @@
 import pytest
-import pytest
 import xarray as xr
-from qmtl.foundation.common.metrics_factory import get_mapping_store
-from qmtl.runtime.sdk import ProcessingNode, StreamInput, Runner, NodeCache
+
 from qmtl.foundation.common.compute_key import ComputeContext
+from qmtl.foundation.common.metrics_factory import get_mapping_store
+from qmtl.runtime.sdk import NodeCache, ProcessingNode, Runner, StreamInput
 from qmtl.runtime.sdk import metrics as sdk_metrics
 
 

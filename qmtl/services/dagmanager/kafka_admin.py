@@ -1,15 +1,19 @@
-from __future__ import annotations
-
 """Simple Kafka Admin wrapper for idempotent topic creation."""
+
+from __future__ import annotations
 
 import asyncio
 import time
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, Mapping, Protocol
 
-from qmtl.foundation.common import AsyncCircuitBreaker, ComputeContext, compute_compute_key
-from . import metrics
+from qmtl.foundation.common import (
+    AsyncCircuitBreaker,
+    ComputeContext,
+    compute_compute_key,
+)
 
+from . import metrics
 from .topic import TopicConfig
 
 

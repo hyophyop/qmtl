@@ -4,7 +4,7 @@ import atexit
 import json
 import time
 from pathlib import Path
-from typing import Iterable, Dict
+from typing import Any, Dict, Iterable
 
 import networkx as nx
 

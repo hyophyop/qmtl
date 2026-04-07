@@ -1,8 +1,8 @@
-import asyncio
+
 import httpx
 import pytest
 
-from qmtl.runtime.sdk import TagQueryNode, MatchMode
+from qmtl.runtime.sdk import MatchMode, TagQueryNode
 from qmtl.runtime.sdk.tagquery_manager import TagQueryManager
 
 

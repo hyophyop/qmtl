@@ -1,10 +1,14 @@
 import asyncio
+
 import pytest
 
-import asyncio
-
 from qmtl.services.dagmanager.buffer_scheduler import BufferingScheduler
-from qmtl.services.dagmanager.diff_service import DiffService, DiffRequest, NodeRepository, NodeRecord
+from qmtl.services.dagmanager.diff_service import (
+    DiffRequest,
+    DiffService,
+    NodeRecord,
+    NodeRepository,
+)
 from qmtl.services.dagmanager.topic import topic_name
 
 

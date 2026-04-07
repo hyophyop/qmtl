@@ -1,6 +1,6 @@
 """Strategy demonstrating lifecycle callbacks for state management."""
 
-from qmtl.runtime.sdk import Strategy, StreamInput, ProcessingNode, buy_signal
+from qmtl.runtime.sdk import ProcessingNode, Strategy, StreamInput, buy_signal
 
 
 class CallbackStateStrategy(Strategy):

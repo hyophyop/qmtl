@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Asynchronous circuit breaker utility."""
+
+from __future__ import annotations
 
 import time
 from typing import Any, Awaitable, Callable, TypeVar

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import csv
+import json
 from dataclasses import dataclass
 from pathlib import Path
-import json
-import csv
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 
 @dataclass(frozen=True)

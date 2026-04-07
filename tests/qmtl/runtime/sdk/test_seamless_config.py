@@ -1,15 +1,14 @@
 from __future__ import annotations
 
+import polars as pl
 import pytest
 
-import polars as pl
-
+from qmtl.runtime.io.seamless_provider import (
+    DataFetcherAutoBackfiller,
+    HistoryProviderDataSource,
+)
 from qmtl.runtime.sdk import build_seamless_assembly, hydrate_builder
 from qmtl.runtime.sdk.seamless_data_provider import DataSourcePriority
-from qmtl.runtime.io.seamless_provider import (
-    HistoryProviderDataSource,
-    DataFetcherAutoBackfiller,
-)
 
 
 def _ccxt_preset_config() -> dict:

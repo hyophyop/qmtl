@@ -34,11 +34,12 @@ Example::
 
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+
 import polars as pl
-import time
-import logging
 
 from qmtl.runtime.sdk.seamless_data_provider import (
     DataSourcePriority,

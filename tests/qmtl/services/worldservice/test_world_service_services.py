@@ -4,16 +4,16 @@ import asyncio
 
 import pytest
 
+import qmtl.services.worldservice.services as ws_services
 from qmtl.foundation.common.metrics_factory import get_metric_value
 from qmtl.services.worldservice import metrics as ws_metrics
 from qmtl.services.worldservice.policy_engine import Policy, ThresholdRule
 from qmtl.services.worldservice.schemas import (
     AllocationUpsertRequest,
+    EvaluateRequest,
     PositionSliceModel,
     StrategySeries,
-    EvaluateRequest,
 )
-import qmtl.services.worldservice.services as ws_services
 from qmtl.services.worldservice.services import WorldService
 from qmtl.services.worldservice.storage.facade import Storage
 

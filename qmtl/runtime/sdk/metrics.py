@@ -1,32 +1,45 @@
-from __future__ import annotations
-
 """Prometheus metrics for the SDK cache layer."""
+
+from __future__ import annotations
 
 import time
 from collections.abc import Mapping, Sequence
 
 from prometheus_client import (
-    generate_latest,
-    start_http_server,
     REGISTRY as global_registry,
 )
+from prometheus_client import (
+    generate_latest,
+    start_http_server,
+)
+
 from qmtl.foundation.common.metrics_factory import (
     get_mapping_store,
     get_or_create_counter,
     get_or_create_gauge,
     get_or_create_histogram,
-    increment_mapping_store,
-    reset_metrics as reset_registered_metrics,
     set_test_value,
+)
+from qmtl.foundation.common.metrics_factory import (
+    reset_metrics as reset_registered_metrics,
+)
+from qmtl.foundation.common.metrics_shared import (
+    clear_cross_context_cache_hits as _clear_cross_context_cache_hits,
+)
+from qmtl.foundation.common.metrics_shared import (
+    clear_nodecache_resident_bytes as _clear_nodecache_resident_bytes,
 )
 from qmtl.foundation.common.metrics_shared import (
     get_cross_context_cache_hit_counter,
     get_nodecache_resident_bytes,
-    observe_cross_context_cache_hit as _observe_cross_context_cache_hit,
-    observe_nodecache_resident_bytes as _observe_nodecache_resident_bytes,
-    clear_cross_context_cache_hits as _clear_cross_context_cache_hits,
-    clear_nodecache_resident_bytes as _clear_nodecache_resident_bytes,
 )
+from qmtl.foundation.common.metrics_shared import (
+    observe_cross_context_cache_hit as _observe_cross_context_cache_hit,
+)
+from qmtl.foundation.common.metrics_shared import (
+    observe_nodecache_resident_bytes as _observe_nodecache_resident_bytes,
+)
+
 from .protocols import MetricWithValueProtocol
 
 _WORLD_ID = "default"
@@ -587,8 +600,6 @@ def observe_cross_context_cache_hit(
 
 
 def observe_backfill_start(node_id: str, interval: int) -> None:
-    n = str(node_id)
-    i = str(interval)
     backfill_jobs_in_progress.inc()
     _set_scalar(backfill_jobs_in_progress, backfill_jobs_in_progress._value.get())
 

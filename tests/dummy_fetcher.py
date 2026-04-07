@@ -1,7 +1,5 @@
 import polars as pl
 
-from qmtl.runtime.sdk import DataFetcher
-
 
 class DummyDataFetcher:
     """A simple DataFetcher returning predetermined rows."""

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Standard live data feed interface and WebSocket implementation.
 
 This module exposes a small abstraction usable by strategies or services
@@ -7,6 +5,8 @@ that want to consume live updates (prices, signals, control events).
 The WebSocketFeed wraps the existing SDK ``WebSocketClient`` with the
 same reconnection and heartbeat behavior.
 """
+
+from __future__ import annotations
 
 import asyncio
 import contextlib

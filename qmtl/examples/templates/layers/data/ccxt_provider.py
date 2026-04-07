@@ -5,8 +5,8 @@ This module integrates CCXT for exchange data retrieval.
 
 from __future__ import annotations
 
-from qmtl.runtime.sdk import StreamInput
 from qmtl.runtime.io import QuestDBHistoryProvider
+from qmtl.runtime.sdk import StreamInput
 
 
 def create_ccxt_stream(

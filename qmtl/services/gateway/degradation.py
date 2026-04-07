@@ -4,11 +4,10 @@ import asyncio
 from enum import IntEnum
 from typing import Optional
 
-from .database import Database
-
 import psutil
 
 from . import metrics
+from .database import Database
 
 
 class DegradationLevel(IntEnum):

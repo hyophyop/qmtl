@@ -5,9 +5,9 @@ import asyncio
 import contextlib
 import logging
 import signal
-from typing import Any
-from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Any
 
 from . import metrics as gw_metrics
 from .commit_log_consumer import CommitLogConsumer

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Shared execution resources for Node Set builders.
 
 This module centralizes the wiring of activation weighting (soft gating)
@@ -8,12 +6,14 @@ same behavior consistently. Recipes and adapters can import the helpers
 here instead of re-implementing the logic locally.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Callable, Mapping
 
 from qmtl.runtime.sdk.portfolio import Portfolio
-from .options import PortfolioScope
 
+from .options import PortfolioScope
 
 _WORLD_PORTFOLIOS: dict[str, Portfolio] = {}
 

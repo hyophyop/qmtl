@@ -7,11 +7,14 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 
-from tests.helpers.metrics import mapping_store
-from qmtl.services.gateway.controlbus_consumer import ControlBusConsumer, ControlBusMessage
-from qmtl.services.gateway.api import Database
-from qmtl.services.gateway import metrics
 from qmtl.foundation.common.tagquery import MatchMode
+from qmtl.services.gateway import metrics
+from qmtl.services.gateway.api import Database
+from qmtl.services.gateway.controlbus_consumer import (
+    ControlBusConsumer,
+    ControlBusMessage,
+)
+from tests.helpers.metrics import mapping_store
 
 
 class FakeHub:

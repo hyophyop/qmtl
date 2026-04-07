@@ -10,16 +10,16 @@ from qmtl.services.gateway.degradation import DegradationManager
 from qmtl.services.gateway.gateway_health import GatewayHealthCapabilities
 from qmtl.services.gateway.strategy_manager import StrategyManager
 from qmtl.services.gateway.submission import SubmissionPipeline
-from qmtl.services.gateway.ws import WebSocketHub
 from qmtl.services.gateway.world_client import WorldServiceClient
+from qmtl.services.gateway.ws import WebSocketHub
 
 from .dependencies import GatewayDependencyProvider
 from .fills import create_router as create_fills_router
 from .observability import create_router as create_observability_router
+from .rebalancing import create_router as create_rebalancing_router
 from .status import create_router as create_status_router
 from .strategies import create_router as create_strategies_router
 from .worlds import create_router as create_worlds_router
-from .rebalancing import create_router as create_rebalancing_router
 
 
 def create_api_router(

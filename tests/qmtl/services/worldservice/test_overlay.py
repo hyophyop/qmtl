@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import pytest
-from qmtl.services.worldservice.rebalancing.overlay import OverlayPlanner
+
 from qmtl.services.worldservice.rebalancing.base import PositionSlice, SymbolDelta
+from qmtl.services.worldservice.rebalancing.overlay import OverlayPlanner
 from qmtl.services.worldservice.schemas import OverlayConfigModel
 
 

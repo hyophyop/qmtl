@@ -1,28 +1,32 @@
-import asyncio
+import json
 from collections import deque
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 
 import grpc
 import pytest
+
+from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
+from qmtl.services.dagmanager.controlbus_producer import ControlBusProducer
+from qmtl.services.dagmanager.diff_service import StreamSender
+from qmtl.services.dagmanager.garbage_collector import GarbageCollector, QueueInfo
+from qmtl.services.dagmanager.grpc_server import serve
+from qmtl.services.dagmanager.kafka_admin import (
+    TopicExistsError,
+    compute_key,
+    partition_key,
+)
+from qmtl.services.dagmanager.monitor import AckStatus
+from qmtl.services.dagmanager.repository import NodeRepository
+from qmtl.services.gateway.controlbus_consumer import (
+    ControlBusConsumer,
+    ControlBusMessage,
+)
 
 pytestmark = [
     pytest.mark.filterwarnings('ignore::pytest.PytestUnraisableExceptionWarning'),
     pytest.mark.filterwarnings('ignore:unclosed <socket.socket[^>]*>'),
     pytest.mark.filterwarnings('ignore:unclosed event loop'),
 ]
-import json
-
-from qmtl.services.dagmanager.diff_service import StreamSender
-from qmtl.services.dagmanager.kafka_admin import TopicExistsError, partition_key, compute_key
-from qmtl.services.dagmanager.grpc_server import serve
-from qmtl.services.dagmanager.api import create_app
-from qmtl.services.dagmanager import metrics
-from qmtl.services.dagmanager.garbage_collector import GarbageCollector, QueueInfo
-from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
-from qmtl.services.dagmanager.monitor import AckStatus
-from qmtl.services.dagmanager.controlbus_producer import ControlBusProducer
-from qmtl.services.gateway.controlbus_consumer import ControlBusConsumer, ControlBusMessage
-from qmtl.services.dagmanager.repository import NodeRepository
 
 
 class FakeSession:

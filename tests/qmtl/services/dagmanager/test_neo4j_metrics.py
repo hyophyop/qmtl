@@ -1,12 +1,12 @@
 import asyncio
-import asyncio
+
 import pytest
 
-import asyncio
-import pytest
-
-from qmtl.services.dagmanager.neo4j_metrics import GraphCountCollector, GraphCountScheduler
 from qmtl.services.dagmanager import metrics
+from qmtl.services.dagmanager.neo4j_metrics import (
+    GraphCountCollector,
+    GraphCountScheduler,
+)
 
 
 class FakeResult:

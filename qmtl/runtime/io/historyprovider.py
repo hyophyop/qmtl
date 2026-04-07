@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """QuestDB history backend and provider implementations."""
+
+from __future__ import annotations
 
 from typing import TYPE_CHECKING
 

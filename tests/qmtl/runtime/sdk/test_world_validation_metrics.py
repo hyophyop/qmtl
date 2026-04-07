@@ -12,7 +12,6 @@ from qmtl.runtime.sdk.world_validation_metrics import (
     time_under_water_ratio,
 )
 
-
 GOOD_RETURNS = [0.01, 0.02, -0.005, 0.015, 0.012, 0.008, -0.003, 0.02, 0.01, 0.005]
 
 

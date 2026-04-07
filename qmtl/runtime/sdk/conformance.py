@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable, Any, cast
+from typing import Any, Iterable, Literal, cast
 
 import numpy as np
 import polars as pl
-from typing import Literal, cast
 from numpy.typing import NDArray
 
 from .exceptions import NodeValidationError

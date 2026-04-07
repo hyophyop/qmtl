@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import cast, Optional
+from typing import Optional, cast
 
 import httpx
 from httpx import _types as httpx_types

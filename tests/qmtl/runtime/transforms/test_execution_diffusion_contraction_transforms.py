@@ -1,13 +1,14 @@
 import math
+
 import pytest
 
 from qmtl.runtime.transforms.execution_diffusion_contraction import (
     concentration_scores,
     depth_wedge,
+    edch_side,
+    expected_jump,
     hazard_probability,
     path_resistance,
-    expected_jump,
-    edch_side,
 )
 
 

@@ -17,17 +17,16 @@ This service is intentionally simplistic and stateful only in-memory.
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from typing import Any, Dict
 
-import time
 import uvicorn
+import yaml
 from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel
-import yaml
 
 from qmtl.services.worldservice.shared_schemas import EvaluateRequest
-
 
 app = FastAPI()
 

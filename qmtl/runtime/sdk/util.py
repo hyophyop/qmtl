@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import re
-from typing import Any
 
-from .exceptions import InvalidIntervalError, InvalidPeriodError, InvalidTagError, InvalidNameError
+from .exceptions import (
+    InvalidIntervalError,
+    InvalidNameError,
+    InvalidPeriodError,
+    InvalidTagError,
+)
 
 __all__ = ["parse_interval", "parse_period", "validate_tag", "validate_name"]
 

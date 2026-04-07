@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+
 def _repo_root() -> Path:
     current = Path(__file__).resolve()
     for parent in current.parents:

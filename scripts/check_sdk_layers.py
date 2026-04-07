@@ -1,11 +1,11 @@
-from __future__ import annotations
-
 """Validate SDK layer dependencies to prevent upward imports.
 
 Rules enforced:
 - Core SDK modules (cache/backfill/data_io/history_provider_facade/etc.) must
   not import node implementations.
 """
+
+from __future__ import annotations
 
 import argparse
 from typing import Iterable, Sequence

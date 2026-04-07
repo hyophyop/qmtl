@@ -5,8 +5,8 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Tuple
 import math
+from typing import Iterable, Tuple
 
 from .hazard_utils import hazard_probability as _hazard_probability
 

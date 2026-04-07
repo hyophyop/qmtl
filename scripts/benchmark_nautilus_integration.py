@@ -18,10 +18,10 @@ Requirements:
 from __future__ import annotations
 
 import asyncio
+import statistics
 import time
 from pathlib import Path
 from typing import Any
-import statistics
 
 try:
     from nautilus_trader.persistence.catalog import DataCatalog
@@ -35,11 +35,11 @@ from qmtl.runtime.io.nautilus_catalog_source import (
     check_nautilus_available,
 )
 from qmtl.runtime.io.nautilus_coverage_index import NautilusCoverageIndex
-from qmtl.runtime.sdk.seamless_data_provider import SeamlessDataProvider
 from qmtl.runtime.sdk.conformance import (
-    TickConformanceRule,
     QuoteConformanceRule,
+    TickConformanceRule,
 )
+from qmtl.runtime.sdk.seamless_data_provider import SeamlessDataProvider
 
 
 class BenchmarkResults:
@@ -245,7 +245,6 @@ async def benchmark_schema_conversion(
     source = NautilusCatalogDataSource(catalog=catalog)
     
     # Fetch raw data (with conversion)
-    node_id = "ohlcv:binance:BTC/USDT:1m"
     start_ts = 1700000000 * 1_000_000_000  # nanoseconds
     end_ts = 1700003600 * 1_000_000_000
     

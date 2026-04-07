@@ -11,7 +11,6 @@ from ..event_service import EventRecorderService
 from .config import NodeConfig
 from .mixins import ComputeContextMixin, NodeFeedMixin
 
-
 _UNSET = object()
 
 
@@ -37,8 +36,8 @@ class Node(ComputeContextMixin, NodeFeedMixin):
         hash_utils: Any = None,
         event_service: EventRecorderService | None = None,
     ) -> None:
-        from .. import node_validation as default_validator
         from .. import hash_utils as default_hash_utils
+        from .. import node_validation as default_validator
 
         self.validator = validator or default_validator
         self.hash_utils = hash_utils or default_hash_utils

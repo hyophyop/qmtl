@@ -1,4 +1,5 @@
 import asyncio
+
 import pytest
 
 from qmtl.services.gateway.redis_client import InMemoryRedis

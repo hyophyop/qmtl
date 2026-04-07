@@ -3,8 +3,8 @@ import types
 
 import pytest
 
-from qmtl.services.dagmanager.config import DagManagerConfig
 import qmtl.services.dagmanager.server as server
+from qmtl.services.dagmanager.config import DagManagerConfig
 
 
 class _DummyGrpcServer:

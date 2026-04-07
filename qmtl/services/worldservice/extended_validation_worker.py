@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import inspect
+import logging
+import math
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-import math
-import logging
-import inspect
-
 from qmtl.services.worldservice.policy_engine import Policy, evaluate_extended_layers
 
+from .live_metrics_risk import (
+    risk_hub_snapshot_lag_seconds,
+    risk_hub_snapshot_missing_total,
+)
+from .metrics import parse_timestamp
 from .storage import Storage
 from .validation_metrics import (
     augment_live_metrics,
@@ -18,11 +22,6 @@ from .validation_metrics import (
     augment_stress_metrics,
     iso_timestamp_now,
 )
-from .live_metrics_risk import (
-    risk_hub_snapshot_lag_seconds,
-    risk_hub_snapshot_missing_total,
-)
-from .metrics import parse_timestamp
 
 logger = logging.getLogger(__name__)
 

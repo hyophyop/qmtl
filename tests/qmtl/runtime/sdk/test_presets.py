@@ -5,17 +5,17 @@ from __future__ import annotations
 import pytest
 
 from qmtl.runtime.sdk.presets import (
+    PRESET_AGGRESSIVE,
+    PRESET_CONSERVATIVE,
+    PRESET_MODERATE,
+    PRESET_SANDBOX,
+    PRESETS,
     PolicyPreset,
     PresetPolicy,
     ThresholdConfig,
     TopKConfig,
     get_preset,
     list_presets,
-    PRESETS,
-    PRESET_SANDBOX,
-    PRESET_CONSERVATIVE,
-    PRESET_MODERATE,
-    PRESET_AGGRESSIVE,
 )
 
 

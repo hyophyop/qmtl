@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import time
-
 from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -9,8 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from qmtl.services.gateway import metrics as gw_metrics
 from qmtl.services.gateway.dagmanager_client import DagManagerClient
 from qmtl.services.gateway.models import (
-    QueuesByTagResponse,
     QueueDescriptor,
+    QueuesByTagResponse,
     SeamlessHistoryReport,
     StatusResponse,
     StrategyAck,
@@ -135,7 +134,7 @@ def create_router(deps: GatewayDependencyProvider) -> APIRouter:
         execution_domain: str | None = None,
         dagmanager: DagManagerClient = Depends(deps.provide_dagmanager),
     ) -> QueuesByTagResponse:
-        from qmtl.foundation.common.tagquery import split_tags, normalize_match_mode
+        from qmtl.foundation.common.tagquery import normalize_match_mode, split_tags
 
         tag_list = split_tags(tags)
         mode = normalize_match_mode(match_mode).value

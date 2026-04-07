@@ -6,16 +6,16 @@ from typing import cast
 
 import pytest
 
+from qmtl.services.dagmanager.kafka_admin import compute_key, partition_key
 from qmtl.services.gateway import metrics
 from qmtl.services.gateway.commit_log import CommitLogWriter
 from qmtl.services.gateway.commit_log_consumer import CommitLogConsumer
-from qmtl.services.gateway.database import PostgresDatabase, Database
+from qmtl.services.gateway.dagmanager_client import DagManagerClient
+from qmtl.services.gateway.database import Database, PostgresDatabase
+from qmtl.services.gateway.fsm import StrategyFSM
 from qmtl.services.gateway.ownership import OwnershipManager
 from qmtl.services.gateway.redis_queue import RedisTaskQueue
 from qmtl.services.gateway.worker import StrategyWorker
-from qmtl.services.gateway.dagmanager_client import DagManagerClient
-from qmtl.services.gateway.fsm import StrategyFSM
-from qmtl.services.dagmanager.kafka_admin import partition_key, compute_key
 
 
 class FakeConn:

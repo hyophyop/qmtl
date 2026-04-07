@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Decode and validate strategy DAG payloads."""
+
+from __future__ import annotations
 
 import base64
 import json

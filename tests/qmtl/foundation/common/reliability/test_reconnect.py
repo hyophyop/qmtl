@@ -1,9 +1,10 @@
-import pytest
 import sys
 import types
+
+import pytest
 import redis.asyncio as redis
 
-from qmtl.foundation.common.reconnect import ReconnectingRedis, ReconnectingNeo4j
+from qmtl.foundation.common.reconnect import ReconnectingNeo4j, ReconnectingRedis
 
 
 class DummyRedis:

@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Optional
 
 from .interfaces import FillModel
-from .order import Order, Fill, OrderType, TimeInForce
+from .order import Fill, Order, OrderType, TimeInForce
 
 
 class ImmediateFillModel(FillModel):

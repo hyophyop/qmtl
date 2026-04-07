@@ -5,14 +5,21 @@ import time
 
 import pytest
 
-from qmtl.foundation.common.compute_key import ComputeContext as RunnerComputeContext, compute_compute_key
+from qmtl.foundation.common.compute_key import ComputeContext as RunnerComputeContext
+from qmtl.foundation.common.compute_key import compute_compute_key
 from qmtl.foundation.common.tagquery import MatchMode
 from qmtl.runtime.sdk.node import Node
 from qmtl.runtime.sdk.services import RunnerServices
 from qmtl.runtime.transforms.publisher import TradeOrderPublisherNode
-from qmtl.services.gateway.controlbus_consumer import ControlBusConsumer, ControlBusMessage
+from qmtl.services.gateway.controlbus_consumer import (
+    ControlBusConsumer,
+    ControlBusMessage,
+)
 from qmtl.services.gateway.models import StrategySubmit
-from qmtl.services.gateway.submission.context_service import ComputeContextService, StrategyComputeContext
+from qmtl.services.gateway.submission.context_service import (
+    ComputeContextService,
+    StrategyComputeContext,
+)
 
 
 class _StubWorldClient:

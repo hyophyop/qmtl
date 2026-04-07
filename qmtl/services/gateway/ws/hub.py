@@ -7,9 +7,9 @@ from typing import Any, Mapping, Optional, Set
 
 from fastapi import WebSocket
 
+from qmtl.foundation.common.cloudevents import format_event
 from qmtl.foundation.common.tagquery import MatchMode
 
-from qmtl.foundation.common.cloudevents import format_event
 from .connections import ConnectionRegistry
 from .dispatcher import EventDispatcher
 from .duplicate import DuplicateTracker
@@ -17,7 +17,6 @@ from .filters import FilterEvaluator
 from .instrumentation import HubMetrics
 from .rate_limit import TokenBucketRateLimiter
 from .server import ServerManager
-
 
 logger = logging.getLogger(__name__)
 

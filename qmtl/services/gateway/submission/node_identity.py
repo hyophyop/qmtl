@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Validation for node identifiers in submitted DAGs."""
+
+from __future__ import annotations
 
 from typing import Any, Iterable
 

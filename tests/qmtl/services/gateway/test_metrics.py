@@ -1,14 +1,13 @@
-import time
-import warnings
 import json
+import warnings
 
 import pytest
 from fastapi.testclient import TestClient
 
-from qmtl.services.gateway.api import create_app, Database
-from qmtl.services.gateway.models import StrategySubmit
 from qmtl.foundation.common import crc32_of_list
 from qmtl.services.gateway import metrics
+from qmtl.services.gateway.api import Database, create_app
+from qmtl.services.gateway.models import StrategySubmit
 
 warnings.filterwarnings(
     "ignore", category=ResourceWarning, message="unclosed event loop"

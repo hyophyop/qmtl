@@ -2,40 +2,41 @@
 
 from __future__ import annotations
 
-import json
-import logging
 import asyncio
 import inspect
+import json
+import logging
 import math
 import re
-from dataclasses import dataclass
-from copy import deepcopy
 from contextlib import AsyncExitStack, asynccontextmanager
+from copy import deepcopy
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, Iterable, Mapping, Optional
 
 from fastapi import HTTPException
 
-from qmtl.model_cards import ModelCardRegistry
-from qmtl.foundation.common.hashutils import hash_bytes
 from qmtl.foundation.common.compute_context import canonicalize_world_mode
+from qmtl.foundation.common.hashutils import hash_bytes
+from qmtl.model_cards import ModelCardRegistry
 from qmtl.runtime.sdk.world_validation_metrics import build_v1_evaluation_metrics
 from qmtl.services.observability import add_span_attributes, build_observability_fields
 
+from . import metrics as ws_metrics
 from .activation import ActivationEventPublisher
 from .apply_flow import ApplyCoordinator
 from .controlbus_producer import ControlBusProducer
 from .decision import DecisionEvaluator, augment_metrics_with_linearity
+from .extended_validation_worker import ExtendedValidationWorker
+from .metrics import parse_timestamp
 from .policy import GatingPolicy
 from .policy_engine import PolicyEvaluationResult, recommended_stage
-from .extended_validation_worker import ExtendedValidationWorker
-from .validation_metrics import (
-    augment_advanced_metrics,
-    augment_live_metrics,
-    augment_portfolio_metrics,
-    augment_stress_metrics,
+from .rebalancing import (
+    MultiWorldProportionalRebalancer,
+    MultiWorldRebalanceContext,
+    PositionSlice,
+    SymbolDelta,
 )
-from .rebalancing import MultiWorldProportionalRebalancer, MultiWorldRebalanceContext, PositionSlice, SymbolDelta
 from .rebalancing.overlay import OverlayConfigError, OverlayPlanner
 from .run_state import ApplyRunRegistry, ApplyRunState, ApplyStage
 from .schemas import (
@@ -50,18 +51,21 @@ from .schemas import (
     CohortEvaluateResponse,
     DecisionEnvelope,
     EvaluateRequest,
-    ExPostFailureRecord,
     EvaluationOverride,
+    ExPostFailureRecord,
     MultiWorldRebalanceRequest,
     PositionSliceModel,
     SeamlessArtifactPayload,
     StrategySeries,
 )
-from . import metrics as ws_metrics
-from .metrics import parse_timestamp
 from .storage import Storage
 from .validation_checks import ensure_validation_health
-
+from .validation_metrics import (
+    augment_advanced_metrics,
+    augment_live_metrics,
+    augment_portfolio_metrics,
+    augment_stress_metrics,
+)
 
 logger = logging.getLogger(__name__)
 

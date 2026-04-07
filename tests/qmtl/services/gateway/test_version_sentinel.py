@@ -1,9 +1,9 @@
 import base64
 import json
+from typing import Any, Awaitable, cast
 
 import pytest
 import redis.asyncio as redis
-from typing import Any, Awaitable, cast
 
 from qmtl.services.gateway.database import MemoryDatabase, PostgresDatabase
 from qmtl.services.gateway.fsm import StrategyFSM

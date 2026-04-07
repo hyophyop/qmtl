@@ -1,12 +1,11 @@
-from __future__ import annotations
-
 """Lightweight Node Set registry for discoverability and extension."""
+
+from __future__ import annotations
 
 from importlib import import_module
 from typing import Callable, Dict, Iterable, TypeVar
 
 from .base import NodeSet
-
 
 RecipeBuilder = Callable[..., NodeSet]
 _REGISTRY: Dict[str, RecipeBuilder] = {}

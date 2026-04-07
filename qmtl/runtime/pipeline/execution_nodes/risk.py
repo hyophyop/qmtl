@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping, cast
+from typing import cast
 
+from qmtl.runtime.pipeline.order_types import RiskRejection, SizedOrder
 from qmtl.runtime.sdk.node import CacheView, Node, ProcessingNode
 from qmtl.runtime.sdk.portfolio import Portfolio
 from qmtl.runtime.sdk.risk_management import PositionInfo, RiskManager
 
 from ._shared import latest_entry
-from qmtl.runtime.pipeline.order_types import RiskRejection, SizedOrder
 
 
 class RiskControlNode(ProcessingNode):

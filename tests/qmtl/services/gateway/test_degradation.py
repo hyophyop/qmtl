@@ -1,13 +1,14 @@
 import asyncio
-import pytest
-from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock
 
-from qmtl.services.gateway.api import create_app
-from qmtl.services.gateway.models import StrategySubmit
-from qmtl.services.gateway.database import Database
-from qmtl.services.gateway.degradation import DegradationManager, DegradationLevel
+import pytest
+from fastapi.testclient import TestClient
+
 from qmtl.foundation.common import crc32_of_list
+from qmtl.services.gateway.api import create_app
+from qmtl.services.gateway.database import Database
+from qmtl.services.gateway.degradation import DegradationLevel, DegradationManager
+from qmtl.services.gateway.models import StrategySubmit
 
 
 class FakeDB(Database):

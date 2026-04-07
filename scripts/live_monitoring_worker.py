@@ -9,7 +9,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
-from typing import Any
 
 import redis.asyncio as redis
 

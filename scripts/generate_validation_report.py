@@ -372,7 +372,7 @@ def generate_markdown_report(evaluation_run: Mapping[str, Any], model_card: Mapp
         lines.append("### Extended validation details")
         for rule in extended_rules:
             if rule.details:
-                lines.append(f"")
+                lines.append("")
                 lines.append(f"**{rule.name}** ({rule.status.upper()})")
                 for key, value in rule.details.items():
                     if value is not None:

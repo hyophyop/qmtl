@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, status
-from pydantic import BaseModel, Field
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
+from fastapi import FastAPI, status
 from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from .garbage_collector import GarbageCollector
-from .dagmanager_health import get_health
-from .neo4j_metrics import GraphCountCollector, GraphCountScheduler
+from pydantic import BaseModel, Field
+
 from .controlbus_producer import ControlBusProducer
+from .dagmanager_health import get_health
+from .garbage_collector import GarbageCollector
+from .neo4j_metrics import GraphCountCollector, GraphCountScheduler
 from .queue_updates import publish_queue_updates
 from .repository import NodeRepository
 

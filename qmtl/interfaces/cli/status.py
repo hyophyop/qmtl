@@ -5,7 +5,8 @@ import sys
 from typing import List
 
 from qmtl.utils.i18n import _ as _t
-from .http_client import http_get, gateway_url
+
+from .http_client import gateway_url, http_get
 
 
 def cmd_status(argv: List[str]) -> int:

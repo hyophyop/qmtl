@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
-from typing import Any, Callable, Literal, Sequence
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Callable, Literal, Sequence
 
 from qmtl.runtime.sdk.node import Node
 
 from .options import NodeSetOptions, PortfolioScope
 from .resources import ExecutionResources, get_execution_resources
+
+if TYPE_CHECKING:
+    from qmtl.runtime.sdk.cache_view import CacheView
 
 _LOGGER = logging.getLogger(__name__)
 

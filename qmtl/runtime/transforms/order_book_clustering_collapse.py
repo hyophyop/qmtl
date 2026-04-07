@@ -5,9 +5,9 @@
 
 from __future__ import annotations
 
-from .hazard_utils import hazard_probability as _hazard_probability
 from .hazard_utils import direction_signal as _direction_signal
 from .hazard_utils import execution_cost
+from .hazard_utils import hazard_probability as _hazard_probability
 
 
 def hazard_probability(z: dict[str, float], beta: tuple[float, ...]) -> float:

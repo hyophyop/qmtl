@@ -13,7 +13,6 @@ supported.
 from __future__ import annotations
 
 import os
-from dataclasses import asdict
 from typing import Any
 
 from qmtl.runtime.brokerage import (

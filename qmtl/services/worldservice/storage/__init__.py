@@ -10,7 +10,6 @@ from .constants import (
     WORLD_NODE_STATUSES,
 )
 from .facade import Storage
-from .persistent import PersistentStorage
 from .models import (
     EvaluationRunRecord,
     ValidationCacheEntry,
@@ -18,6 +17,7 @@ from .models import (
     WorldAuditLog,
     WorldPolicies,
 )
+from .persistent import PersistentStorage
 
 __all__ = [
     "DEFAULT_EDGE_OVERRIDES",

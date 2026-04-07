@@ -1,7 +1,7 @@
-import math
 import importlib.util
-from types import ModuleType
+import math
 import sys
+from types import ModuleType
 
 
 def _load_portfolio_module() -> ModuleType:

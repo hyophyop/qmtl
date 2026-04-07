@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Optional
 import asyncio
 import json
 import time
+from dataclasses import dataclass, field
+from typing import Optional
 
-from .diff_service import DiffService, DiffRequest, NodeRepository
+from .diff_service import DiffRequest, DiffService, NodeRepository
 
 
 @dataclass

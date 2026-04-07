@@ -26,12 +26,11 @@ Example::
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
 import json
 import logging
-import asyncio
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 

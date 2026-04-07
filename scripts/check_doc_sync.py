@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Verify alignment between AlphaDocs, registry, and QMTL module annotations."""
 
-from pathlib import Path
 import re
 import sys
+from pathlib import Path
 
 try:
     import yaml

@@ -1,15 +1,15 @@
-from qmtl.runtime.sdk import Node, StreamInput
 from qmtl.runtime.nodesets.steps import (
-    pretrade,
-    sizing,
-    execution,
-    order_publish,
-    fills,
-    portfolio,
-    risk,
-    timing,
     compose,
+    execution,
+    fills,
+    order_publish,
+    portfolio,
+    pretrade,
+    risk,
+    sizing,
+    timing,
 )
+from qmtl.runtime.sdk import Node, StreamInput
 
 
 def test_compose_default_order_and_props():

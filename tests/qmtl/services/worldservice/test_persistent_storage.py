@@ -7,11 +7,11 @@ import pytest_asyncio
 from qmtl.services.worldservice.policy_engine import Policy, ThresholdRule
 from qmtl.services.worldservice.storage import PersistentStorage
 from qmtl.services.worldservice.storage.repositories import (
+    _REASON_UNSET,
     PersistentActivationRepository,
     PersistentBindingRepository,
     PersistentPolicyRepository,
     PersistentWorldRepository,
-    _REASON_UNSET,
 )
 
 

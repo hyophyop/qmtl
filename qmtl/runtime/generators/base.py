@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Base utilities for synthetic data generators."""
+
+from __future__ import annotations
 
 import numpy as np
 

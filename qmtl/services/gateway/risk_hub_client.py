@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any, Mapping, cast
 
 import httpx
 
 from qmtl.foundation.common.hashutils import hash_bytes
-from qmtl.services.worldservice.blob_store import BlobStore
 from qmtl.services.risk_hub_contract import normalize_and_validate_snapshot
+from qmtl.services.worldservice.blob_store import BlobStore
 
 
 @dataclass

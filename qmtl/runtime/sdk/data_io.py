@@ -1,17 +1,19 @@
-from __future__ import annotations
-
 """Interfaces for I/O operations.
 
 This module defines the abstract I/O interfaces used by the SDK.
 Concrete implementations live under ``qmtl.runtime.io``.
 """
 
-from typing import Any, Protocol, TypeAlias, runtime_checkable
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Any, Protocol, TypeAlias, runtime_checkable
+
 import polars as pl
 
 from .protocols import StreamLike
+
 
 class _SeamlessFetchResultLike(Protocol):
     """Lightweight view of seamless fetch responses without importing the provider."""

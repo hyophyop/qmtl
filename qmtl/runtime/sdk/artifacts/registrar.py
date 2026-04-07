@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import json
 import os
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, MutableMapping, Protocol
 
@@ -13,8 +13,10 @@ import polars as pl
 
 from qmtl.foundation.config import SeamlessConfig
 from qmtl.runtime.io.artifact import (
-    ArtifactRegistrar as _IOArtifactRegistrar,
     ArtifactPublication,
+)
+from qmtl.runtime.io.artifact import (
+    ArtifactRegistrar as _IOArtifactRegistrar,
 )
 from qmtl.runtime.sdk.configuration import get_seamless_config
 

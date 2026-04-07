@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Asynchronous fetcher for Binance kline data."""
+
+from __future__ import annotations
 
 import asyncio
 import atexit

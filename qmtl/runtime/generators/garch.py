@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """GARCH(1,1) synthetic price path generator."""
+
+from __future__ import annotations
 
 import numpy as np
 

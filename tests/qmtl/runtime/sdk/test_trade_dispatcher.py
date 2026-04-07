@@ -3,12 +3,12 @@ from __future__ import annotations
 import pytest
 from cachetools import TTLCache
 
-from qmtl.runtime.sdk.trade_dispatcher import TradeOrderDispatcher
 from qmtl.runtime.sdk.dispatch_pipeline import (
     DispatchContext,
     HttpSubmitStep,
     KafkaSubmitStep,
 )
+from qmtl.runtime.sdk.trade_dispatcher import TradeOrderDispatcher
 
 
 class RecordingPoster:

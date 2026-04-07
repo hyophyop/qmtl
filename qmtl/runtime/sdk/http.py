@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """HTTP utilities for SDK components."""
+
+from __future__ import annotations
 
 from typing import Any
 

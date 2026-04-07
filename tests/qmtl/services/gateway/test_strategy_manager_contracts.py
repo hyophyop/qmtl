@@ -1,11 +1,10 @@
 import base64
 import json
 from dataclasses import dataclass, field
-from typing import Awaitable
+from typing import Any, Awaitable, cast
 
 import pytest
 import redis.asyncio as redis
-from typing import Any, cast
 from fastapi import HTTPException
 
 from qmtl.services.gateway import metrics

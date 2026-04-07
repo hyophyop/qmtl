@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.runtime.sdk import TagQueryNode, Runner
+from qmtl.runtime.sdk import Runner, TagQueryNode
 from qmtl.runtime.sdk.tagquery_manager import TagQueryManager
 
 

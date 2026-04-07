@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from . import configuration
 from qmtl.foundation.config import UnifiedConfig
+
+from . import configuration
 
 # Global flag to disable Ray usage across SDK components.
 NO_RAY: bool = False

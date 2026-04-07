@@ -2,7 +2,7 @@ import pytest
 
 from qmtl.foundation.common.metrics_factory import get_mapping_store
 from qmtl.runtime.sdk import metrics as sdk_metrics
-from qmtl.runtime.sdk.node import StreamInput, ProcessingNode
+from qmtl.runtime.sdk.node import ProcessingNode, StreamInput
 from qmtl.runtime.sdk.runner import Runner
 
 

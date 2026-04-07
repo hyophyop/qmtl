@@ -1,9 +1,10 @@
 """Unit tests for reusable primitives in the WorldService proxy."""
 from __future__ import annotations
 
+from typing import cast
+
 import httpx
 import pytest
-from typing import cast
 
 from qmtl.foundation.common import AsyncCircuitBreaker
 from qmtl.foundation.common.compute_context import DowngradeReason

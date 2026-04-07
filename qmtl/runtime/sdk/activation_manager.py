@@ -7,16 +7,20 @@ orders remain gated OFF (no long/short) until an activation is received.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
 from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Optional
 
 import httpx
 
-from qmtl.runtime.helpers import ActivationMetadata, ActivationUpdate, parse_activation_update
+from qmtl.runtime.helpers import (
+    ActivationMetadata,
+    ActivationUpdate,
+    parse_activation_update,
+)
 
-from .ws_client import WebSocketClient
 from . import runtime
+from .ws_client import WebSocketClient
 
 
 @dataclass

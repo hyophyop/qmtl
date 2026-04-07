@@ -1,11 +1,11 @@
-from __future__ import annotations
-
 """Gateway-facing helpers for compute context handling.
 
 This module now re-exports the canonical compute context utilities housed in
 ``qmtl.foundation.common.compute_context`` to preserve import stability for gateway
 consumers.
 """
+
+from __future__ import annotations
 
 from qmtl.foundation.common.compute_context import (
     ComputeContext,

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Mapping, cast
 
+from qmtl.runtime.pipeline.order_types import FillPayload
 from qmtl.runtime.sdk import metrics as sdk_metrics
 from qmtl.runtime.sdk.node import CacheView, Node, ProcessingNode
 from qmtl.runtime.sdk.portfolio import Portfolio
 
 from ._shared import latest_entry, safe_call
-from qmtl.runtime.pipeline.order_types import FillPayload
 
 
 class PortfolioNode(ProcessingNode):

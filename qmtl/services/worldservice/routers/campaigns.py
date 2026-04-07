@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import re
 from typing import Any, Mapping
 
 from fastapi import APIRouter, HTTPException
@@ -273,13 +273,10 @@ def create_campaigns_router(service: WorldService) -> APIRouter:
             )
 
             latest_metrics: Mapping[str, Any] | None = None
-            latest_summary: Mapping[str, Any] | None = None
             if paper_latest is not None:
                 latest_metrics = paper_latest.get("metrics") if isinstance(paper_latest.get("metrics"), Mapping) else None
-                latest_summary = paper_latest.get("summary") if isinstance(paper_latest.get("summary"), Mapping) else None
             elif backtest_latest is not None:
                 latest_metrics = backtest_latest.get("metrics") if isinstance(backtest_latest.get("metrics"), Mapping) else None
-                latest_summary = backtest_latest.get("summary") if isinstance(backtest_latest.get("summary"), Mapping) else None
 
             sample_days = _estimate_sample_days(latest_metrics)
             trades_total = _metric_int(latest_metrics, "sample", "n_trades_total")

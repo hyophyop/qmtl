@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+import qmtl.foundation.config_validation as config_validation
 from qmtl.foundation.config import (
     DeploymentProfile,
     SeamlessConfig,
@@ -16,13 +17,12 @@ from qmtl.foundation.config_validation import (
     _type_description,
     _type_matches,
     _value_type_name,
-    validate_gateway_config,
     validate_config_structure,
     validate_dagmanager_config,
+    validate_gateway_config,
     validate_seamless_config,
     validate_worldservice_config,
 )
-import qmtl.foundation.config_validation as config_validation
 from qmtl.services.dagmanager.config import DagManagerConfig
 from qmtl.services.gateway.config import GatewayConfig, GatewayOwnershipConfig
 from qmtl.services.worldservice.config import WorldServiceServerConfig

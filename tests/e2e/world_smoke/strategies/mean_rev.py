@@ -5,7 +5,11 @@ executes a no-op Strategy via Runner.submit in backtest mode to
 exercise the SDK path without deprecated helpers.
 """
 
-import os, json, time, pathlib, random
+import json
+import os
+import pathlib
+import random
+import time
 from datetime import datetime
 
 ARTIFACT_DIR = pathlib.Path(os.environ.get("ARTIFACT_DIR", ".artifacts/world_smoke"))

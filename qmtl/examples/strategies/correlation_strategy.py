@@ -1,8 +1,10 @@
 """Correlation strategy example - QMTL v2.0."""
 
 import polars as pl
+
 from qmtl.runtime.sdk import Runner, Strategy
-from qmtl.runtime.sdk.node import Node, TagQueryNode, MatchMode
+from qmtl.runtime.sdk.node import MatchMode, Node, TagQueryNode
+
 
 class CorrelationStrategy(Strategy):
     def setup(self):

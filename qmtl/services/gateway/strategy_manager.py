@@ -8,7 +8,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Optional, Awaitable, cast
+from typing import Any, Awaitable, Optional, cast
 
 import redis.asyncio as redis
 from fastapi import HTTPException
@@ -16,7 +16,7 @@ from opentelemetry import trace
 
 from . import metrics as gw_metrics
 from .commit_log import CommitLogWriter
-from .database import Database, PostgresDatabase
+from .database import Database
 from .degradation import DegradationManager
 from .fsm import StrategyFSM
 from .history_metadata import build_history_metadata_envelope

@@ -1,5 +1,7 @@
 """Example scale transform node."""
 
+from qmtl.runtime.transforms import scale_transform_node
+
 # Source: ../docs/alphadocs/basic_sequence_pipeline.md
 
 TAGS = {
@@ -9,12 +11,9 @@ TAGS = {
     "asset": "sample",
 }
 
-from qmtl.runtime.transforms import scale_transform_node
-
 
 def scale_example_node(data: dict) -> dict:
     """Apply scale transform to metric with optional factor."""
     metric = data.get("metric", {})
     factor = data.get("factor", 2.0)
     return {"scaled": scale_transform_node(metric, factor)}
-

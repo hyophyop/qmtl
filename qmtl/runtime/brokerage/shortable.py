@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Optional, Dict, Tuple, Mapping
+from typing import Dict, Mapping, Optional, Tuple
 
 
 class ShortableProvider:

@@ -1,5 +1,6 @@
-from qmtl.runtime.transforms import impact, resiliency_alpha
 import math
+
+from qmtl.runtime.transforms import impact, resiliency_alpha
 
 
 def test_impact_non_linear_scaling():

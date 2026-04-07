@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import json
 from dataclasses import dataclass
-from typing import Any, Optional, Callable, Awaitable, cast
+from typing import Any, Awaitable, Callable, Optional, cast
 
 import httpx
 from opentelemetry.propagate import inject
@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from qmtl.foundation.common import AsyncCircuitBreaker, crc32_of_list
 from qmtl.services.gateway.models import StrategyAck
+
 from . import runtime
 
 

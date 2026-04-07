@@ -3,9 +3,13 @@ import asyncio
 import pytest
 
 from qmtl.foundation.common.metrics_factory import get_mapping_store
-from qmtl.services.dagmanager.kafka_admin import KafkaAdmin, InMemoryAdminClient
-from qmtl.services.dagmanager.lag_monitor import LagMonitor, LagMonitorLoop, QueueLagInfo
 from qmtl.services.dagmanager import metrics
+from qmtl.services.dagmanager.kafka_admin import InMemoryAdminClient, KafkaAdmin
+from qmtl.services.dagmanager.lag_monitor import (
+    LagMonitor,
+    LagMonitorLoop,
+    QueueLagInfo,
+)
 
 
 class DummyStore:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 import importlib.resources as resources
+from pathlib import Path
 from typing import cast
 
 from .config_templates import write_template
@@ -10,7 +10,6 @@ from .project_templates import (
     DEFAULT_QMTL_CONFIG,
     DEFAULT_STRATEGY_TEMPLATE,
 )
-
 
 _EXAMPLES_PKG = "qmtl.examples"
 _LEGACY_TEMPLATE_ERROR = (

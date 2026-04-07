@@ -1,6 +1,5 @@
 from .neo4j_export import connect
 
-
 SCHEMA_QUERIES = [
     # Uniqueness and lookup for core access paths
     "CREATE CONSTRAINT compute_pk IF NOT EXISTS ON (c:ComputeNode) ASSERT c.node_id IS UNIQUE",

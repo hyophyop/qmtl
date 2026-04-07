@@ -4,7 +4,10 @@ import json
 
 from qmtl.interfaces.cli import submit as cli_submit
 from qmtl.runtime.sdk.submit import PrecheckResult, StrategyMetrics, SubmitResult
-from qmtl.services.worldservice.shared_schemas import ActivationEnvelope, DecisionEnvelope
+from qmtl.services.worldservice.shared_schemas import (
+    ActivationEnvelope,
+    DecisionEnvelope,
+)
 
 
 def test_cli_prints_ws_and_precheck_sections(capsys):

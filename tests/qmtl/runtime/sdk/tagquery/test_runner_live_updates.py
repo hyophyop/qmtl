@@ -1,10 +1,10 @@
 import asyncio
-import json
+
 import httpx
 import pytest
 
-from qmtl.runtime.sdk import Strategy, TagQueryNode, Runner, MatchMode
-from qmtl.services.gateway.api import create_app, Database
+from qmtl.runtime.sdk import MatchMode, Runner, Strategy, TagQueryNode
+from qmtl.services.gateway.api import Database, create_app
 from qmtl.services.gateway.ws import WebSocketHub
 
 

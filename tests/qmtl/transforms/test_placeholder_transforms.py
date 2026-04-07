@@ -128,6 +128,8 @@ def test_transform_shims_passthrough_and_execute(
 
 
 def test_credit_liquidity_amplification_placeholder_returns_zero() -> None:
-    from qmtl.transforms.credit_liquidity_amplification import credit_liquidity_amplification
+    from qmtl.transforms.credit_liquidity_amplification import (
+        credit_liquidity_amplification,
+    )
 
     assert credit_liquidity_amplification(0, 0, 0, 0, 0, 0, 0, 0, 0) == 0.0

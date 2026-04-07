@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Lightweight DAG schema validator with version tagging.
 
@@ -12,8 +10,9 @@ This module intentionally keeps validation minimal and non‑disruptive.
 It can be extended to perform stricter checks over time.
 """
 
-from typing import Any, Iterable
+from __future__ import annotations
 
+from typing import Any, Iterable
 
 SUPPORTED_VERSIONS: set[str] = {"v1", "1", "1.0"}
 

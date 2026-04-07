@@ -1,6 +1,21 @@
-from datetime import datetime, UTC
-from fastapi.testclient import TestClient
+import gc
+import warnings
+from datetime import UTC, datetime
+
 import pytest
+from fastapi.testclient import TestClient
+
+from qmtl.services.dagmanager.api import create_app as dag_api_create_app
+from qmtl.services.dagmanager.diff_service import StreamSender
+from qmtl.services.dagmanager.garbage_collector import QueueInfo
+from qmtl.services.dagmanager.monitor import AckStatus
+from qmtl.services.gateway.api import create_app as gw_create_app
+from qmtl.services.gateway.dagmanager_client import DagManagerClient
+from qmtl.services.gateway.database import PostgresDatabase
+from qmtl.services.gateway.fsm import StrategyFSM
+from qmtl.services.gateway.redis_queue import RedisTaskQueue
+from qmtl.services.gateway.worker import StrategyWorker
+from qmtl.services.gateway.ws import WebSocketHub
 
 # Suppress unraisable exceptions from sockets/event loop cleanup that can
 # occur under pytest -W error when using TestClient and async gRPC clients.
@@ -9,24 +24,6 @@ pytestmark = [
     pytest.mark.filterwarnings('ignore:unclosed <socket.socket[^>]*>'),
     pytest.mark.filterwarnings('ignore:unclosed event loop'),
 ]
-
-from qmtl.services.gateway.api import create_app as gw_create_app
-from qmtl.services.dagmanager.api import create_app as dag_api_create_app
-from qmtl.services.dagmanager.garbage_collector import QueueInfo
-from qmtl.services.dagmanager.diff_service import StreamSender
-from qmtl.services.dagmanager.monitor import AckStatus
-from qmtl.services.gateway.redis_queue import RedisTaskQueue
-from qmtl.services.gateway.dagmanager_client import DagManagerClient
-from qmtl.services.gateway.ws import WebSocketHub
-from qmtl.services.gateway.worker import StrategyWorker
-from qmtl.services.gateway.fsm import StrategyFSM
-from qmtl.services.gateway.database import PostgresDatabase
-
-import grpc
-import asyncio
-import gc
-import warnings
-import pytest
 
 
 class DummyGC:

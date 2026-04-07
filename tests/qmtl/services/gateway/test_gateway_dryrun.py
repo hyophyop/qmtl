@@ -1,9 +1,7 @@
-from qmtl.services.gateway.routes import JSONResponse  # import to ensure module loads
 
 
 def test_dryrun_fallback_sentinel_helper_crc32(monkeypatch):
     # Import inside to access module-level function via attributes if exposed
-    import qmtl.services.gateway.routes as routes
 
     # Build a minimal DAG with stable node_ids
     dag = {

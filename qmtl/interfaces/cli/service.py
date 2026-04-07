@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Service management CLI module.
 
 This module provides access to QMTL services:
@@ -10,12 +8,14 @@ Note: In QMTL v2.0, services are auto-discovered via environment variables.
 You can still use this module to manually start services for development.
 """
 
+from __future__ import annotations
+
 import argparse
 import textwrap
 from importlib import import_module
 from typing import List
-from qmtl.utils.i18n import _
 
+from qmtl.utils.i18n import _
 
 SERVICE_DISPATCH = {
     "gateway": "qmtl.interfaces.cli.gateway",

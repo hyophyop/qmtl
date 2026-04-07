@@ -12,7 +12,6 @@ from .filters import FilterEvaluator
 from .instrumentation import HubMetrics
 from .rate_limit import TokenBucketRateLimiter
 
-
 logger = logging.getLogger(__name__)
 
 

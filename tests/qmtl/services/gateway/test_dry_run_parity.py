@@ -1,18 +1,16 @@
 import base64
 import json
+from typing import Any, cast
 
 from fastapi.testclient import TestClient
 
-from qmtl.services.gateway.api import create_app, Database
+from qmtl.foundation.proto import dagmanager_pb2
+from qmtl.services.dagmanager.kafka_admin import compute_key, partition_key
+from qmtl.services.gateway.api import Database, create_app
 from qmtl.services.gateway.models import StrategySubmit
 from qmtl.services.gateway.routes.strategies import _ack_from_result
 from qmtl.services.gateway.strategy_submission import StrategySubmissionResult
-from qmtl.services.dagmanager.kafka_admin import partition_key, compute_key
-from typing import Any, cast
-
-from qmtl.foundation.proto import dagmanager_pb2
 from tests.qmtl.runtime.sdk.factories import node_ids_crc32, tag_query_node_payload
-
 
 _TAGQUERY_NODE = tag_query_node_payload(
     tags=["t1"],

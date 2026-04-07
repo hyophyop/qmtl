@@ -1,4 +1,5 @@
 import json
+
 import pytest
 
 from qmtl.services.worldservice.controlbus_producer import ControlBusProducer

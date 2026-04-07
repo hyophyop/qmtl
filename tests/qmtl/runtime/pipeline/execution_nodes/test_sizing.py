@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+from qmtl.runtime.pipeline.execution_nodes.sizing import SizingNode
 from qmtl.runtime.sdk.node import Node
 from qmtl.runtime.sdk.portfolio import Portfolio
 from qmtl.runtime.sdk.runner import Runner
-
-from qmtl.runtime.pipeline.execution_nodes.sizing import SizingNode
 
 
 def test_sizing_node_converts_value_to_quantity() -> None:

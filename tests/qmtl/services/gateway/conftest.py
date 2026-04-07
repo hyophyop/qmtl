@@ -7,19 +7,18 @@ import httpx
 import pytest
 
 from qmtl.services.gateway import metrics
-
-from tests.qmtl.services.gateway.helpers import (
-    GatewayTestContext,
-    Handler,
-    StubGatewayDatabase,
-    gateway_app,
-)
 from tests.qmtl.services.gateway.fixtures import (
     DB_BUILDERS,
     DummyDagManager,
     DummyDatabase,
     DummyManager,
     StubWorldClient,
+)
+from tests.qmtl.services.gateway.helpers import (
+    GatewayTestContext,
+    Handler,
+    StubGatewayDatabase,
+    gateway_app,
 )
 
 

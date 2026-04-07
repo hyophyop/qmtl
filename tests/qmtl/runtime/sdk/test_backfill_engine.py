@@ -6,8 +6,8 @@ import polars as pl
 import pytest
 
 from qmtl.foundation.common.metrics_factory import get_mapping_store
-from qmtl.runtime.sdk.node import SourceNode, StreamInput
 from qmtl.runtime.sdk.backfill_engine import BackfillEngine
+from qmtl.runtime.sdk.node import SourceNode, StreamInput
 
 
 class DummySource:
@@ -163,8 +163,8 @@ async def test_streaminput_load_history():
 @pytest.mark.asyncio
 async def test_metadata_publish(monkeypatch):
     from qmtl.runtime.io.artifact import ArtifactPublication
-    from qmtl.runtime.sdk.seamless_data_provider import SeamlessFetchMetadata
     from qmtl.runtime.sdk.runner import Runner
+    from qmtl.runtime.sdk.seamless_data_provider import SeamlessFetchMetadata
 
     node = StreamInput(interval="60s", period=2)
     node.strategy_id = "strategy-1"
@@ -239,8 +239,8 @@ async def test_metadata_publish(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_metadata_publish_handles_failure(monkeypatch, caplog):
-    from qmtl.runtime.sdk.seamless_data_provider import SeamlessFetchMetadata
     from qmtl.runtime.sdk.runner import Runner
+    from qmtl.runtime.sdk.seamless_data_provider import SeamlessFetchMetadata
 
     node = StreamInput(interval="60s", period=2)
     node.strategy_id = "strategy-1"

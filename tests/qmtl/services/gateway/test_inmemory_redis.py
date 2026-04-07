@@ -1,9 +1,9 @@
 import pytest
 
+from qmtl.services.gateway.api import Database
+from qmtl.services.gateway.fsm import StrategyFSM
 from qmtl.services.gateway.redis_client import InMemoryRedis
 from qmtl.services.gateway.redis_queue import RedisTaskQueue
-from qmtl.services.gateway.fsm import StrategyFSM
-from qmtl.services.gateway.api import Database
 
 
 class FakeDB(Database):

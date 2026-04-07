@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from typing import List, Tuple
-
 import sys
 import types
+from typing import List, Tuple
 
 
 def _sanitize_sys_modules() -> None:
@@ -23,8 +22,15 @@ _sanitize_sys_modules()
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from qmtl.runtime.sdk.history_coverage import WarmupWindow, compute_missing_ranges, merge_coverage
-from qmtl.runtime.sdk.seamless_data_provider import SeamlessDataProvider, _RangeOperations
+from qmtl.runtime.sdk.history_coverage import (
+    WarmupWindow,
+    compute_missing_ranges,
+    merge_coverage,
+)
+from qmtl.runtime.sdk.seamless_data_provider import (
+    SeamlessDataProvider,
+    _RangeOperations,
+)
 
 
 def _range_strategy() -> st.SearchStrategy[List[Tuple[int, int]]]:

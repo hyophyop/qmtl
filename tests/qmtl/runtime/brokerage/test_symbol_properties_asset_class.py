@@ -1,16 +1,14 @@
 import pytest
 
-import pytest
-
 from qmtl.runtime.brokerage import (
     Account,
     BrokerageModel,
     CashBuyingPowerModel,
     MarketFillModel,
-    PerShareFeeModel,
     NullSlippageModel,
     Order,
     OrderType,
+    PerShareFeeModel,
     SymbolPropertiesProvider,
 )
 

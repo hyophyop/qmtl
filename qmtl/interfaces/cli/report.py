@@ -3,11 +3,13 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import List, Optional, Protocol
-import sys
+
 from qmtl.utils.i18n import _
+
 
 class AlphaPerformanceFn(Protocol):
     def __call__(

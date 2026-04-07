@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Dict, Iterable, List, Mapping, Tuple
+from typing import Dict, List, Mapping
 
-from .base import PositionSlice, RebalanceContext, RebalancePlan, Rebalancer, SymbolDelta
+from .base import RebalanceContext, RebalancePlan, Rebalancer, SymbolDelta
 
 
 def _round_lot(symbol: str, qty: float, lot_size_by_symbol: Mapping[str, float] | None) -> float:

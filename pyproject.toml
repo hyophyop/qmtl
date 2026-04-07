@@ -27,6 +27,8 @@ dependencies = [
     "opentelemetry-instrumentation-grpc",
     "cachetools",
     "blake3",
+    "pydantic",
+    "sympy",
     "pytest-asyncio>=0.23",
     "pysr>=1.5.9",
 ]
@@ -125,6 +127,40 @@ include = ["qmtl*"]
 "qmtl" = [
   "locale/*/LC_MESSAGES/*.mo",
   "locale/*/LC_MESSAGES/*.po",
+]
+
+[tool.ruff]
+target-version = "py311"
+extend-exclude = [
+  "notebooks/*.ipynb",
+  "qmtl/foundation/proto/*_pb2*.py",
+]
+
+[tool.ruff.lint]
+# Start with the low-noise, high-signal subset that we can enforce repo-wide.
+select = ["E9", "F"]
+ignore = ["E402", "E741", "F401", "F541", "F811", "F841"]
+
+[tool.deptry]
+known_first_party = ["qmtl"]
+ignore = ["DEP002"]
+ignore_notebooks = true
+extend_exclude = [
+  "qmtl/examples",
+  "qmtl/services/.*/tests",
+  "qmtl/foundation/proto/.*_pb2.*\\.py$",
+]
+
+[tool.deptry.per_rule_ignores]
+# These imports are lazy optional integrations and should not force hard runtime deps.
+DEP001 = [
+  "aiokafka",
+  "ccxtpro",
+  "confluent_kafka",
+  "fsspec",
+  "neo4j",
+  "orjson",
+  "pyoperon",
 ]
 
 [tool.mypy]

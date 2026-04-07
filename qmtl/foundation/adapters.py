@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Adapter protocols for optional infrastructure clients.
 
 This module centralises lightweight Protocol definitions and factory helpers
@@ -7,6 +5,8 @@ for external clients that are optionally installed in deployments. Validation
 routines and other call sites should interact with these protocols instead of
 accessing concrete client attributes directly.
 """
+
+from __future__ import annotations
 
 from typing import Any, Protocol, Sequence
 

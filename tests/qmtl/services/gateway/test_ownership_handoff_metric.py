@@ -1,9 +1,10 @@
-import pytest
 from typing import Any, cast
 
+import pytest
+
+from qmtl.services.gateway import metrics as gw_metrics
 from qmtl.services.gateway.database import PostgresDatabase
 from qmtl.services.gateway.ownership import OwnershipManager
-from qmtl.services.gateway import metrics as gw_metrics
 
 
 class _Conn:

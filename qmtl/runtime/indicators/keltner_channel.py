@@ -1,9 +1,8 @@
 """Keltner Channel indicator."""
 
-from statistics import mean
 
-from qmtl.runtime.sdk.node import Node
 from qmtl.runtime.sdk.cache_view import CacheView
+from qmtl.runtime.sdk.node import Node
 
 
 def keltner_channel(

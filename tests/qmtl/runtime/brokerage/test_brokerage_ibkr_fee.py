@@ -1,4 +1,5 @@
 import pytest
+
 from qmtl.runtime.brokerage import IBKRFeeModel, OrderType
 
 

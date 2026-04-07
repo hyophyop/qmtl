@@ -3,13 +3,13 @@ from __future__ import annotations
 import polars as pl
 import pytest
 
+from qmtl.runtime.sdk.data_io import HistoryProvider
 from qmtl.runtime.sdk.history_coverage import (
     WarmupWindow,
     compute_missing_ranges,
     ensure_strict_history,
 )
 from qmtl.runtime.sdk.history_warmup_polling import HistoryWarmupPoller, WarmupRequest
-from qmtl.runtime.sdk.data_io import HistoryProvider
 
 
 class ProxyHistoryProvider(HistoryProvider):

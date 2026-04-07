@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, date
+from datetime import date, datetime, timedelta
 from typing import Dict, List, Set
 
-from .order import Fill, Account
+from .order import Account, Fill
 
 
 @dataclass

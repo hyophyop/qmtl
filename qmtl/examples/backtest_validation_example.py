@@ -4,6 +4,7 @@ Demonstrates the simplified Runner.submit() API.
 """
 
 import argparse
+
 from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import StreamInput
 

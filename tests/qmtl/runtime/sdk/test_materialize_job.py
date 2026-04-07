@@ -5,7 +5,10 @@ import pytest
 
 from qmtl.runtime.sdk.conformance import ConformanceReport
 from qmtl.runtime.sdk.materialize_job import MaterializeReport, MaterializeSeamlessJob
-from qmtl.runtime.sdk.seamless_data_provider import SeamlessFetchMetadata, SeamlessFetchResult
+from qmtl.runtime.sdk.seamless_data_provider import (
+    SeamlessFetchMetadata,
+    SeamlessFetchResult,
+)
 
 
 class _StubProvider:

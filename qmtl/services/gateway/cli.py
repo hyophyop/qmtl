@@ -7,11 +7,6 @@ from typing import Any
 
 import redis.asyncio as redis
 
-from .redis_client import InMemoryRedis
-
-from .api import create_app
-from .config import GatewayConfig
-from .ws import WebSocketHub
 from qmtl.foundation.common.tracing import setup_tracing
 from qmtl.foundation.config import (
     DeploymentProfile,
@@ -21,11 +16,16 @@ from qmtl.foundation.config import (
 )
 from qmtl.foundation.config_validation import validate_gateway_config
 from qmtl.services.dagmanager.topic import set_topic_namespace_enabled
-from .controlbus_consumer import ControlBusConsumer
-from .controlbus_ack import ActivationAckProducer
+from qmtl.utils.i18n import _, language_source, set_language
+
+from .api import create_app
 from .commit_log import CommitLogWriter, create_commit_log_writer
 from .commit_log_consumer import CommitLogConsumer
-from qmtl.utils.i18n import _, language_source, set_language
+from .config import GatewayConfig
+from .controlbus_ack import ActivationAckProducer
+from .controlbus_consumer import ControlBusConsumer
+from .redis_client import InMemoryRedis
+from .ws import WebSocketHub
 
 
 def _log_config_source(

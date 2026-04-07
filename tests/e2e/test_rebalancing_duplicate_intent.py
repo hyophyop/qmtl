@@ -1,10 +1,10 @@
-import pytest
 import httpx
+import pytest
 
-from qmtl.services.worldservice.api import create_app as create_world_app
-from qmtl.services.worldservice.storage import Storage
 from qmtl.services.gateway.api import create_app as create_gateway_app
 from qmtl.services.gateway.world_client import WorldServiceClient
+from qmtl.services.worldservice.api import create_app as create_world_app
+from qmtl.services.worldservice.storage import Storage
 from tests.qmtl.services.gateway.helpers import StubGatewayDatabase
 
 

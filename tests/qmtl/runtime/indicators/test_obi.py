@@ -4,8 +4,8 @@ from qmtl.runtime.indicators import (
     order_book_depth_slope,
     order_book_imbalance_levels,
     order_book_obi,
-    order_book_obiL_and_slope,
     order_book_obi_ema,
+    order_book_obiL_and_slope,
 )
 from qmtl.runtime.sdk.cache_view import CacheView
 from qmtl.runtime.sdk.node import SourceNode

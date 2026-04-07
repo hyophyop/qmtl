@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """OpenTelemetry tracing utilities for QMTL.
 
 This module exposes a ``setup_tracing`` helper which configures the global
@@ -8,6 +6,8 @@ Jaeger or Tempo by defining the ``telemetry.otel_exporter_endpoint`` key in the
 canonical YAML configuration. Setting the value to ``console`` retains the
 development-friendly behaviour of printing spans locally.
 """
+
+from __future__ import annotations
 
 import importlib
 import logging

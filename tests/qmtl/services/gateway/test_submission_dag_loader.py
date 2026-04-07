@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import base64
 import json
+from typing import Any, cast
 
 import pytest
 from fastapi import HTTPException
-
-from typing import Any, cast
 
 from qmtl.services.gateway.submission.dag_loader import DagLoader
 

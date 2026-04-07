@@ -1,40 +1,40 @@
 from __future__ import annotations
 
-import logging
-import secrets
 import asyncio
-from contextlib import asynccontextmanager, suppress
-from typing import Optional, Callable, Awaitable, Any, TYPE_CHECKING
+import logging
 import os
+import secrets
+from contextlib import asynccontextmanager, suppress
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional
 
 import redis.asyncio as redis
 from fastapi import FastAPI, Request, Response
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry import trace
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from qmtl.foundation.common import AsyncCircuitBreaker
+from qmtl.services.worldservice.blob_store import BlobStore, build_blob_store
 
 from . import metrics as gw_metrics
+from .commit_log import CommitLogWriter
+from .commit_log_consumer import CommitLogConsumer
+from .config import GatewayOwnershipConfig
 from .controlbus_consumer import ControlBusConsumer
 from .dagmanager_client import DagManagerClient
-from .database import Database, PostgresDatabase, MemoryDatabase, SQLiteDatabase
-from .degradation import DegradationManager, DegradationLevel
+from .database import Database, MemoryDatabase, PostgresDatabase, SQLiteDatabase
+from .degradation import DegradationLevel, DegradationManager
 from .event_descriptor import EventDescriptorConfig
 from .event_handlers import create_event_router
 from .fsm import StrategyFSM
 from .gateway_health import GatewayHealthCapabilities
-from .routes import create_api_router
-from .strategy_manager import StrategyManager
-from .config import GatewayOwnershipConfig
 from .ownership import KafkaOwnership, OwnershipManager, resolve_ownership_manager
+from .risk_hub_client import RiskHubClient
+from .routes import create_api_router
+from .shared_account_policy import SharedAccountPolicyConfig
+from .strategy_manager import StrategyManager
+from .submission import ComputeContextService, SubmissionPipeline
 from .world_client import Budget, WorldServiceClient
 from .ws import WebSocketHub
-from .commit_log_consumer import CommitLogConsumer
-from .commit_log import CommitLogWriter
-from .submission import ComputeContextService, SubmissionPipeline
-from .shared_account_policy import SharedAccountPolicyConfig
-from .risk_hub_client import RiskHubClient
-from qmtl.services.worldservice.blob_store import BlobStore, build_blob_store
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from qmtl.foundation.config import DeploymentProfile, RiskHubConfig

@@ -18,8 +18,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from qmtl.runtime.sdk import Node, StreamInput
 from qmtl.runtime.nodesets.recipes import make_ccxt_futures_nodeset
+from qmtl.runtime.sdk import Node, StreamInput
 from qmtl.runtime.sdk.util import parse_interval
 
 
@@ -74,7 +74,7 @@ def main() -> None:
     price = signal.input  # StreamInput from _make_signal
     assert isinstance(price, StreamInput)
     price_interval = _require_interval(price, "price stream")
-    signal_interval = _require_interval(signal, "signal")
+    _require_interval(signal, "signal")
     price.feed(price.node_id, price_interval, 60, {"close": 1})
     signal.feed(price.node_id, price_interval, 60, {"close": 1})
 

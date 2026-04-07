@@ -3,9 +3,9 @@ import asyncio
 import pytest
 
 from qmtl.services.dagmanager.completion import QueueCompletionMonitor
+from qmtl.services.dagmanager.controlbus_producer import ControlBusProducer
 from qmtl.services.dagmanager.diff_service import NodeRecord, NodeRepository
 from qmtl.services.dagmanager.kafka_admin import KafkaAdmin
-from qmtl.services.dagmanager.controlbus_producer import ControlBusProducer
 
 
 class DummyRepo(NodeRepository):

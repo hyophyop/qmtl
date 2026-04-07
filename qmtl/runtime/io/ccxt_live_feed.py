@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """ccxt.pro-based WebSocket live feed (draft).
 
 This module provides a LiveDataFeed implementation that streams OHLCV or Trades
@@ -14,18 +12,21 @@ Scope
 - Filters out building candle by default (emits closed candles only).
 """
 
+from __future__ import annotations
+
 import asyncio
-from dataclasses import dataclass
-from typing import Any, AsyncIterator, Iterable, Literal, Optional
 import logging
 import time
+from dataclasses import dataclass
+from typing import Any, AsyncIterator, Iterable, Literal, Optional
 
 import polars as pl
 
 from qmtl.runtime.sdk.ohlcv_nodeid import parse as _parse_ohlcv_node_id
 from qmtl.runtime.sdk.seamless_data_provider import LiveDataFeed
-from .ccxt_fetcher import CcxtWatchExchange, _try_parse_timeframe_s as _tf_to_seconds
 
+from .ccxt_fetcher import CcxtWatchExchange
+from .ccxt_fetcher import _try_parse_timeframe_s as _tf_to_seconds
 
 log = logging.getLogger(__name__)
 

@@ -14,17 +14,16 @@ import aiosqlite
 import asyncpg  # type: ignore[import-untyped]
 
 from qmtl.foundation.common.hashutils import hash_bytes
-from qmtl.services.worldservice.policy_engine import Policy
 
 from .constants import DEFAULT_EDGE_OVERRIDES
 from .models import AllocationRun, AllocationState, EvaluationRunRecord, WorldActivation
 from .repositories import (
+    _REASON_UNSET,
     PersistentActivationRepository,
     PersistentBindingRepository,
-    PersistentPolicyRepository,
     PersistentEvaluationRunRepository,
+    PersistentPolicyRepository,
     PersistentWorldRepository,
-    _REASON_UNSET,
     _normalize_execution_domain,
     _normalize_world_node_status,
 )

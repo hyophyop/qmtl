@@ -1,10 +1,12 @@
 """Multi-asset lag strategy example - QMTL v2.0."""
 
-from qmtl.runtime.sdk import Runner, Strategy
-from qmtl.runtime.sdk.node import Node, StreamInput
-from qmtl.runtime.sdk.event_service import EventRecorderService
-from qmtl.runtime.io import QuestDBHistoryProvider, QuestDBRecorder
 import polars as pl
+
+from qmtl.runtime.io import QuestDBHistoryProvider, QuestDBRecorder
+from qmtl.runtime.sdk import Runner, Strategy
+from qmtl.runtime.sdk.event_service import EventRecorderService
+from qmtl.runtime.sdk.node import Node, StreamInput
+
 
 class MultiAssetLagStrategy(Strategy):
     def setup(self):

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+
 import polars as pl
 
-from qmtl.runtime.sdk import Runner, Strategy
+from qmtl.runtime.sdk import Runner, Strategy, metrics
 from qmtl.runtime.sdk.node import Node, StreamInput
-from qmtl.runtime.sdk import metrics
 
 
 class MA1(Strategy):

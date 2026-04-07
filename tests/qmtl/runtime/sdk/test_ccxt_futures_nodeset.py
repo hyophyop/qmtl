@@ -1,9 +1,9 @@
 import pytest
 
-from qmtl.runtime.sdk import Node, StreamInput
 from qmtl.runtime.nodesets.options import NodeSetOptions
 from qmtl.runtime.nodesets.recipes import make_ccxt_futures_nodeset
 from qmtl.runtime.nodesets.resources import clear_shared_portfolios
+from qmtl.runtime.sdk import Node, StreamInput
 
 
 def test_attach_futures_nodeset_simulate():

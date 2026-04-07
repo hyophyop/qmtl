@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Mapping, cast
+from typing import cast
 
+from qmtl.runtime.pipeline.order_types import OrderRejection, SizedOrder
 from qmtl.runtime.sdk.node import CacheView, Node, ProcessingNode
 from qmtl.runtime.sdk.timing_controls import TimingController
 
 from ._shared import latest_entry
-from qmtl.runtime.pipeline.order_types import OrderRejection, SizedOrder
 
 
 class TimingGateNode(ProcessingNode):

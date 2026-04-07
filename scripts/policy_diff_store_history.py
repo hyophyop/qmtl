@@ -33,9 +33,9 @@ from qmtl.services.worldservice.metrics import parse_timestamp
 from qmtl.services.worldservice.storage import PersistentStorage
 
 try:
-    from scripts.policy_diff import PolicyDiffReport, StrategyDiff, _load_policy, compute_policy_diff
+    from scripts.policy_diff import StrategyDiff, _load_policy, compute_policy_diff
 except ModuleNotFoundError:  # pragma: no cover
-    from policy_diff import PolicyDiffReport, StrategyDiff, _load_policy, compute_policy_diff
+    from policy_diff import StrategyDiff, _load_policy, compute_policy_diff
 
 
 def _iso_now() -> str:
@@ -411,4 +411,3 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-

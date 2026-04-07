@@ -1,11 +1,11 @@
-import pytest
+
 from qmtl.runtime.sdk import (
     AugmentedHistoryProvider,
+    EventRecorderService,
     QuestDBBackend,
     QuestDBHistoryProvider,
     QuestDBRecorder,
     StreamInput,
-    EventRecorderService,
 )
 
 
@@ -23,7 +23,7 @@ def test_questdb_table_defaults_to_node_id():
 def test_questdb_explicit_table_override():
     loader = QuestDBHistoryProvider("db", table="t")
     recorder = QuestDBRecorder("db", table="t")
-    stream = StreamInput(
+    StreamInput(
         interval="60s",
         period=1,
         history_provider=loader,

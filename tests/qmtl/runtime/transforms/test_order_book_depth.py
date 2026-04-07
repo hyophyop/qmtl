@@ -1,6 +1,6 @@
-from qmtl.runtime.transforms import depth_node
-from qmtl.runtime.sdk.node import SourceNode
 from qmtl.runtime.sdk.cache_view import CacheView
+from qmtl.runtime.sdk.node import SourceNode
+from qmtl.runtime.transforms import depth_node
 
 
 def test_depth_node_compute():

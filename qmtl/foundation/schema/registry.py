@@ -1,17 +1,16 @@
 from __future__ import annotations
 
+import json
+import logging
+import os
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, replace
 from enum import Enum
 from functools import lru_cache
 from typing import Dict, Optional
-import json
-import logging
-import os
-import urllib.request
-import urllib.error
 
 from qmtl.foundation.common.metrics_factory import get_or_create_counter
-
 
 logger = logging.getLogger(__name__)
 

@@ -3,8 +3,9 @@
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from qmtl.runtime.sdk.cache_view import CacheView
 import polars as pl
+
+from qmtl.runtime.sdk.cache_view import CacheView
 
 
 def identity_transform_node(view: CacheView):

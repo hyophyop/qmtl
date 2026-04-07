@@ -7,10 +7,14 @@ import pytest
 
 from qmtl.foundation.common.metrics_factory import get_metric_value
 from qmtl.services.worldservice import metrics as ws_metrics
-from qmtl.services.worldservice.extended_validation_worker import ExtendedValidationWorker
+from qmtl.services.worldservice.extended_validation_worker import (
+    ExtendedValidationWorker,
+)
 from qmtl.services.worldservice.policy_engine import parse_policy
 from qmtl.services.worldservice.storage import Storage
-from qmtl.services.worldservice.validation_controlbus_consumer import ValidationControlBusConsumer
+from qmtl.services.worldservice.validation_controlbus_consumer import (
+    ValidationControlBusConsumer,
+)
 
 
 class _StubKafkaConsumer:

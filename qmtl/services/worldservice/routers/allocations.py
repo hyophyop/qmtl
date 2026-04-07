@@ -14,7 +14,6 @@ from ..schemas import (
 )
 from ..services import WorldService
 
-
 _DEFAULT_TTL_SECONDS = 300
 _STALE_THRESHOLD = timedelta(seconds=_DEFAULT_TTL_SECONDS)
 

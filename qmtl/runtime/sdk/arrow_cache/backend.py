@@ -7,12 +7,12 @@ from typing import Any, Dict
 
 from qmtl.foundation.common.compute_key import DEFAULT_EXECUTION_DOMAIN
 
-from ..backfill_state import BackfillState
 from .. import configuration
+from ..backfill_state import BackfillState
 from ..cache_context import ComputeContext as CacheComputeContext
 from .dependencies import ARROW_AVAILABLE, ARROW_CACHE_ENABLED, pa
 from .eviction import EvictionStrategy, create_default_eviction_strategy
-from .instrumentation import CacheInstrumentation, NOOP_INSTRUMENTATION, default_instrumentation
+from .instrumentation import CacheInstrumentation, default_instrumentation
 from .slices import _Slice
 from .view import ArrowCacheView
 

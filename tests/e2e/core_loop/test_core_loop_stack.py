@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from qmtl.foundation.common import crc32_of_list
+
 from .stack import CoreLoopStackHandle
 
 pytestmark = pytest.mark.contract

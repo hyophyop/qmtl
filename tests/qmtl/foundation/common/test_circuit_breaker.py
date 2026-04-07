@@ -1,4 +1,3 @@
-import asyncio
 import pytest
 
 from qmtl.foundation.common import AsyncCircuitBreaker

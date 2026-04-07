@@ -20,7 +20,6 @@ import httpx
 
 from qmtl.services.worldservice.policy import parse_gating_policy
 
-
 _DEFAULT_POLICY_PATH = (
     Path(__file__).resolve().parents[1] / "worldservice" / "gating_policy.example.yml"
 )

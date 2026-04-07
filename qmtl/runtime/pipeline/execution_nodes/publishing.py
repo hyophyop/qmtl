@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Mapping, MutableMapping, cast
+from typing import Callable, Mapping, MutableMapping, cast
 
-from qmtl.services.gateway.commit_log import CommitLogWriter
+from qmtl.runtime.pipeline.order_types import (
+    GatewayOrderPayload,
+    prepare_gateway_payload,
+)
 from qmtl.runtime.sdk import metrics as sdk_metrics
 from qmtl.runtime.sdk.node import CacheView, Node, ProcessingNode
-
 from qmtl.runtime.transforms.execution_nodes import activation_blocks_order
+from qmtl.services.gateway.commit_log import CommitLogWriter
 
 from ._shared import latest_entry, publish_commit_log, safe_call
-from qmtl.runtime.pipeline.order_types import GatewayOrderPayload, prepare_gateway_payload
 
 
 class OrderPublishNode(ProcessingNode):

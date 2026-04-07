@@ -1,11 +1,11 @@
-from __future__ import annotations
-
 """Monitoring and recovery actions for DAG Manager."""
 
+from __future__ import annotations
+
+import asyncio
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Protocol, Optional
-import asyncio
+from typing import Optional, Protocol
 
 from .alerts import AlertManager
 

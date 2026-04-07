@@ -1,8 +1,8 @@
 """Indicators strategy example - QMTL v2.0."""
 
+from qmtl.runtime.indicators import ema
 from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import StreamInput
-from qmtl.runtime.indicators import ema
 
 
 class EmaStrategy(Strategy):

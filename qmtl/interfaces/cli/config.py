@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Mapping
 
 from qmtl.foundation.config import find_config_file, load_config
-from qmtl.utils.i18n import _
 from qmtl.foundation.config_validation import (
     ValidationIssue,
     validate_config_structure,
@@ -22,6 +21,7 @@ from qmtl.interfaces.config_templates import (
     available_profiles,
     write_template,
 )
+from qmtl.utils.i18n import _
 
 _STATUS_LABELS = {
     "ok": "OK",

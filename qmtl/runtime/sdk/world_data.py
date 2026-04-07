@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Helpers for world → data preset auto-wiring."""
+
+from __future__ import annotations
 
 import logging
 import math
@@ -12,15 +12,14 @@ import numpy as np
 import polars as pl
 
 from qmtl.foundation.config import SeamlessConfig
+from qmtl.runtime.io.seamless_provider import _FrameMappingDataSource
 from qmtl.runtime.sdk.configuration import get_seamless_config
 from qmtl.runtime.sdk.seamless.builder import SeamlessBuilder, SeamlessPresetRegistry
 from qmtl.runtime.sdk.seamless_data_provider import (
     BackfillConfig,
-    DataAvailabilityStrategy,
     SeamlessDataProvider,
     _load_presets_document,
 )
-from qmtl.runtime.io.seamless_provider import _FrameMappingDataSource
 
 logger = logging.getLogger(__name__)
 

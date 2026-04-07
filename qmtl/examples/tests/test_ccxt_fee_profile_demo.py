@@ -5,8 +5,8 @@ import pytest
 
 def test_ccxt_fee_profile_demo_builds_models_and_applies_fees():
     from qmtl.examples.brokerage_demo.ccxt_fee_profile_demo import (
-        build_spot_model,
         build_futures_model,
+        build_spot_model,
         run_demo,
     )
     from qmtl.runtime.brokerage import BrokerageModel, Order, OrderType, TimeInForce

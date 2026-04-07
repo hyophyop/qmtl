@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Adapters for optional runtime integrations used by Runner."""
+
+from __future__ import annotations
 
 from typing import Any, Callable, Protocol
 

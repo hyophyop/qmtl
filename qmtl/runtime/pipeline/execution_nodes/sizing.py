@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Callable, Mapping
 
+from qmtl.runtime.pipeline.order_types import SizedOrder
 from qmtl.runtime.sdk.node import CacheView, Node, ProcessingNode
 from qmtl.runtime.sdk.portfolio import Portfolio
-
 from qmtl.runtime.transforms.execution_shared import apply_sizing
 
 from ._shared import latest_entry
-from qmtl.runtime.pipeline.order_types import SizedOrder
 
 
 class SizingNode(ProcessingNode):

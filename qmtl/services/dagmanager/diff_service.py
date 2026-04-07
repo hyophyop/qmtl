@@ -1,30 +1,38 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, MutableMapping, TYPE_CHECKING, Mapping
+import asyncio
 import logging
 import math
+import time
+from dataclasses import dataclass
 from queue import Empty, Queue
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Mapping, MutableMapping
 
 try:  # optional high performance json
     import orjson as _json
 except Exception:  # pragma: no cover - fallback
     import json as _json
 
-_json_loads = _json.loads
-import time
-import asyncio
+from qmtl.foundation.common import (
+    AsyncCircuitBreaker,
+    crc32_of_list,
+    normalize_schema_compat_id,
+)
+from qmtl.foundation.common.compute_context import (
+    ComputeContext,
+    coerce_compute_context,
+)
+from qmtl.foundation.common.metrics_factory import increment_mapping_store
+from qmtl.foundation.common.metrics_shared import observe_cross_context_cache_hit
 
-logger = logging.getLogger(__name__)
-
-
+from .kafka_admin import KafkaAdmin, compute_key, partition_key
 from .metrics import (
+    cross_context_cache_violation_total,
+    diff_failures_total,
+    diff_requests_total,
     observe_diff_duration,
     queue_create_error_total,
     sentinel_gap_count,
-    diff_requests_total,
-    diff_failures_total,
-    cross_context_cache_violation_total,
     set_active_version_weight,
 )
 from .models import (
@@ -34,34 +42,31 @@ from .models import (
     NodeInfo,
     NodeRecord,
 )
+from .monitor import AckStatus
 from .normalize import (
     normalize_execution_domain,
     normalize_version,
     stringify,
 )
-from .kafka_admin import KafkaAdmin, partition_key, compute_key
+from .repository import NodeRepository
 from .topic import (
     TopicConfig,
-    topic_name,
-    get_config,
-    topic_namespace_enabled,
-    normalize_namespace,
     build_namespace,
     ensure_namespace,
+    get_config,
+    normalize_namespace,
+    topic_name,
+    topic_namespace_enabled,
 )
-from qmtl.foundation.common import (
-    AsyncCircuitBreaker,
-    crc32_of_list,
-    normalize_schema_compat_id,
-)
-from qmtl.foundation.common.compute_context import ComputeContext, coerce_compute_context
-from qmtl.foundation.common.metrics_factory import increment_mapping_store
-from qmtl.foundation.common.metrics_shared import observe_cross_context_cache_hit
-from .monitor import AckStatus
-from .repository import NodeRepository
 
 if TYPE_CHECKING:  # pragma: no cover - optional import for typing
     from neo4j import Driver
+
+
+_json_loads = _json.loads
+logger = logging.getLogger(__name__)
+
+
 @dataclass
 class _CachedBinding:
     topic: str

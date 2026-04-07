@@ -5,8 +5,8 @@ This module demonstrates a simple strategy using a single technical indicator.
 
 from __future__ import annotations
 
-from qmtl.runtime.sdk import Strategy, Node
 from qmtl.runtime.indicators import ema
+from qmtl.runtime.sdk import Node, Strategy
 
 
 class SingleIndicatorStrategy(Strategy):

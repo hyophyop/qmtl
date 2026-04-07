@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-
 TradeMode = Literal["simulate", "paper", "live"]
 PortfolioScope = Literal["strategy", "world"]
 LabelOrderGuard = Literal["off", "warn", "block"]

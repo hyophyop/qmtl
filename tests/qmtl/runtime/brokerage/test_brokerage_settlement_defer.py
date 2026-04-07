@@ -5,10 +5,10 @@ from qmtl.runtime.brokerage import (
     BrokerageModel,
     CashWithSettlementBuyingPowerModel,
     MarketFillModel,
-    PerShareFeeModel,
     NullSlippageModel,
-    SettlementModel,
     Order,
+    PerShareFeeModel,
+    SettlementModel,
 )
 
 

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import asyncio
+import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, Iterable, List, Mapping, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Mapping, Optional
 
 from qmtl.services.risk_hub_contract import (
     DEFAULT_REALIZED_RETURNS_MAX_POINTS_PER_SERIES,
@@ -15,6 +15,7 @@ from qmtl.services.risk_hub_contract import (
     normalize_realized_returns,
     stable_snapshot_hash,
 )
+
 from .blob_store import BlobStore
 
 

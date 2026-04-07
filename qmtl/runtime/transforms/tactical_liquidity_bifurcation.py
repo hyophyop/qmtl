@@ -8,8 +8,8 @@ from __future__ import annotations
 from math import exp
 from typing import Mapping, Sequence
 
-from .hazard_utils import hazard_probability as _hazard_probability
 from .hazard_utils import direction_signal as _direction_signal
+from .hazard_utils import hazard_probability as _hazard_probability
 
 
 def bifurcation_hazard(z: Mapping[str, float], beta: Sequence[float]) -> float:

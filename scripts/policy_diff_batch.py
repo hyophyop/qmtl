@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
+from qmtl.services.worldservice.policy_engine import Policy
 from scripts.policy_diff import (
     PolicyDiffReport,
     StrategyDiff,
@@ -22,7 +23,6 @@ from scripts.policy_diff import (
     _load_runs,
     evaluate_policy,
 )
-from qmtl.services.worldservice.policy_engine import Policy
 
 
 def _merge_runs(paths: Iterable[Path]) -> list[dict[str, Any]]:

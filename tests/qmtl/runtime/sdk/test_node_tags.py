@@ -1,4 +1,4 @@
-import pytest
+
 from qmtl.runtime.sdk.node import SourceNode
 
 

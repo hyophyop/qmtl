@@ -1,12 +1,11 @@
 """Smoke tests for public SDK shim modules."""
 
-import importlib
 
 
 def test_sdk_package_reexports_core_symbols():
     """Test that qmtl.sdk exports v2 core API symbols."""
-    import qmtl.sdk as sdk
     import qmtl.runtime.sdk as runtime_sdk
+    import qmtl.sdk as sdk
 
     # v2 core API
     assert sdk.Runner is runtime_sdk.Runner

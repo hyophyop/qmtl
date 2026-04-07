@@ -1,17 +1,17 @@
-from __future__ import annotations
-
 """Auto backfill strategies for history providers."""
 
-from abc import ABC, abstractmethod
+from __future__ import annotations
+
 import time
+from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Iterable, MutableMapping
-from typing import Any, TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import polars as pl
 
+from . import metrics
 from .data_io import AutoBackfillRequest, DataFetcher, HistoryBackend
 from .history_coverage import CoverageRange, WarmupWindow, compute_missing_ranges
-from . import metrics
 
 if TYPE_CHECKING:  # pragma: no cover - optional dependency
     from .event_service import EventRecorderService

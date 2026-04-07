@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from qmtl.runtime.sdk import Node, StreamInput
-from qmtl.runtime.sdk.cache_view import CacheView
-from qmtl.runtime.sdk.brokerage_client import FakeBrokerageClient
 from qmtl.runtime.nodesets.recipes import (
     make_ccxt_futures_nodeset,
     make_ccxt_spot_nodeset,
 )
+from qmtl.runtime.sdk import Node, StreamInput
+from qmtl.runtime.sdk.brokerage_client import FakeBrokerageClient
+from qmtl.runtime.sdk.cache_view import CacheView
 
 
 def _make_signal() -> Node:

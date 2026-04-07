@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Utilities that expose Kafka broker metrics to the garbage collector."""
+
+from __future__ import annotations
 
 from typing import Callable
 from urllib import request

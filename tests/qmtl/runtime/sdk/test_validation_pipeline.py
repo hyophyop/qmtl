@@ -11,10 +11,10 @@ import inspect
 import pytest
 
 from qmtl.runtime.sdk.validation_pipeline import (
+    PerformanceMetrics,
     ValidationPipeline,
     ValidationResult,
     ValidationStatus,
-    PerformanceMetrics,
     calculate_performance_metrics,
     validate_strategy,
     validate_strategy_sync,

@@ -4,10 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import shutil
 from datetime import date
 from pathlib import Path
 from typing import Iterable, Mapping
-import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS_DIR = ROOT / "docs"

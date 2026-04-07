@@ -6,13 +6,13 @@ from dataclasses import dataclass, replace
 from typing import Callable, Mapping, Optional
 
 from .brokerage_model import BrokerageModel
-from .interfaces import BuyingPowerModel, FillModel, SlippageModel, FeeModel
 from .buying_power import CashBuyingPowerModel
-from .fill_models import ImmediateFillModel
+from .exchange_hours import ExchangeHoursProvider
 from .fees import PerShareFeeModel
+from .fill_models import ImmediateFillModel
+from .interfaces import BuyingPowerModel, FeeModel, FillModel, SlippageModel
 from .slippage import SpreadBasedSlippageModel
 from .symbols import SymbolPropertiesProvider
-from .exchange_hours import ExchangeHoursProvider
 
 
 @dataclass

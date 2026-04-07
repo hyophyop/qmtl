@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, Generic, TypeVar, cast
 from dataclasses import dataclass
+from typing import Any, Generic, TypeVar, cast
 
 from . import metrics as sdk_metrics
 from .protocols import NodeLike
-
 
 PayloadT = TypeVar("PayloadT")
 CacheEntry = tuple[int, PayloadT]
@@ -167,8 +166,9 @@ class CacheView(Generic[PayloadT]):
         data = object.__getattribute__(self, "_data")
         if isinstance(data, _Seq):
             try:  # pragma: no cover - exercised via Arrow tests
-                import pyarrow as pa
                 import pickle
+
+                import pyarrow as pa
             except Exception as e:  # pragma: no cover - optional dependency
                 raise AttributeError("table") from e
             ts = [int(t) for t, _ in data]

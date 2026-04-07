@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Lightweight snapshot/hydration helpers for Node caches.
 
 This module implements a pragmatic baseline for P0‑4 (Snapshot checkpointing
@@ -12,6 +10,8 @@ Environment variables:
 - QMTL_SNAPSHOT_STRICT_RUNTIME: '1' to require matching runtime fingerprint
 """
 
+from __future__ import annotations
+
 import base64
 import json
 import logging
@@ -20,10 +20,12 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Mapping, NamedTuple, Protocol, Tuple
 
+from . import metrics as sdk_metrics
+
 if TYPE_CHECKING:
+    import fsspec as _fsspec
     import pyarrow as _pyarrow
     import pyarrow.parquet as _pyarrow_parquet
-    import fsspec as _fsspec
 
 logger = logging.getLogger(__name__)
 
@@ -81,8 +83,6 @@ class ArrowContext(NamedTuple):
 def _get_arrow_context() -> ArrowContext | None:
     return _import_pyarrow()
 
-from . import metrics as sdk_metrics
-
 # Optional pyarrow context (exported for tests expecting module-level access)
 _arrow_ctx = _get_arrow_context()
 pa: "_pyarrow | None" = _arrow_ctx.pa if _arrow_ctx else None
@@ -119,8 +119,8 @@ def runtime_fingerprint() -> str:
     installed), os info. The intent is to gate reuse across materially different
     environments without causing excessive churn.
     """
-    import sys
     import platform
+    import sys
 
     parts = [
         f"python={sys.version_info.major}.{sys.version_info.minor}",

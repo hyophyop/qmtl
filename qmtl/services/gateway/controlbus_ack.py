@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """ControlBus ACK publisher for activation freeze/unfreeze events."""
+
+from __future__ import annotations
 
 import asyncio
 import json
@@ -10,7 +10,6 @@ from typing import Iterable
 
 from qmtl.foundation.common.cloudevents import format_event
 from qmtl.services.kafka import KafkaProducerLike, create_kafka_producer
-
 
 logger = logging.getLogger(__name__)
 

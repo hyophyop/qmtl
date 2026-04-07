@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, cast
 
-from .instrumentation import CacheInstrumentation, NOOP_INSTRUMENTATION
+from .instrumentation import NOOP_INSTRUMENTATION, CacheInstrumentation
 from .slices import _Slice, _SliceView
 
 

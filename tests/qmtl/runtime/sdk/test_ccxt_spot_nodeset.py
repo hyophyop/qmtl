@@ -1,10 +1,10 @@
 import pytest
 
-from qmtl.runtime.sdk import Node, StreamInput
-from qmtl.runtime.sdk.cache_view import CacheView
 from qmtl.runtime.nodesets.options import NodeSetOptions
 from qmtl.runtime.nodesets.recipes import make_ccxt_spot_nodeset
 from qmtl.runtime.nodesets.resources import clear_shared_portfolios
+from qmtl.runtime.sdk import Node, StreamInput
+from qmtl.runtime.sdk.cache_view import CacheView
 
 
 def test_attach_nodeset_simulate():

@@ -1,28 +1,28 @@
-from __future__ import annotations
-
 """Preset registrations for Seamless builder integrations."""
+
+from __future__ import annotations
 
 import logging
 import os
 from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
-from qmtl.runtime.sdk.seamless import SeamlessPresetRegistry
-from qmtl.runtime.sdk.seamless_data_provider import DataSourcePriority
-from qmtl.runtime.io.historyprovider import QuestDBLoader
-from qmtl.runtime.io.seamless_provider import (
-    DataFetcherAutoBackfiller,
-    LiveDataFeedImpl,
-    HistoryProviderDataSource,
-)
 from qmtl.runtime.io.ccxt_fetcher import (
     CcxtBackfillConfig,
     CcxtOHLCVFetcher,
-    RateLimiterConfig,
     CcxtTradesConfig,
     CcxtTradesFetcher,
+    RateLimiterConfig,
 )
 from qmtl.runtime.io.ccxt_live_feed import CcxtProConfig, CcxtProLiveFeed
+from qmtl.runtime.io.historyprovider import QuestDBLoader
+from qmtl.runtime.io.seamless_provider import (
+    DataFetcherAutoBackfiller,
+    HistoryProviderDataSource,
+    LiveDataFeedImpl,
+)
 from qmtl.runtime.sdk.artifacts import FileSystemArtifactRegistrar
+from qmtl.runtime.sdk.seamless import SeamlessPresetRegistry
+from qmtl.runtime.sdk.seamless_data_provider import DataSourcePriority
 
 _logger = logging.getLogger(__name__)
 
@@ -43,6 +43,14 @@ def _ensure_float(value: Any, default: float) -> float:
     if value is None:
         return default
     return float(value)
+
+
+def _as_mapping(value: Any, field: str) -> Mapping[str, Any] | None:
+    if value is None:
+        return None
+    if isinstance(value, Mapping):
+        return dict(value)
+    raise TypeError(f"{field} must be a mapping")
 
 
 def _normalize_symbols(value: Any) -> list[str] | None:
@@ -413,8 +421,8 @@ def _register_nautilus_presets() -> None:
         """
         try:
             from qmtl.runtime.io.nautilus_catalog_source import (
-                NautilusCatalogDataSource,
                 NAUTILUS_AVAILABLE,
+                NautilusCatalogDataSource,
             )
         except ImportError as e:
             raise NautilusPresetUnavailableError("nautilus.catalog", e) from e

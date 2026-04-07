@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from qmtl.services.worldservice.storage.audit import AuditLogRepository
-from qmtl.services.worldservice.storage.edge_overrides import EdgeOverrideRepository, _REASON_UNSET
+from qmtl.services.worldservice.storage.edge_overrides import (
+    _REASON_UNSET,
+    EdgeOverrideRepository,
+)
 
 
 def test_edge_override_repository_reason_round_trip() -> None:

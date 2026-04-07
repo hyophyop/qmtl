@@ -4,6 +4,7 @@ import math
 
 import pytest
 
+from qmtl.foundation.common.compute_context import DowngradeReason
 from qmtl.runtime.helpers import (
     apply_temporal_requirements,
     compute_alpha_performance_summary,
@@ -12,7 +13,6 @@ from qmtl.runtime.helpers import (
     parse_activation_update,
 )
 from qmtl.runtime.sdk.execution_context import resolve_execution_context
-from qmtl.foundation.common.compute_context import DowngradeReason
 
 
 def test_determine_execution_mode_prefers_explicit() -> None:

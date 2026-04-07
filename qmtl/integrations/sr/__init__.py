@@ -46,39 +46,42 @@ Example
 """
 
 # Types
-from .types import (  # noqa: F401
-    SRCandidate,
-    BaseSRCandidate,
-    PySRCandidate,
-    OperonCandidate,
-)
+from . import adapters  # noqa: F401
 
 # DAG
 from .dag import (  # noqa: F401
+    ExpressionDagBuilder,
     ExpressionDagSpec,
     build_expression_dag,
-    ExpressionDagBuilder,
-)
-
-# Adapters
-from .pysr_adapter import load_pysr_hof_as_dags, load_pysr_hof_as_strategies  # noqa: F401
-from . import adapters  # noqa: F401
-
-# Strategy Templates
-from .strategy_template import (  # noqa: F401
-    build_expression_strategy,
-    build_strategy_from_dag_spec,
-    submit_with_validation,
-    validate_strategy_against_sample,
-    ValidationSample,
-    ValidationSampleMismatch,
-    ValidationResult,
 )
 
 # Expression Keys
 from .expression_key import (  # noqa: F401
     compute_expression_key,
     normalize_ast,
+)
+
+# Adapters
+from .pysr_adapter import (  # noqa: F401
+    load_pysr_hof_as_dags,
+    load_pysr_hof_as_strategies,
+)
+
+# Strategy Templates
+from .strategy_template import (  # noqa: F401
+    ValidationResult,
+    ValidationSample,
+    ValidationSampleMismatch,
+    build_expression_strategy,
+    build_strategy_from_dag_spec,
+    submit_with_validation,
+    validate_strategy_against_sample,
+)
+from .types import (  # noqa: F401
+    BaseSRCandidate,
+    OperonCandidate,
+    PySRCandidate,
+    SRCandidate,
 )
 
 __all__ = [

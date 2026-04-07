@@ -1,9 +1,8 @@
 from __future__ import annotations
 
+from qmtl.runtime.pipeline.execution_nodes.publishing import OrderPublishNode
 from qmtl.runtime.sdk.node import Node
 from qmtl.runtime.sdk.runner import Runner
-
-from qmtl.runtime.pipeline.execution_nodes.publishing import OrderPublishNode
 
 
 class DummyWriter:

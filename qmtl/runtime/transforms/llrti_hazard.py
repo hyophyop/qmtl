@@ -7,8 +7,8 @@ from __future__ import annotations
 from math import exp
 from typing import Iterable, Mapping, Sequence
 
+from .hazard_utils import execution_cost, hazard_probability
 from .llrti import llrti
-from .hazard_utils import hazard_probability, execution_cost
 
 
 def label_jumps(price_changes: Iterable[float], threshold: float) -> list[int]:

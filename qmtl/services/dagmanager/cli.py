@@ -11,23 +11,25 @@ from typing import Awaitable, Callable, Dict, Iterable, Sequence
 
 import grpc
 
-from .diff_service import (
-    DiffRequest,
-    DiffService,
-    NodeRepository,
-    QueueManager,
-    NodeRecord,
-    StreamSender,
-)
-from .monitor import AckStatus
-from .topic import topic_name
-from .neo4j_export import export_schema, connect
-from .neo4j_init import init_schema, rollback as neo4j_rollback
-from ..gateway.dagmanager_client import DagManagerClient
+from qmtl.foundation.common import AsyncCircuitBreaker
 from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
 from qmtl.runtime.sdk.util import parse_interval
 from qmtl.utils.i18n import _, set_language
-from qmtl.foundation.common import AsyncCircuitBreaker
+
+from ..gateway.dagmanager_client import DagManagerClient
+from .diff_service import (
+    DiffRequest,
+    DiffService,
+    NodeRecord,
+    NodeRepository,
+    QueueManager,
+    StreamSender,
+)
+from .monitor import AckStatus
+from .neo4j_export import connect, export_schema
+from .neo4j_init import init_schema
+from .neo4j_init import rollback as neo4j_rollback
+from .topic import topic_name
 
 
 class _MemRepo(NodeRepository):

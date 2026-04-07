@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import hashlib
 import inspect
 import re
+from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
@@ -14,8 +14,8 @@ from ..schemas import (
     ApplyRequest,
     EvaluationOverride,
     EvaluationRunModel,
-    LivePromotionApproveRequest,
     LivePromotionApplyRequest,
+    LivePromotionApproveRequest,
     LivePromotionAutoApplyResponse,
     LivePromotionCandidate,
     LivePromotionCandidatesResponse,
@@ -379,7 +379,6 @@ def create_promotions_router(service: WorldService) -> APIRouter:
         target_set = {str(v) for v in target_active if str(v).strip()}
 
         governance = await _get_live_promotion_governance(service, world_id)
-        mode_normalized = str(governance.mode or "").lower()
         override_status = str(summary.get("override_status") or "none").lower()
         cooldown_remaining_sec = await _cooldown_remaining_seconds(
             service,

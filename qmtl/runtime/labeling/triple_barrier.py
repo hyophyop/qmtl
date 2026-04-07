@@ -7,9 +7,18 @@ from datetime import datetime, timedelta
 from itertools import count
 from typing import Mapping
 
-from qmtl.runtime.labeling.costs import CostContext, CostEstimate, CostModel, NullCostModel
-from qmtl.runtime.labeling.schema import BarrierMode, BarrierSpec, HorizonSpec, LabelOutcome
-
+from qmtl.runtime.labeling.costs import (
+    CostContext,
+    CostEstimate,
+    CostModel,
+    NullCostModel,
+)
+from qmtl.runtime.labeling.schema import (
+    BarrierMode,
+    BarrierSpec,
+    HorizonSpec,
+    LabelOutcome,
+)
 
 _SIDE_ALIASES = {
     "long": "long",

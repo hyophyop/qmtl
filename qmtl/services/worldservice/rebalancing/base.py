@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Mapping, Optional, Protocol, Tuple
+from typing import Dict, List, Mapping, Protocol
 
 
 @dataclass

@@ -7,7 +7,6 @@ from typing import Any, Awaitable, Callable, Optional
 
 from .connections import ConnectionRegistry
 
-
 logger = logging.getLogger(__name__)
 
 
