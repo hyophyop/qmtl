@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import contextlib
-from typing import Any, Awaitable, Callable, Optional, TYPE_CHECKING
-
+import json
+import logging
+from typing import Any, Awaitable, Callable, Optional
 from urllib.parse import urlparse, urlunparse
 
-import logging
 import websockets
+
 from . import runtime
 
 WebSocketClientProtocol = Any

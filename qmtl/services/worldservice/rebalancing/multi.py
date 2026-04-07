@@ -5,16 +5,15 @@ from typing import Dict, List, Mapping, Optional
 
 from .base import (
     PositionSlice,
-    RebalancePlan,
-    Rebalancer,
     RebalanceContext,
+    RebalancePlan,
     SymbolDelta,
 )
-from .rule_based import ProportionalRebalancer
 from .calculators import (
     GlobalDeltaAggregator,
     StrategyAllocationCalculator,
 )
+from .rule_based import ProportionalRebalancer
 
 
 @dataclass
@@ -111,4 +110,3 @@ class MultiWorldProportionalRebalancer:
         for wid, positions in per_world_positions.items():
             aggregator.ingest(positions, per_world_plans[wid])
         return aggregator.build()
-

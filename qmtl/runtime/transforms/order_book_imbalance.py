@@ -5,8 +5,8 @@ from __future__ import annotations
 import math
 from typing import Callable
 
-from qmtl.runtime.sdk.node import Node
 from qmtl.runtime.sdk.cache_view import CacheView
+from qmtl.runtime.sdk.node import Node
 
 
 def _latest(view: CacheView, node: Node, interval: int | str) -> float | None:

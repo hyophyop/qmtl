@@ -8,8 +8,8 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Optional
 
-from .order import Account, Order, Fill
 from .exchange_hours import ExchangeHoursProvider
+from .order import Account, Fill, Order
 
 
 class BuyingPowerModel(ABC):

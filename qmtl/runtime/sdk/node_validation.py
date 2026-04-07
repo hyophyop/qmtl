@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import inspect
-from dataclasses import dataclass
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from typing import Any, List
 
 from qmtl.foundation.validation_core import Rule, RuleSet, ValidationResult
-from .util import parse_interval, parse_period, validate_tag, validate_name
+
 from .exceptions import InvalidParameterError
+from .util import parse_interval, parse_period, validate_name, validate_tag
 
 __all__ = [
     "normalize_inputs",

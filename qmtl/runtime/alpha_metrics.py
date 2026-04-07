@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
-from typing import Any, Dict, Tuple
+from typing import Any, Tuple
 
 ALPHA_PERFORMANCE_METRIC_PREFIX = "alpha_performance."
 ALPHA_PERFORMANCE_METRIC_KEYS: Tuple[str, ...] = (

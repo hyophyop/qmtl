@@ -6,9 +6,13 @@ from typing import Any
 from fastapi import APIRouter
 
 from .. import metrics as ws_metrics
-from ..schemas import LiveMonitoringReport, LiveMonitoringStrategyReport, RuleResultModel
-from ..services import WorldService
 from ..live_monitoring_worker import LiveMonitoringWorker
+from ..schemas import (
+    LiveMonitoringReport,
+    LiveMonitoringStrategyReport,
+    RuleResultModel,
+)
+from ..services import WorldService
 from ..validation_metrics import iso_timestamp_now
 
 

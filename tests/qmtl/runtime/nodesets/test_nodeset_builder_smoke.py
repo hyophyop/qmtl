@@ -9,6 +9,8 @@ from qmtl.runtime.nodesets.resources import clear_shared_portfolios
 from qmtl.runtime.nodesets.steps import StepSpec
 from qmtl.runtime.pipeline.execution_nodes import (
     PortfolioNode as RealPortfolioNode,
+)
+from qmtl.runtime.pipeline.execution_nodes import (
     SizingNode as RealSizingNode,
 )
 from qmtl.runtime.sdk.node import Node

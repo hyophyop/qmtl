@@ -7,8 +7,8 @@ import pytest
 from pytest import approx
 
 from qmtl.foundation.common.metrics_factory import get_metric_value
-from qmtl.services.worldservice.api import create_app
 from qmtl.services.worldservice import metrics
+from qmtl.services.worldservice.api import create_app
 from qmtl.services.worldservice.storage import Storage
 
 

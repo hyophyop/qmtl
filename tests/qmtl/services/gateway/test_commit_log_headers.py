@@ -1,4 +1,3 @@
-import json
 import pytest
 
 from qmtl.services.dagmanager.kafka_admin import compute_key

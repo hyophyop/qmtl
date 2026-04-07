@@ -1,7 +1,7 @@
 """Simple moving average indicator."""
 
-from qmtl.runtime.sdk.node import Node
 from qmtl.runtime.sdk.cache_view import CacheView
+from qmtl.runtime.sdk.node import Node
 
 
 def sma(source: Node, period: int, *, name: str | None = None) -> Node:

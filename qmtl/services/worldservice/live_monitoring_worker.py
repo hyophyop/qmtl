@@ -7,8 +7,8 @@ can be evaluated over consistent artifacts.
 
 from __future__ import annotations
 
-import logging
 import inspect
+import logging
 from collections.abc import Mapping, Sequence
 from typing import Any, Iterable
 

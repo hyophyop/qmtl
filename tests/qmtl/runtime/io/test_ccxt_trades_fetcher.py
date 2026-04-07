@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import types
-import polars as pl
+
 import pytest
 
 from qmtl.runtime.io.ccxt_fetcher import (

@@ -2,6 +2,7 @@ from pathlib import Path
 
 import yaml
 
+
 def _repo_root() -> Path:
     current = Path(__file__).resolve()
     for parent in current.parents:

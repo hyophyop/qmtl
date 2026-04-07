@@ -11,12 +11,11 @@ from qmtl.foundation.common.tagquery import (
 
 from .. import hash_utils as default_hash_utils
 from .. import node_validation as default_validator
+from ..data_io import EventRecorder, HistoryBackend, HistoryProvider
 from ..event_service import EventRecorderService
 from ..exceptions import InvalidParameterError
-from ..data_io import HistoryBackend, HistoryProvider, EventRecorder
 from ..util import parse_interval
 from .base import Node
-
 
 logger = logging.getLogger(__name__)
 

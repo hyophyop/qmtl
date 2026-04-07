@@ -1,11 +1,11 @@
-from __future__ import annotations
-
 """Composable builder utilities for Seamless data providers.
 
 The goal is to let concrete integrations (CCXT, equities, etc.) assemble
 Seamless providers by wiring storage, backfill, live, and governance
 components without hard-coding those decisions inside provider subclasses.
 """
+
+from __future__ import annotations
 
 import importlib
 from dataclasses import dataclass, field

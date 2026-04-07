@@ -7,7 +7,6 @@ import pytest
 from qmtl.services.gateway import metrics
 from qmtl.services.gateway.world_client import WorldServiceClient
 
-
 RequestCheck = Callable[[httpx.Request], None]
 
 

@@ -1,13 +1,13 @@
-from __future__ import annotations
-
 """Background task recording Kafka consumer lag per topic."""
 
-from dataclasses import dataclass, field
-from typing import Iterable, Protocol, Dict, Optional
-import asyncio
+from __future__ import annotations
 
-from .kafka_admin import KafkaAdmin
+import asyncio
+from dataclasses import dataclass, field
+from typing import Dict, Iterable, Optional, Protocol
+
 from . import metrics
+from .kafka_admin import KafkaAdmin
 
 
 @dataclass(frozen=True)

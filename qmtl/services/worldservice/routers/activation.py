@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+
 from fastapi import APIRouter, HTTPException, Response
 
 from qmtl.foundation.common.hashutils import hash_bytes

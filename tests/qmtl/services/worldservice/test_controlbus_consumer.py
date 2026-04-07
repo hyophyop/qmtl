@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -8,7 +8,7 @@ import pytest
 from qmtl.foundation.common.metrics_factory import get_metric_value
 from qmtl.services.worldservice import metrics as ws_metrics
 from qmtl.services.worldservice.controlbus_consumer import RiskHubControlBusConsumer
-from qmtl.services.worldservice.risk_hub import RiskSignalHub, PortfolioSnapshot
+from qmtl.services.worldservice.risk_hub import PortfolioSnapshot, RiskSignalHub
 
 
 class _StubKafkaConsumer:

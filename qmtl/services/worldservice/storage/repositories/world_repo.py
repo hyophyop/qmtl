@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, Mapping, Optional
 
-from .base import AuditLogger, DatabaseDriver
 from ..models import WorldRecord
+from .base import AuditLogger, DatabaseDriver
 
 
 class PersistentWorldRepository:

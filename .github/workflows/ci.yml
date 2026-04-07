@@ -66,6 +66,12 @@ jobs:
       - name: Install dependencies (dev)
         run: uv pip install -e .[dev]
 
+      - name: Ruff lint (repo-safe subset)
+        run: uv run --no-project --with ruff ruff check .
+
+      - name: Dependency hygiene (deptry)
+        run: uv run --no-project --with deptry deptry qmtl
+
       - name: Radon diff (CC/MI)
         run: |
           git fetch origin main

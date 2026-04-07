@@ -10,9 +10,8 @@ from qmtl.foundation.common.compute_context import (
     canonicalize_world_mode_alias,
 )
 
-from .compute_context import resolve_execution_domain
-
 from . import metrics as gw_metrics
+from .compute_context import resolve_execution_domain
 
 
 def _record_compute_context_downgrade_metric(context: ComputeContext) -> None:

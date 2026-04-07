@@ -15,7 +15,6 @@ from qmtl.runtime.sdk.timing_controls import (
     validate_backtest_timing,
 )
 
-
 UTC = timezone.utc
 
 

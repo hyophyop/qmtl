@@ -1,9 +1,9 @@
-from __future__ import annotations
-
 """Service for posting trade orders to a broker API with retries."""
 
-from typing import Any
+from __future__ import annotations
+
 import time
+from typing import Any
 
 import httpx
 

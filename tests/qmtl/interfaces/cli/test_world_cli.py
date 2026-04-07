@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from qmtl.interfaces.cli import world
 from qmtl.automation.campaign_executor import ExecutionResult
+from qmtl.interfaces.cli import world
 
 
 def test_campaign_execute_uses_executor(monkeypatch, capsys):

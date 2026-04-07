@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
 import math
 import statistics
+from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
 from typing import Any, Dict
 

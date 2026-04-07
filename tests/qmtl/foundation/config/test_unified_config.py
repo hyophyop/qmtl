@@ -1,10 +1,11 @@
-from pathlib import Path
 import json
 import logging
+from pathlib import Path
+
 import pytest
 import yaml
 
-from qmtl.foundation.config import load_config, UnifiedConfig
+from qmtl.foundation.config import UnifiedConfig, load_config
 
 
 def test_load_unified_config_yaml(tmp_path: Path) -> None:

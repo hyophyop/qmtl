@@ -4,8 +4,8 @@ import re
 import sys
 from pathlib import Path
 from typing import Iterable
-import yaml
 
+import yaml
 
 LINK_RE = re.compile(r"!??\[[^\]]*\]\(([^)]+)\)")
 EN_CORE_ARCH_DOCS = {

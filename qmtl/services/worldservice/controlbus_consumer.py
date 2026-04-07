@@ -9,13 +9,20 @@ import json
 import logging
 from collections import deque
 from collections.abc import Mapping, Sequence
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Iterable
 
 from qmtl.foundation.common.cloudevents import format_event
-from qmtl.services.kafka import KafkaConsumerLike, create_kafka_consumer
-from qmtl.services.kafka import KafkaProducerLike, create_kafka_producer
-from qmtl.services.risk_hub_contract import normalize_and_validate_snapshot, risk_snapshot_dedupe_key
+from qmtl.services.kafka import (
+    KafkaConsumerLike,
+    KafkaProducerLike,
+    create_kafka_consumer,
+    create_kafka_producer,
+)
+from qmtl.services.risk_hub_contract import (
+    normalize_and_validate_snapshot,
+    risk_snapshot_dedupe_key,
+)
 
 from . import metrics as ws_metrics
 from .controlbus_defaults import (
@@ -27,7 +34,6 @@ from .controlbus_defaults import (
     default_dlq_topic,
 )
 from .risk_hub import PortfolioSnapshot, RiskSignalHub
-
 
 logger = logging.getLogger(__name__)
 

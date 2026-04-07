@@ -5,8 +5,8 @@ This module provides a complete execution pipeline using NodeSet.
 
 from __future__ import annotations
 
+from qmtl.runtime.nodesets.steps import execution, fills, portfolio, pretrade, sizing
 from qmtl.runtime.sdk import Node
-from qmtl.runtime.nodesets.steps import pretrade, sizing, execution, fills, portfolio
 
 
 def create_execution_nodeset(signal_node: Node):

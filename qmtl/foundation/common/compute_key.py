@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from blake3 import blake3
 
-from .compute_context import ComputeContext, DEFAULT_EXECUTION_DOMAIN
+from .compute_context import DEFAULT_EXECUTION_DOMAIN, ComputeContext
 
 __all__ = [
     "ComputeContext",

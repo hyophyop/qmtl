@@ -1,45 +1,47 @@
 from __future__ import annotations
 
-from collections import defaultdict
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import json
 import logging
 import uuid
+from collections import defaultdict
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Mapping, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-
 
 if hasattr(status, "HTTP_422_UNPROCESSABLE_CONTENT"):
     HTTP_422_UNPROCESSABLE = status.HTTP_422_UNPROCESSABLE_CONTENT
 else:
     HTTP_422_UNPROCESSABLE = status.HTTP_422_UNPROCESSABLE_ENTITY
 
-from .. import metrics as gw_metrics
-from ..database import Database
-from ..rebalancing_executor import (
-    OrderOptions,
-    VenuePolicy,
-    orders_from_world_plan,
-    orders_from_strategy_deltas,
-    orders_from_symbol_deltas,
-)
-from ..routes.dependencies import GatewayDependencyProvider
-from ..shared_account_policy import SharedAccountPolicy
-from ..strategy_manager import StrategyManager
-from ..world_client import WorldServiceClient
-from ..compute_context import resolve_execution_domain
-from ..risk_hub_client import RiskHubClient
 from qmtl.services.worldservice.rebalancing import (
     PositionSlice,
     RebalancePlan,
     SymbolDelta,
     allocate_strategy_deltas,
 )
+from qmtl.services.worldservice.rebalancing.calculators import (
+    StrategyAllocationCalculator,
+)
 from qmtl.services.worldservice.rebalancing.multi import MultiWorldRebalanceContext
-from qmtl.services.worldservice.rebalancing.calculators import StrategyAllocationCalculator
 from qmtl.services.worldservice.schemas import MultiWorldRebalanceRequest
+
+from .. import metrics as gw_metrics
+from ..compute_context import resolve_execution_domain
+from ..database import Database
+from ..rebalancing_executor import (
+    OrderOptions,
+    VenuePolicy,
+    orders_from_strategy_deltas,
+    orders_from_symbol_deltas,
+    orders_from_world_plan,
+)
+from ..risk_hub_client import RiskHubClient
+from ..routes.dependencies import GatewayDependencyProvider
+from ..shared_account_policy import SharedAccountPolicy
+from ..strategy_manager import StrategyManager
+from ..world_client import WorldServiceClient
 
 logger = logging.getLogger(__name__)
 

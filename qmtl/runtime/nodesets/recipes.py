@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Built-in Node Set recipes.
 
 Recipe functions return a composed NodeSet and are the preferred public API
@@ -7,43 +5,13 @@ for constructing exchange-backed execution pipelines. Treat the returned
 NodeSet as a black box; its internal composition may change between versions.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from inspect import Parameter, Signature
 from types import MappingProxyType
 from typing import Any, Callable, Literal, Mapping, Sequence
 
-from qmtl.runtime.sdk import Node
-from qmtl.runtime.sdk.cache_view import CacheView
-from qmtl.runtime.sdk.brokerage_client import (
-    CcxtBrokerageClient,
-    FakeBrokerageClient,
-    FuturesCcxtBrokerageClient,
-)
-from qmtl.runtime.sdk.execution_modeling import ExecutionModel
-from qmtl.runtime.sdk.order_gate import Activation
-from qmtl.runtime.labeling.costs import CostModel
-from qmtl.runtime.labeling.schema import BarrierSpec, HorizonSpec
-from qmtl.runtime.nodesets.base import NodeSet, NodeSetBuilder, NodeSetContext
-from qmtl.runtime.nodesets.adapter import NodeSetAdapter, NodeSetDescriptor, PortSpec
-from qmtl.runtime.nodesets.labeling import build_triple_barrier_label_node
-from qmtl.runtime.nodesets.options import NodeSetOptions
-from qmtl.runtime.nodesets.steps import (
-    StepSpec,
-    STEP_ORDER,
-    execution,
-    order_publish,
-)
-from qmtl.runtime.nodesets.registry import nodeset_recipe
-from qmtl.runtime.pipeline.execution_nodes import (
-    ExecutionNode as RealExecutionNode,
-    OrderPublishNode as RealOrderPublishNode,
-    PreTradeGateNode as RealPreTradeNode,
-    SizingNode as RealSizingNode,
-    PortfolioNode as RealPortfolioNode,
-)
-from qmtl.runtime.pipeline.order_types import normalize_order_intent
-from qmtl.runtime.transforms.execution_shared import apply_sizing
-from qmtl.runtime.transforms.position_intent import PositionTargetNode, Thresholds
 from qmtl.runtime.brokerage import (
     Account,
     BrokerageModel,
@@ -52,8 +20,47 @@ from qmtl.runtime.brokerage import (
     NullSlippageModel,
     PercentFeeModel,
 )
+from qmtl.runtime.labeling.costs import CostModel
+from qmtl.runtime.labeling.schema import BarrierSpec, HorizonSpec
+from qmtl.runtime.nodesets.adapter import NodeSetAdapter, NodeSetDescriptor, PortSpec
+from qmtl.runtime.nodesets.base import NodeSet, NodeSetBuilder, NodeSetContext
+from qmtl.runtime.nodesets.labeling import build_triple_barrier_label_node
+from qmtl.runtime.nodesets.options import NodeSetOptions
+from qmtl.runtime.nodesets.registry import nodeset_recipe
+from qmtl.runtime.nodesets.steps import (
+    STEP_ORDER,
+    StepSpec,
+    execution,
+    order_publish,
+)
+from qmtl.runtime.pipeline.execution_nodes import (
+    ExecutionNode as RealExecutionNode,
+)
+from qmtl.runtime.pipeline.execution_nodes import (
+    OrderPublishNode as RealOrderPublishNode,
+)
+from qmtl.runtime.pipeline.execution_nodes import (
+    PortfolioNode as RealPortfolioNode,
+)
+from qmtl.runtime.pipeline.execution_nodes import (
+    PreTradeGateNode as RealPreTradeNode,
+)
+from qmtl.runtime.pipeline.execution_nodes import (
+    SizingNode as RealSizingNode,
+)
+from qmtl.runtime.pipeline.order_types import normalize_order_intent
+from qmtl.runtime.sdk import Node
+from qmtl.runtime.sdk.brokerage_client import (
+    CcxtBrokerageClient,
+    FakeBrokerageClient,
+    FuturesCcxtBrokerageClient,
+)
+from qmtl.runtime.sdk.cache_view import CacheView
+from qmtl.runtime.sdk.execution_modeling import ExecutionModel
+from qmtl.runtime.sdk.order_gate import Activation
+from qmtl.runtime.transforms.execution_shared import apply_sizing
+from qmtl.runtime.transforms.position_intent import PositionTargetNode, Thresholds
 from qmtl.services.gateway.commit_log import CommitLogWriter
-
 
 _MISSING = object()
 

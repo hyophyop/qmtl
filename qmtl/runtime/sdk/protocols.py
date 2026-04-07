@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Protocols for SDK runtime dependencies used by the runner."""
+
+from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 

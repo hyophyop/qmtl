@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Utilities for One-Cancels-Other (OCO) order pairs using live connectors."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Tuple

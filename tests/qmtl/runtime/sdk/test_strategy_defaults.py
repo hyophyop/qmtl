@@ -1,5 +1,6 @@
 import pytest
-from qmtl.runtime.sdk import Strategy, StreamInput, ProcessingNode
+
+from qmtl.runtime.sdk import ProcessingNode, Strategy, StreamInput
 
 
 class DefaultStrategy(Strategy):

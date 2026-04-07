@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Position-intent emitting nodes for intent-first execution.
 
 These nodes keep strategy logic pure by declaring target positions instead of
@@ -7,12 +5,14 @@ issuing imperative orders. Downstream execution can reconcile to targets using
 portfolio snapshots (backtest) or world-level rebalancing (live).
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from typing import Any, Callable, Sequence
 
 from qmtl.runtime.sdk.cache_view import CacheView
-from qmtl.runtime.sdk.node import Node, ProcessingNode
 from qmtl.runtime.sdk.intent import PositionTarget, to_order_payloads
+from qmtl.runtime.sdk.node import Node, ProcessingNode
 
 
 @dataclass

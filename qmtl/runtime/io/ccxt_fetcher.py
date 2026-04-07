@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """CCXT-based DataFetcher implementations for OHLCV (and future Trades).
 
 This module is optional and only imported when used. It provides a thin
@@ -7,6 +5,10 @@ asynchronous wrapper around ``ccxt.async_support`` to return DataFrames in the
 SDK's standard schema with a ``ts`` (seconds) column.
 """
 
+from __future__ import annotations
+
+import asyncio
+import re
 from dataclasses import dataclass, field
 from typing import (
     Any,
@@ -20,16 +22,18 @@ from typing import (
     TypeVar,
     cast,
 )
-import asyncio
-import re
 
 import polars as pl
 
 from qmtl.runtime.sdk.data_io import DataFetcher
 from qmtl.runtime.sdk.ohlcv_nodeid import (
     TIMEFRAME_SECONDS as _OHLCV_TIMEFRAME_SECONDS,
+)
+from qmtl.runtime.sdk.ohlcv_nodeid import (
     parse as _parse_ohlcv_node_id,
 )
+
+from .ccxt_rate_limiter import get_limiter
 
 
 @dataclass(slots=True)
@@ -224,10 +228,6 @@ def _build_rate_limit_key(
     if not rendered:
         return default_key, True
     return rendered, False
-
-
-from .ccxt_rate_limiter import get_limiter
-
 
 T = TypeVar("T")
 

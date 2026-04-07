@@ -5,7 +5,12 @@ from datetime import datetime, timedelta
 import pytest
 
 from qmtl.runtime.labeling.costs import FixedBpsCostModel
-from qmtl.runtime.labeling.schema import BarrierMode, BarrierSpec, HorizonSpec, LabelOutcome
+from qmtl.runtime.labeling.schema import (
+    BarrierMode,
+    BarrierSpec,
+    HorizonSpec,
+    LabelOutcome,
+)
 from qmtl.runtime.labeling.triple_barrier import (
     TripleBarrierEntry,
     TripleBarrierObservation,

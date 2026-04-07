@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 from collections import defaultdict
-from typing import Any, Callable, Iterable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Iterable
 
 from .node import StreamInput
 

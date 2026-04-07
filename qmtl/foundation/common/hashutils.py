@@ -1,9 +1,9 @@
-from __future__ import annotations
-
 """Common hashing utilities with graceful fallbacks."""
 
-from typing import Any, Callable, Final, cast
+from __future__ import annotations
+
 import hashlib
+from typing import Any, Callable, Final, cast
 
 _blake3: Callable[[bytes], Any] | None
 try:  # pragma: no cover - import guard exercised in fallback tests

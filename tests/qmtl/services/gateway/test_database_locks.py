@@ -1,6 +1,6 @@
 import pytest
 
-from qmtl.services.gateway.database import pg_try_advisory_lock, pg_advisory_unlock
+from qmtl.services.gateway.database import pg_advisory_unlock, pg_try_advisory_lock
 
 
 class FakeConn:

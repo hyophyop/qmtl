@@ -97,8 +97,6 @@ async def test_history_service_with_provider_and_strict(monkeypatch):
 
     strategy = ProviderStrategy()
     strategy.setup()
-    node = strategy.nodes[0]
-
     service = HistoryWarmupService()
     service.hydrate_snapshots = lambda s: None  # type: ignore[assignment]
     monkeypatch.setattr("qmtl.runtime.sdk.runtime.FAIL_ON_HISTORY_GAP", True, raising=False)

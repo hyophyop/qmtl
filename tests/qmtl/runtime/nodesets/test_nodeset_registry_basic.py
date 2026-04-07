@@ -1,8 +1,8 @@
 import pytest
 
-from qmtl.runtime.sdk import Node, StreamInput
 from qmtl.runtime.nodesets import registry as registry_module
-from qmtl.runtime.nodesets.registry import make, list_registered
+from qmtl.runtime.nodesets.registry import list_registered, make
+from qmtl.runtime.sdk import Node, StreamInput
 
 
 def test_nodeset_registry_has_ccxt_spot():

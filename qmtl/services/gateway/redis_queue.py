@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import inspect
+import logging
 from typing import Any, Awaitable, Callable, Optional
 
-import logging
 import redis.asyncio as redis
 
 

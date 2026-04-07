@@ -8,6 +8,7 @@ client-side mode flag.
 from __future__ import annotations
 
 import argparse
+
 import polars as pl
 
 from qmtl.runtime.sdk import Runner, Strategy

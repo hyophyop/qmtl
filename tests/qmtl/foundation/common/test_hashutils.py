@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import importlib
 import hashlib
+import importlib
 
 import pytest
 

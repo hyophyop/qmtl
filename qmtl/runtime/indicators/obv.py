@@ -1,7 +1,7 @@
 """On-Balance Volume indicator."""
 
-from qmtl.runtime.sdk.node import Node
 from qmtl.runtime.sdk.cache_view import CacheView
+from qmtl.runtime.sdk.node import Node
 
 
 def obv(close: Node, volume: Node, *, name: str | None = None, period: int | None = None) -> Node:

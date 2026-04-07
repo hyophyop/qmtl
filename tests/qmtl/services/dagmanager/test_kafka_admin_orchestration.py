@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+
 import pytest
 
 from qmtl.services.dagmanager.kafka_admin import (

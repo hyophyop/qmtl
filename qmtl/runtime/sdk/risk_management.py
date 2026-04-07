@@ -10,12 +10,14 @@ from .risk import (
     PositionInfo,
     RiskConfig,
     RiskViolation,
-    RiskViolationType,
     VolatilityControl,
     aggregate_portfolios,
     evaluate_concentration,
     evaluate_leverage,
     evaluate_position_size,
+)
+from .risk import (
+    RiskViolationType as RiskViolationType,
 )
 
 

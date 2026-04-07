@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal, TypedDict, NotRequired
+from typing import Literal, NotRequired, TypedDict
 
 
 class OrderIntent(TypedDict, total=False):

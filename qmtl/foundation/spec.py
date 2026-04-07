@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Architecture spec version map used for design-drift checks.
 
 Each key corresponds to a document under
@@ -7,6 +5,8 @@ Each key corresponds to a document under
 the value is the expected ``spec_version`` declared in that document's YAML
 front-matter.
 """
+
+from __future__ import annotations
 
 ARCH_SPEC_VERSIONS: dict[str, str] = {
     # Keep in sync with docs/ko/architecture/architecture.md front-matter

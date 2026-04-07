@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Async wrapper for invoking DAG Manager diff operations."""
+
+from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass

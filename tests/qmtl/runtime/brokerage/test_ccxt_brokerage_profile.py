@@ -47,8 +47,8 @@ def test_symbol_specific_fees_take_precedence(monkeypatch):
     }
     _install_ccxt_stub(markets=markets, trading_fee=(0.01, 0.02))
 
-    from qmtl.runtime.brokerage.ccxt_profile import make_ccxt_brokerage
     import qmtl.runtime.brokerage.ccxt_profile as cp
+    from qmtl.runtime.brokerage.ccxt_profile import make_ccxt_brokerage
     cp._FEE_CACHE.clear()
 
     model = make_ccxt_brokerage(
@@ -65,8 +65,8 @@ def test_symbol_specific_fees_take_precedence(monkeypatch):
 def test_exchange_level_fees_used_when_no_markets():
     sys.modules.pop("ccxt", None)
     _install_ccxt_stub(markets={}, trading_fee=(0.005, 0.007))
-    from qmtl.runtime.brokerage.ccxt_profile import make_ccxt_brokerage
     import qmtl.runtime.brokerage.ccxt_profile as cp
+    from qmtl.runtime.brokerage.ccxt_profile import make_ccxt_brokerage
     cp._FEE_CACHE.clear()
 
     model = make_ccxt_brokerage("binance", product="spot", detect_fees=True)
@@ -82,8 +82,8 @@ def test_defaults_used_when_ccxt_absent_or_detection_disabled(monkeypatch):
     # Ensure ccxt is not importable
     sys.modules.pop("ccxt", None)
 
-    from qmtl.runtime.brokerage.ccxt_profile import make_ccxt_brokerage
     import qmtl.runtime.brokerage.ccxt_profile as cp
+    from qmtl.runtime.brokerage.ccxt_profile import make_ccxt_brokerage
     cp._FEE_CACHE.clear()
 
     # Detection disabled: use explicit defaults
@@ -112,8 +112,8 @@ def test_fee_detection_cached_load_markets_called_once():
     stub = _install_ccxt_stub(
         markets={"BTC/USDT": {"maker": 0.001, "taker": 0.002}}, trading_fee=(0.0, 0.0)
     )
-    from qmtl.runtime.brokerage.ccxt_profile import make_ccxt_brokerage
     import qmtl.runtime.brokerage.ccxt_profile as cp
+    from qmtl.runtime.brokerage.ccxt_profile import make_ccxt_brokerage
     cp._FEE_CACHE.clear()
 
     # First call

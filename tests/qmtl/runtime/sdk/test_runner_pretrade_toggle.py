@@ -18,30 +18,28 @@ class DummyService:
 
 
 def test_runner_can_disable_trade_submission():
-    importlib.reload(runner_module)
-    from qmtl.runtime.sdk.runner import Runner  # re-import after reload
+    runner = importlib.reload(runner_module).Runner
 
-    Runner.set_enable_trade_submission(False)
+    runner.set_enable_trade_submission(False)
     service = DummyService()
-    Runner.set_trade_execution_service(service)
+    runner.set_trade_execution_service(service)
 
     src = Node(name="sig", interval=1, period=1)
     pub = TradeOrderPublisherNode(src)
-    Runner.feed_queue_data(pub, src.node_id, 1, 0, {"action": "BUY", "size": 1.0})
+    runner.feed_queue_data(pub, src.node_id, 1, 0, {"action": "BUY", "size": 1.0})
     assert service.orders == []
 
-    Runner.set_enable_trade_submission(True)
-    Runner.feed_queue_data(pub, src.node_id, 1, 1, {"action": "SELL", "size": 2.0})
+    runner.set_enable_trade_submission(True)
+    runner.feed_queue_data(pub, src.node_id, 1, 1, {"action": "SELL", "size": 2.0})
     assert len(service.orders) == 1 and service.orders[0]["side"] == "SELL"
 
 
 def test_runner_blocks_trade_submission_in_shadow_domain() -> None:
-    importlib.reload(runner_module)
-    from qmtl.runtime.sdk.runner import Runner  # re-import after reload
+    runner = importlib.reload(runner_module).Runner
 
-    Runner.set_enable_trade_submission(True)
+    runner.set_enable_trade_submission(True)
     service = DummyService()
-    Runner.set_trade_execution_service(service)
+    runner.set_trade_execution_service(service)
 
     src = Node(name="sig", interval=1, period=1)
     pub = TradeOrderPublisherNode(src)
@@ -49,7 +47,7 @@ def test_runner_blocks_trade_submission_in_shadow_domain() -> None:
     src.apply_compute_context(context)
     pub.apply_compute_context(context)
 
-    result = Runner.feed_queue_data(
+    result = runner.feed_queue_data(
         pub, src.node_id, 1, 0, {"action": "BUY", "size": 1.0}
     )
 
@@ -66,4 +64,3 @@ def test_runner_blocks_trade_submission_in_shadow_domain() -> None:
     )
     assert shadow_key == pub.compute_key
     assert shadow_key != backtest_key
-

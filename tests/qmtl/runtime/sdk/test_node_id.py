@@ -1,4 +1,5 @@
-from qmtl.runtime.sdk import SourceNode, ProcessingNode, StreamInput, Strategy
+from qmtl.runtime.sdk import ProcessingNode, SourceNode, Strategy, StreamInput
+
 
 def test_node_id_generation():
     node = SourceNode(compute_fn=lambda x: x, name="n", interval="1s", period=1)

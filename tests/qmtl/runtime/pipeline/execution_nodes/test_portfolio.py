@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+from qmtl.runtime.pipeline.execution_nodes.portfolio import PortfolioNode
 from qmtl.runtime.sdk.node import Node
 from qmtl.runtime.sdk.portfolio import Portfolio
 from qmtl.runtime.sdk.runner import Runner
 from qmtl.runtime.sdk.watermark import clear_watermarks, get_watermark
-
-from qmtl.runtime.pipeline.execution_nodes.portfolio import PortfolioNode
 
 
 def test_portfolio_node_updates_positions_and_cash() -> None:

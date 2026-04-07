@@ -1,75 +1,78 @@
 from __future__ import annotations
 
-from typing import (
-    Protocol,
-    AsyncIterator,
-    Optional,
-    Callable,
-    Awaitable,
-    TypeVar,
-    Any,
-    Sequence,
-    Mapping,
-    MutableMapping,
-    Literal,
-    cast,
-)
-from types import MappingProxyType
-from abc import ABC
-from collections import defaultdict, deque
-from dataclasses import dataclass, replace
-from datetime import datetime, timezone
-from importlib import resources
-import inspect
-import polars as pl
-from enum import Enum
 import asyncio
+import inspect
+import json
 import logging
 import math
 import os
-import json
-from pathlib import Path
-import time
 import random
+import time
 from asyncio import TaskGroup
+from collections import defaultdict, deque
+from dataclasses import dataclass, replace
+from datetime import datetime, timezone
+from enum import Enum
+from importlib import resources
 from itertools import count
+from pathlib import Path
+from types import MappingProxyType
+from typing import (
+    Any,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Literal,
+    Mapping,
+    MutableMapping,
+    Optional,
+    Protocol,
+    Sequence,
+    TypeVar,
+    cast,
+)
 
+import polars as pl
 import yaml
 
-from qmtl.foundation.config import DeploymentProfile, SeamlessConfig
 from qmtl.foundation.common.compute_context import (
     normalize_context_value,
     resolve_execution_domain,
 )
+from qmtl.foundation.config import DeploymentProfile, SeamlessConfig
+from qmtl.foundation.schema import SchemaRegistryClient, SchemaValidationError
+from qmtl.foundation.seamless_health import (
+    format_coordinator_probe,
+    probe_coordinator_health,
+)
 from qmtl.runtime.sdk.configuration import (
-    get_runtime_config_path,
     get_runtime_config,
+    get_runtime_config_path,
 )
 
-from .history_coverage import (
-    merge_coverage as _merge_coverage,
-    compute_missing_ranges as _compute_missing_ranges,
-    WarmupWindow,
-)
-from .data_io import HistoryProvider
 from . import metrics as sdk_metrics
-from .cache_lru import LRUCache
-from .conformance import ConformancePipeline, ConformanceReport
+from .artifacts import ArtifactPublication, ArtifactRegistrar
+from .artifacts.fingerprint import compute_artifact_fingerprint
 from .backfill_coordinator import (
     BackfillCoordinator,
     DistributedBackfillCoordinator,
     InMemoryBackfillCoordinator,
     Lease,
 )
-from .sla import SLAPolicy, SLAViolationMode
+from .cache_lru import LRUCache
+from .conformance import ConformancePipeline, ConformanceReport
+from .data_io import HistoryProvider
 from .exceptions import SeamlessSLAExceeded
-from .artifacts import ArtifactRegistrar, ArtifactPublication
-from .artifacts.fingerprint import compute_artifact_fingerprint
-from qmtl.foundation.schema import SchemaRegistryClient, SchemaValidationError
-from qmtl.foundation.seamless_health import (
-    format_coordinator_probe,
-    probe_coordinator_health,
+from .history_coverage import (
+    WarmupWindow,
 )
+from .history_coverage import (
+    compute_missing_ranges as _compute_missing_ranges,
+)
+from .history_coverage import (
+    merge_coverage as _merge_coverage,
+)
+from .sla import SLAPolicy, SLAViolationMode
 
 logger = logging.getLogger(__name__)
 
@@ -771,9 +774,6 @@ class SeamlessDataProvider(HistoryProvider):
         publish_override: bool | None,
         early_override: bool | None,
     ) -> _FingerprintSettings:
-        mode_value = str(config.fingerprint_mode or "").strip().lower()
-        canonical_requested = mode_value == _FINGERPRINT_MODE_CANONICAL
-
         publish_override_value = _resolve_publish_override(config)
         if publish_override_value is None:
             publish_default = _coerce_bool(

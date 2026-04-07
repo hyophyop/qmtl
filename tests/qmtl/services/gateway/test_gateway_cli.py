@@ -3,6 +3,7 @@ import subprocess
 import sys
 
 import pytest
+
 from qmtl.foundation.config import DeploymentProfile
 from qmtl.services.gateway.config import GatewayConfig
 from qmtl.utils.i18n import set_language
@@ -81,6 +82,7 @@ def test_gateway_cli_config_file(monkeypatch, tmp_path):
     captured = {}
 
     from types import SimpleNamespace
+
     from qmtl.services.gateway import cli
 
     namespace_calls: list[bool] = []
@@ -137,6 +139,7 @@ def test_gateway_cli_prefers_uvicorn_server(monkeypatch, tmp_path):
     )
 
     from types import SimpleNamespace
+
     from qmtl.services.gateway import cli
 
     captured = {}
@@ -206,6 +209,7 @@ def test_gateway_cli_sets_exit_flag_when_cancelled(monkeypatch, tmp_path):
 
     from contextlib import suppress
     from types import SimpleNamespace
+
     from qmtl.services.gateway import cli
 
     captured = {}
@@ -284,6 +288,7 @@ def test_gateway_cli_redis_backend(monkeypatch, tmp_path):
     captured = {}
 
     from types import SimpleNamespace
+
     from qmtl.services.gateway import cli
 
     class DummyRedis:
@@ -396,6 +401,7 @@ def test_gateway_cli_no_sentinel_flag(monkeypatch, tmp_path):
     captured = {}
 
     from types import SimpleNamespace
+
     from qmtl.services.gateway import cli
 
     def fake_create_app(**kwargs):
@@ -427,6 +433,7 @@ def test_gateway_cli_allow_live_flag(monkeypatch, tmp_path):
     captured = {}
 
     from types import SimpleNamespace
+
     from qmtl.services.gateway import cli
 
     def fake_create_app(**kwargs):
@@ -457,6 +464,7 @@ def test_gateway_cli_db_connect_failure(monkeypatch, tmp_path):
     )
 
     from types import SimpleNamespace
+
     from qmtl.services.gateway import cli
 
     class DummyDB:
@@ -500,6 +508,7 @@ def test_gateway_cli_db_close_failure(monkeypatch, tmp_path):
     )
 
     from types import SimpleNamespace
+
     from qmtl.services.gateway import cli
 
     class DummyDB:

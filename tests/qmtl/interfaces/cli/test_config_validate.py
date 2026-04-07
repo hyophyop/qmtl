@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Dict
-import yaml
 
 import pytest
+import yaml
 
-from qmtl.interfaces.cli import config as config_cli
 from qmtl.foundation.config_validation import ValidationIssue
+from qmtl.interfaces.cli import config as config_cli
 
 
 @pytest.fixture(autouse=True)

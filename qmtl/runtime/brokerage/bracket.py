@@ -1,13 +1,13 @@
-from __future__ import annotations
-
 """Bracket order helper built atop :class:`OCOOrder`."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from typing import Optional, Tuple
 
-from .order import Order, Fill, Account
 from .brokerage_model import BrokerageModel
 from .oco import OCOOrder
+from .order import Account, Fill, Order
 
 
 @dataclass

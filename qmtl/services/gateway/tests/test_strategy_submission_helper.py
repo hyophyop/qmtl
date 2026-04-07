@@ -13,14 +13,12 @@ from qmtl.services.gateway.strategy_submission import (
     StrategySubmissionHelper,
 )
 from qmtl.services.gateway.submission.context_service import StrategyComputeContext
-
-from tests.qmtl.services.gateway.helpers import build_strategy_payload
 from tests.qmtl.services.gateway.fixtures import (
     DummyDagManager,
     DummyDatabase,
     DummyManager,
 )
-
+from tests.qmtl.services.gateway.helpers import build_strategy_payload
 
 pytestmark = pytest.mark.asyncio
 pytest_plugins = ("tests.qmtl.services.gateway.conftest",)

@@ -1,5 +1,11 @@
 import json
+
+import grpc
 import pytest
+
+from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
+from qmtl.services.dagmanager.cli import main
+from qmtl.services.dagmanager.kafka_admin import compute_key, partition_key
 
 # Suppress unraisable exceptions surfaced by pytest when background resources
 # (event loops/sockets) from third-party libs are cleaned up during tests.
@@ -8,10 +14,7 @@ pytestmark = [
     pytest.mark.filterwarnings('ignore:unclosed <socket.socket[^>]*>'),
     pytest.mark.filterwarnings('ignore:unclosed event loop'),
 ]
-from qmtl.services.dagmanager.cli import main
-from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
-import grpc
-from qmtl.services.dagmanager.kafka_admin import partition_key, compute_key
+
 
 class DummyChannel:
     async def close(self):
@@ -25,6 +28,7 @@ class DummyRpcError(grpc.RpcError):
 
     def __str__(self) -> str:  # pragma: no cover - simple string
         return self._msg
+
 
 def test_cli_diff_dry_run(tmp_path, capsys):
     dag = {
@@ -45,6 +49,7 @@ def test_cli_diff_dry_run(tmp_path, capsys):
     main(["diff", "--file", str(path), "--dry-run"])
     out = capsys.readouterr().out
     assert "n1" in out
+
 
 def test_cli_queue_stats(monkeypatch, capsys):
     captured = {}

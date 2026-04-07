@@ -6,12 +6,11 @@ and hazard rate calculations.
 
 from __future__ import annotations
 
-from typing import Iterable
 import math
+from typing import Iterable
 
-from qmtl.runtime.sdk.node import Node
 from qmtl.runtime.sdk.cache_view import CacheView
-
+from qmtl.runtime.sdk.node import Node
 
 # Source: docs/alphadocs/ideas/gap-amplification-transition-theory.md
 # Formula: sum_i (ask_i - bid_i) * (ask_vol_i + bid_vol_i) / sum_i (ask_vol_i + bid_vol_i)

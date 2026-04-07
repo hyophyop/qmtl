@@ -1,45 +1,48 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
-import time
-from typing import Optional, Any
+import json
 import logging
 import textwrap
+import time
+from datetime import datetime
+from pathlib import Path
 from types import MethodType
+from typing import TYPE_CHECKING, Any, Optional
 
 import polars as pl
 import pytest
-import json
-from pathlib import Path
 
+from qmtl.foundation.common.compute_context import ComputeContext
 from qmtl.foundation.common.metrics_factory import get_mapping_store
 from qmtl.foundation.config import DeploymentProfile, SeamlessConfig, UnifiedConfig
-from qmtl.runtime.sdk.seamless_data_provider import (
-    SeamlessDataProvider,
-    DataSource,
-    DataSourcePriority,
-    ConformancePipelineError,
-    SeamlessDomainPolicyError,
-    BackfillConfig,
-)
 from qmtl.runtime.io.seamless_provider import (
-    HistoryProviderDataSource,
     DataFetcherAutoBackfiller,
+    HistoryProviderDataSource,
 )
-from qmtl.foundation.common.compute_context import ComputeContext
 from qmtl.runtime.sdk import metrics as sdk_metrics
-from qmtl.runtime.sdk.conformance import ConformancePipeline
+from qmtl.runtime.sdk import seamless_data_provider as seamless_module
 from qmtl.runtime.sdk.artifacts import ArtifactPublication, FileSystemArtifactRegistrar
 from qmtl.runtime.sdk.artifacts.fingerprint import compute_artifact_fingerprint
-from qmtl.runtime.sdk import seamless_data_provider as seamless_module
-from qmtl.runtime.sdk.sla import SLAPolicy, SLAViolationMode
-from qmtl.runtime.sdk.exceptions import SeamlessSLAExceeded
 from qmtl.runtime.sdk.backfill_coordinator import InMemoryBackfillCoordinator, Lease
 from qmtl.runtime.sdk.configuration import (
     reset_runtime_config_cache,
     runtime_config_override,
 )
+from qmtl.runtime.sdk.conformance import ConformancePipeline
+from qmtl.runtime.sdk.exceptions import SeamlessSLAExceeded
+from qmtl.runtime.sdk.seamless_data_provider import (
+    BackfillConfig,
+    ConformancePipelineError,
+    DataSource,
+    DataSourcePriority,
+    SeamlessDataProvider,
+    SeamlessDomainPolicyError,
+)
+from qmtl.runtime.sdk.sla import SLAPolicy, SLAViolationMode
+
+if TYPE_CHECKING:
+    from qmtl.runtime.sdk.seamless_data_provider import _SLATracker
 
 
 def _store(metric):

@@ -4,7 +4,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from qmtl.services.gateway.api import create_app, Database
+from qmtl.services.gateway.api import Database, create_app
 from qmtl.services.gateway.models import StrategySubmit
 from tests.qmtl.runtime.sdk.factories import indicator_node_payload, node_ids_crc32
 

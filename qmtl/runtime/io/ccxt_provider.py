@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Convenience provider wiring CCXT fetcher with QuestDB backend.
 
 This module exposes a small helper class that composes
@@ -7,18 +5,21 @@ This module exposes a small helper class that composes
 ``CcxtOHLCVFetcher`` implementation.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Mapping
 
+from qmtl.runtime.io.historyprovider import QuestDBHistoryProvider
 from qmtl.runtime.sdk.auto_backfill import FetcherBackfillStrategy
 from qmtl.runtime.sdk.ohlcv_nodeid import build as _build_ohlcv_node_id
-from qmtl.runtime.io.historyprovider import QuestDBHistoryProvider
+
 from .ccxt_fetcher import (
     CcxtBackfillConfig,
     CcxtOHLCVFetcher,
-    RateLimiterConfig,
     CcxtTradesConfig,
     CcxtTradesFetcher,
+    RateLimiterConfig,
 )
 
 

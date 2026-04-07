@@ -1,12 +1,10 @@
 """Tests for Tick and Quote conformance rules."""
 
-import pytest
 import polars as pl
 
 from qmtl.runtime.sdk.conformance import (
-    TickConformanceRule,
     QuoteConformanceRule,
-    ConformanceReport,
+    TickConformanceRule,
 )
 
 

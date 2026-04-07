@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Service container used by :mod:`qmtl.runtime.sdk.runner`."""
+
+from __future__ import annotations
 
 from typing import Any, Callable
 

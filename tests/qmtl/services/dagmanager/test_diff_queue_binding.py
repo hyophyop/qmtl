@@ -13,8 +13,8 @@ from qmtl.services.dagmanager.diff_service import (
     NodeRecord,
     StreamSender,
 )
-from qmtl.services.dagmanager.topic import topic_name
 from qmtl.services.dagmanager.monitor import AckStatus
+from qmtl.services.dagmanager.topic import topic_name
 
 from .diff_fakes import FakeStream, TimeoutOnceStream
 from .diff_helpers import dag_node, make_diff_request, partition_with_context

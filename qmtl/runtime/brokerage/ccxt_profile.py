@@ -19,15 +19,14 @@ Notes
 
 from __future__ import annotations
 
-from typing import Any, Callable, Mapping
 import logging
+from typing import Any, Callable, Mapping
 
 from .brokerage_model import BrokerageModel
 from .buying_power import CashBuyingPowerModel
 from .fees import MakerTakerFeeModel
 from .fill_models import ImmediateFillModel
 from .slippage import NullSlippageModel, SpreadBasedSlippageModel
-
 
 _log = logging.getLogger(__name__)
 

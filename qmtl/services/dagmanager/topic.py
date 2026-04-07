@@ -1,11 +1,10 @@
-from __future__ import annotations
-
 """Utilities for Kafka topic naming and configuration."""
 
-from dataclasses import dataclass
-import logging
-from typing import Iterable, Mapping
+from __future__ import annotations
 
+import logging
+from dataclasses import dataclass
+from typing import Iterable, Mapping
 
 _NAMESPACE_ENABLED: bool = True
 

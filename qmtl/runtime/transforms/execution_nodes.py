@@ -12,15 +12,14 @@ Currently includes:
 
 from __future__ import annotations
 
-from typing import Mapping, Any
+from typing import Any, Mapping
 
+from qmtl.runtime.brokerage import Account, BrokerageModel
+from qmtl.runtime.pipeline.order_types import OrderRejection, SizedOrder
 from qmtl.runtime.sdk.cache_view import CacheView
 from qmtl.runtime.sdk.node import Node
 from qmtl.runtime.sdk.pretrade import Activation
-from qmtl.runtime.brokerage import BrokerageModel, Account
-from qmtl.runtime.sdk.portfolio import Portfolio
-from qmtl.runtime.transforms.execution_shared import run_pretrade_checks, apply_sizing
-from qmtl.runtime.pipeline.order_types import OrderRejection, SizedOrder
+from qmtl.runtime.transforms.execution_shared import apply_sizing, run_pretrade_checks
 
 
 class PreTradeGateNode(Node):

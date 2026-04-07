@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Simple tracking for backfill progress."""
+
+from __future__ import annotations
 
 from collections import defaultdict
 from typing import Iterable

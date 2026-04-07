@@ -1,11 +1,11 @@
-from __future__ import annotations
-
 """Helpers for publishing stabilized Seamless artifacts."""
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from __future__ import annotations
+
 import inspect
 import logging
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, MutableMapping, Sequence
 
 import polars as pl

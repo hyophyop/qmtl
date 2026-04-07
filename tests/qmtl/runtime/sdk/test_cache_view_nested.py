@@ -1,4 +1,3 @@
-import pytest
 
 from qmtl.runtime.sdk.cache_view import CacheView
 

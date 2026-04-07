@@ -2,14 +2,14 @@
 
 from pathlib import Path
 
+from qmtl.integrations.sr.dag import ExpressionDagSpec
 from qmtl.integrations.sr.pysr_adapter import (
+    REQUIRED_COLS,
+    _latest_hof,
+    _load_rows,
     load_pysr_hof_as_dags,
     load_pysr_hof_as_strategies,
-    _load_rows,
-    _latest_hof,
-    REQUIRED_COLS,
 )
-from qmtl.integrations.sr.dag import ExpressionDagSpec
 
 
 class TestLoadRows:

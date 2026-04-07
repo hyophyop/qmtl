@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field, StrictFloat, StrictInt, StrictStr
+
 ConfigDictType: Any
 try:
     ConfigDictType = importlib.import_module("pydantic").ConfigDict

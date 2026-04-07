@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Interfaces and key definitions for the Feature Artifact Plane."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Iterable, Protocol

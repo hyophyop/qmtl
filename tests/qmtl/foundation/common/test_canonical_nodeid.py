@@ -8,12 +8,11 @@ from blake3 import blake3
 from qmtl.foundation.common import (
     CanonicalNodeSpec,
     NodeValidationError,
-    crc32_of_list,
     compute_node_id,
+    crc32_of_list,
     enforce_node_identity,
 )
 from qmtl.foundation.common.nodeid import hash_blake3
-
 
 _DEF_BASE_NODE = {
     "node_type": "CanonicalNode",

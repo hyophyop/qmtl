@@ -12,11 +12,12 @@ ASCII DAG::
       \-->[momentum]
 """
 
-from pathlib import Path
 import argparse
+
+import polars as pl
+
 from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import Node, StreamInput
-import polars as pl
 
 
 class BranchingStrategy(Strategy):

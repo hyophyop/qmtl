@@ -4,16 +4,16 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from qmtl.foundation.common.compute_key import ComputeContext
 from qmtl.foundation.common.compute_context import resolve_execution_domain
+from qmtl.foundation.common.compute_key import ComputeContext
 from qmtl.services.dagmanager.topic import build_namespace, topic_namespace_enabled
 from qmtl.services.gateway.models import StrategyAck
 
+from . import metrics as sdk_metrics
 from .feature_store import FeatureArtifactPlane
 from .gateway_client import GatewayClient
 from .strategy import Strategy
 from .tag_manager_service import TagManagerService
-from . import metrics as sdk_metrics
 
 logger = logging.getLogger(__name__)
 

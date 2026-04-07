@@ -1,8 +1,8 @@
 import pytest
 
 from qmtl.foundation.common.metrics_factory import get_mapping_store
-from qmtl.services.dagmanager.models import DiffRequest
 from qmtl.services.dagmanager import metrics
+from qmtl.services.dagmanager.models import DiffRequest
 
 from .diff_helpers import build_dag, dag_node
 
@@ -12,7 +12,7 @@ def _queue_key(node_id: str) -> str:
 
     # ``DiffService`` uses ``partition_key`` with default interval/bucket values
     # when no explicit overrides are present on the node definition.
-    from qmtl.services.dagmanager.kafka_admin import partition_key, compute_key
+    from qmtl.services.dagmanager.kafka_admin import compute_key, partition_key
 
     ck = compute_key(node_id)
     return partition_key(node_id, None, None, compute_key=ck)

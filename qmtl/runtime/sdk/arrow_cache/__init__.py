@@ -1,8 +1,21 @@
 """Composable Arrow cache backend."""
 from __future__ import annotations
 
-from .backend import NodeCacheArrow
 from . import dependencies as _dependencies
+from .backend import NodeCacheArrow
+from .eviction import (
+    EvictionStrategy,
+    RayEvictionStrategy,
+    ThreadedEvictionStrategy,
+    create_default_eviction_strategy,
+)
+from .instrumentation import (
+    NOOP_INSTRUMENTATION,
+    CacheInstrumentation,
+    default_instrumentation,
+)
+from .slices import _Slice, _SliceView
+from .view import ArrowCacheView
 
 ARROW_AVAILABLE = _dependencies.ARROW_AVAILABLE
 RAY_AVAILABLE = _dependencies.RAY_AVAILABLE
@@ -18,15 +31,6 @@ def reload_arrow_cache() -> bool:
     result = _dependencies.reload()
     ARROW_CACHE_ENABLED = _dependencies.ARROW_CACHE_ENABLED
     return result
-from .eviction import (
-    EvictionStrategy,
-    RayEvictionStrategy,
-    ThreadedEvictionStrategy,
-    create_default_eviction_strategy,
-)
-from .instrumentation import CacheInstrumentation, NOOP_INSTRUMENTATION, default_instrumentation
-from .slices import _Slice, _SliceView
-from .view import ArrowCacheView
 
 __all__ = [
     "NodeCacheArrow",

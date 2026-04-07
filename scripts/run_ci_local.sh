@@ -54,6 +54,10 @@ if [[ "$INSTALL" -eq 1 ]]; then
   run_step "Install dependencies (dev)" uv pip install -e ".[dev]"
 fi
 
+run_step "Ruff lint (repo-safe subset)" uv run --no-project --with ruff ruff check .
+
+run_step "Dependency hygiene (deptry)" uv run --no-project --with deptry deptry qmtl
+
 run_step "Docs link check" uv run python scripts/check_docs_links.py
 
 run_step "Radon diff (CC/MI)" bash -lc '

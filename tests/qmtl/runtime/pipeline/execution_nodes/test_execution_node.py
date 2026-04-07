@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+from qmtl.runtime.pipeline.execution_nodes.execution import ExecutionNode
 from qmtl.runtime.sdk.execution_modeling import ExecutionFill
 from qmtl.runtime.sdk.node import Node
 from qmtl.runtime.sdk.runner import Runner
-
-from qmtl.runtime.pipeline.execution_nodes.execution import ExecutionNode
 
 
 class DummyExecModel:

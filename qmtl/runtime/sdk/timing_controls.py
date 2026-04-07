@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, time, timezone
-from typing import Dict, Optional, Tuple
 from dataclasses import dataclass
+from datetime import date, datetime, time, timezone
 from enum import Enum
+from typing import Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 

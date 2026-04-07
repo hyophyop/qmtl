@@ -1,7 +1,7 @@
 import pytest
 
 from qmtl.services.worldservice.blob_store import JsonBlobStore
-from qmtl.services.worldservice.risk_hub import RiskSignalHub, PortfolioSnapshot
+from qmtl.services.worldservice.risk_hub import PortfolioSnapshot, RiskSignalHub
 
 
 @pytest.mark.asyncio

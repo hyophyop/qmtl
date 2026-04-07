@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Schema-aware producer wrapper.
 
 Wraps a minimal :class:`Producer` and injects a `schema_id` envelope for data
@@ -11,10 +9,13 @@ This keeps JSON compatibility while allowing consumers to resolve and validate
 payloads via a registry.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
-from . import Producer
 from qmtl.foundation.schema.registry import SchemaRegistryClient
+
+from . import Producer
 
 
 class SchemaAwareProducer:

@@ -1,16 +1,16 @@
-import json
+import asyncio
 import base64
 import gc
+import json
+
 import pytest
 from fastapi.testclient import TestClient
-import asyncio
 
-from qmtl.services.gateway.api import create_app, Database
-from qmtl.services.gateway.dagmanager_client import DagManagerClient
+from qmtl.services.dagmanager.diff_service import Neo4jNodeRepository, StreamSender
 from qmtl.services.dagmanager.grpc_server import serve
-from qmtl.services.dagmanager.diff_service import StreamSender, Neo4jNodeRepository
-import grpc
 from qmtl.services.dagmanager.monitor import AckStatus
+from qmtl.services.gateway.api import Database, create_app
+from qmtl.services.gateway.dagmanager_client import DagManagerClient
 from tests.qmtl.runtime.sdk.factories import node_ids_crc32, tag_query_node_payload
 
 

@@ -14,15 +14,9 @@ import pytest
 
 from qmtl.services.worldservice.policy_engine import (
     Policy,
-    ValidationProfile,
-    SampleProfile,
-    PerformanceProfile,
-    RobustnessProfile,
-    RiskProfile,
     evaluate_policy,
     parse_policy,
 )
-
 
 # =============================================================================
 # STRATEGY SCENARIO FIXTURES
@@ -248,8 +242,8 @@ class TestBadStrategyScenarios:
             failed_rules = [r for r in rules.values() if r.status == "fail"]
             assert len(failed_rules) > 0, f"{strategy_id} should have at least one failing rule"
             for rule in failed_rules:
-                assert rule.reason, f"Failed rule should have a reason"
-                assert rule.reason_code, f"Failed rule should have a reason_code"
+                assert rule.reason, "Failed rule should have a reason"
+                assert rule.reason_code, "Failed rule should have a reason_code"
 
 
 # =============================================================================

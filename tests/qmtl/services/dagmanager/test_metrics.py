@@ -1,22 +1,21 @@
-from datetime import datetime, timedelta, UTC
 import logging
+from datetime import UTC, datetime, timedelta
 
+import httpx
 import pytest
 
+from qmtl.foundation.common.metrics_factory import get_mapping_store, get_metric_value
+from qmtl.services.dagmanager import metrics
 from qmtl.services.dagmanager.diff_service import (
-    DiffService,
     DiffRequest,
+    DiffService,
     NodeRepository,
     QueueManager,
     StreamSender,
 )
-from qmtl.services.dagmanager.topic import topic_name
 from qmtl.services.dagmanager.garbage_collector import GarbageCollector, QueueInfo
-import httpx
-import time
-from qmtl.foundation.common.metrics_factory import get_mapping_store, get_metric_value
-from qmtl.services.dagmanager import metrics
 from qmtl.services.dagmanager.monitor import AckStatus
+from qmtl.services.dagmanager.topic import topic_name
 
 
 class FakeRepo(NodeRepository):
@@ -206,7 +205,7 @@ def test_dagmanager_nodecache_metric_aggregates():
 
 def test_sdk_nodecache_metric_updates():
     from qmtl.runtime.sdk import metrics as sdk_metrics
-    from qmtl.runtime.sdk.node import StreamInput, ProcessingNode
+    from qmtl.runtime.sdk.node import ProcessingNode, StreamInput
     from qmtl.runtime.sdk.runner import Runner
 
     sdk_metrics.reset_metrics()

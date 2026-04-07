@@ -7,12 +7,10 @@ from decimal import Decimal
 import pytest
 
 from qmtl.runtime.sdk import Runner, Strategy, StrategyMetrics, SubmitResult
-from qmtl.services.worldservice.shared_schemas import ActivationEnvelope, DecisionEnvelope
-
 from qmtl.runtime.sdk.submit import (
     AutoReturnsConfig,
-    PreparedSubmitSession,
     PrecheckResult,
+    PreparedSubmitSession,
     ResolvedSubmitContext,
     WsEvalResult,
     _build_submit_result_from_validation,
@@ -24,6 +22,10 @@ from qmtl.runtime.sdk.submit import (
     submit_async,
 )
 from qmtl.runtime.sdk.validation_pipeline import ValidationStatus
+from qmtl.services.worldservice.shared_schemas import (
+    ActivationEnvelope,
+    DecisionEnvelope,
+)
 
 # Suppress noisy resource warnings from http client sockets/event loops in local tests
 pytestmark = [

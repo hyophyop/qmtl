@@ -5,15 +5,16 @@ from typing import Any, Callable, Iterable, Mapping
 import numpy as np
 import xarray as xr
 
+from qmtl.foundation.common.compute_key import DEFAULT_EXECUTION_DOMAIN
+
 from . import hash_utils as default_hash_utils
 from . import metrics as sdk_metrics
 from .backfill_state import BackfillState
 from .cache_backfill import BackfillMerger
-from .cache_context import ContextSwitchStrategy, ComputeContext
+from .cache_context import ComputeContext, ContextSwitchStrategy
 from .cache_reader import CacheWindowReader
 from .cache_ring_buffer import RingBuffer
 from .cache_view import CacheView
-from qmtl.foundation.common.compute_key import DEFAULT_EXECUTION_DOMAIN
 
 RingBufferFactory = Callable[[int], RingBuffer]
 ReaderFactory = Callable[[Mapping[tuple[str, int], RingBuffer], int], CacheWindowReader]

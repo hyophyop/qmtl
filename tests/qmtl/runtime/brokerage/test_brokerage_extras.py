@@ -1,4 +1,3 @@
-from datetime import datetime
 
 import pytest
 
@@ -6,12 +5,12 @@ from qmtl.runtime.brokerage import (
     Account,
     BrokerageModel,
     CashBuyingPowerModel,
+    MarketFillModel,
+    NullSlippageModel,
     Order,
     PerShareFeeModel,
-    NullSlippageModel,
-    MarketFillModel,
-    StaticShortableProvider,
     ShortableLot,
+    StaticShortableProvider,
     ibkr_equities_like_profile,
 )
 

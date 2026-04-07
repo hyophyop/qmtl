@@ -1,11 +1,11 @@
-from __future__ import annotations
-
 """Check Python import cycles against a recorded baseline.
 
 This script builds an import graph using grimp and detects strongly
 connected components (including self-loops). It fails if new cycles are
 introduced compared to the saved baseline.
 """
+
+from __future__ import annotations
 
 import argparse
 import json

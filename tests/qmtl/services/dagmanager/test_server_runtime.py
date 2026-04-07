@@ -6,8 +6,8 @@ import contextlib
 import pytest
 
 from qmtl.foundation.config import DeploymentProfile
-from qmtl.services.dagmanager.config import DagManagerConfig
 from qmtl.services.dagmanager import server
+from qmtl.services.dagmanager.config import DagManagerConfig
 
 
 class _StopEventServer:

@@ -15,7 +15,6 @@ from typing import Any
 
 from qmtl.foundation.common.hashutils import hash_bytes
 
-
 DEFAULT_REALIZED_RETURNS_MAX_POINTS_PER_SERIES = 200_000
 DEFAULT_REALIZED_RETURNS_MAX_POINTS_TOTAL = 1_000_000
 

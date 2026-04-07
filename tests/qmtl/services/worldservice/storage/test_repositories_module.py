@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import inspect
 
-from qmtl.services.worldservice.storage import audit, edge_overrides, normalization, repositories
+from qmtl.services.worldservice.storage import (
+    audit,
+    edge_overrides,
+    normalization,
+    repositories,
+)
 
 
 def test_repositories_module_re_exports_expected_symbols() -> None:

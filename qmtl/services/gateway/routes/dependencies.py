@@ -10,8 +10,8 @@ from qmtl.services.gateway.gateway_health import GatewayHealthCapabilities
 from qmtl.services.gateway.strategy_manager import StrategyManager
 from qmtl.services.gateway.strategy_submission import StrategySubmissionHelper
 from qmtl.services.gateway.submission import ComputeContextService, SubmissionPipeline
-from qmtl.services.gateway.ws import WebSocketHub
 from qmtl.services.gateway.world_client import WorldServiceClient
+from qmtl.services.gateway.ws import WebSocketHub
 
 
 class GatewayDependencyProvider:

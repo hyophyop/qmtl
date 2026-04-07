@@ -2,12 +2,24 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass, field
 import statistics
-from typing import Any, Dict, Iterable, Iterator, List, Literal, Mapping, Protocol, Sequence, Tuple
+from dataclasses import dataclass, field
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Literal,
+    Mapping,
+    Protocol,
+    Sequence,
+    Tuple,
+)
 
 import yaml
 from pydantic import BaseModel, Field
+
 from qmtl.foundation.common.hashutils import hash_bytes
 
 

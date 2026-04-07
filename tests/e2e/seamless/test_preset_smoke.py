@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 import polars as pl
 import pytest
 
 from qmtl.runtime.sdk import build_seamless_assembly
-from qmtl.runtime.sdk.seamless_data_provider import SeamlessDataProvider, DataSource, DataSourcePriority
+from qmtl.runtime.sdk.seamless_data_provider import (
+    DataSource,
+    DataSourcePriority,
+    SeamlessDataProvider,
+)
 
 
 class _StubStorage:
@@ -90,7 +93,7 @@ async def test_preset_builder_chaining_smoke(monkeypatch):
             {"name": "seamless.registrar.filesystem"},
         ]
     }
-    assembly = build_seamless_assembly(cfg)
+    build_seamless_assembly(cfg)
 
     # Use the assembled storage in a dummy seamless provider and exercise a fetch
     provider = _DummyProvider(_StorageSource(backend))

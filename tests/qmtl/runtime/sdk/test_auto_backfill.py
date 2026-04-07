@@ -2,12 +2,12 @@ import polars as pl
 import pytest
 
 from qmtl.foundation.common.metrics_factory import get_mapping_store
+from qmtl.runtime.sdk import metrics
 from qmtl.runtime.sdk.auto_backfill import (
     FetcherBackfillStrategy,
     LiveReplayBackfillStrategy,
 )
 from qmtl.runtime.sdk.history_provider_facade import AugmentedHistoryProvider
-from qmtl.runtime.sdk import metrics
 
 
 class InMemoryBackend:

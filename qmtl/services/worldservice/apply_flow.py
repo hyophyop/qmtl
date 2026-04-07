@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import logging
 from typing import Any, Dict, List, NoReturn
 
 from fastapi import HTTPException
@@ -13,11 +13,11 @@ from fastapi import HTTPException
 from qmtl.foundation.common.hashutils import hash_bytes
 from qmtl.services.observability import add_span_attributes, build_observability_fields
 
+from . import metrics as ws_metrics
 from .activation import ActivationEventPublisher
 from .controlbus_producer import ControlBusProducer
 from .decision import DecisionEvaluator
 from .edge_overrides import EdgeOverrideManager, EdgeOverridePlan
-from . import metrics as ws_metrics
 from .policy import GatingPolicy
 from .run_state import ApplyRunRegistry, ApplyRunState, ApplyStage
 from .schemas import ApplyAck, ApplyRequest

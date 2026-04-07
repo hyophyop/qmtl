@@ -17,15 +17,14 @@ from qmtl.services.gateway.models import StrategySubmit
 from qmtl.services.gateway.redis_client import InMemoryRedis
 from qmtl.services.gateway.strategy_manager import StrategyManager
 from qmtl.services.gateway.submission.context_service import (
-    StrategyComputeContext,
     ComputeContextService,
+    StrategyComputeContext,
 )
 from tests.qmtl.runtime.sdk.factories import canonical_node_payload
 
 
 def _redis_and_db() -> tuple[redis.Redis, PostgresDatabase]:
     return cast(redis.Redis, InMemoryRedis()), cast(PostgresDatabase, MemoryDatabase())
-from typing import cast
 
 
 @pytest.mark.asyncio

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
 
-from qmtl.runtime.sdk.node import Node
-from qmtl.runtime.sdk.cache_view import CacheView
 from qmtl.runtime.sdk import metrics as sdk_metrics
+from qmtl.runtime.sdk.cache_view import CacheView
+from qmtl.runtime.sdk.node import Node
 
 
 def publisher_node(signal: Any) -> Any:

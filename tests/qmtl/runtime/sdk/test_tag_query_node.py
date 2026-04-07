@@ -1,7 +1,7 @@
 import logging
 
 from qmtl.foundation.common.tagquery import split_tags
-from qmtl.runtime.sdk import TagQueryNode, MatchMode
+from qmtl.runtime.sdk import MatchMode, TagQueryNode
 
 
 def test_update_queues_warmup_and_drop():

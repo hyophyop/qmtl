@@ -3,9 +3,9 @@
 import pytest
 
 from qmtl.integrations.sr.expression_key import (
+    _parse_expression,
     compute_expression_key,
     normalize_ast,
-    _parse_expression,
 )
 
 

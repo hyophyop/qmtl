@@ -7,8 +7,6 @@ validators. It checks for the presence and basic types of ``symbol``,
 
 from __future__ import annotations
 
-from typing import Any
-
 
 def validate_fill_or_dlq(payload: dict) -> dict:
     try:

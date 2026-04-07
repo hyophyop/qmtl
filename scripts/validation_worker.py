@@ -7,8 +7,13 @@ import os
 
 import redis.asyncio as redis
 
-from qmtl.services.worldservice.extended_validation_worker import ExtendedValidationWorker
-from qmtl.services.worldservice.metrics import monotonic_seconds, record_extended_validation_run
+from qmtl.services.worldservice.extended_validation_worker import (
+    ExtendedValidationWorker,
+)
+from qmtl.services.worldservice.metrics import (
+    monotonic_seconds,
+    record_extended_validation_run,
+)
 from qmtl.services.worldservice.risk_hub import RiskSignalHub
 from qmtl.services.worldservice.storage import PersistentStorage
 from qmtl.services.worldservice.validation_controlbus_consumer import (

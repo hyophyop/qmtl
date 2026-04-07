@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 
+import qmtl.runtime.sdk.seamless_data_provider as seamless_module
 from qmtl.runtime.io import (
     CcxtBackfillConfig,
     CcxtOHLCVFetcher,
@@ -28,7 +29,6 @@ from qmtl.runtime.io import (
 )
 from qmtl.runtime.io.seamless_provider import EnhancedQuestDBProvider
 from qmtl.runtime.sdk.seamless_data_provider import DataAvailabilityStrategy
-import qmtl.runtime.sdk.seamless_data_provider as seamless_module
 
 
 @dataclass(slots=True)

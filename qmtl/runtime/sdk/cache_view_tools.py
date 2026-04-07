@@ -6,6 +6,8 @@ from typing import Any, Generic, Mapping, Protocol, Sequence, TypeVar
 
 import polars as pl
 
+from .protocols import NodeLike
+
 PayloadT = TypeVar("PayloadT")
 CacheEntry = tuple[int, PayloadT]
 
@@ -13,8 +15,6 @@ CacheEntry = tuple[int, PayloadT]
 class CacheViewLike(Protocol):
     def __getitem__(self, key: Any) -> Any:
         ...
-
-from .protocols import NodeLike
 
 
 @dataclass(frozen=True)

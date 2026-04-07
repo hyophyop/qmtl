@@ -15,6 +15,7 @@ ASCII DAG::
 """
 
 import argparse
+
 from qmtl.runtime.indicators import ema, rsi
 from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import StreamInput

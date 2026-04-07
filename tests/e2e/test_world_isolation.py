@@ -1,15 +1,23 @@
-import pytest
 from types import SimpleNamespace
-from fastapi import FastAPI
-import httpx
 
-from qmtl.foundation.common import compute_node_id
-from qmtl.services.gateway.dagmanager_client import DagManagerClient
+import httpx
+import pytest
+from fastapi import FastAPI
+
 import qmtl.services.dagmanager.topic as topic_module
-from qmtl.services.gateway.event_handlers import create_event_router
-from qmtl.services.gateway.event_descriptor import EventDescriptorConfig, validate_event_token
+from qmtl.foundation.common import compute_node_id
 from qmtl.runtime.sdk.activation_manager import ActivationManager
-from qmtl.runtime.sdk.metrics import node_processed_total, generate_latest, global_registry
+from qmtl.runtime.sdk.metrics import (
+    generate_latest,
+    global_registry,
+    node_processed_total,
+)
+from qmtl.services.gateway.dagmanager_client import DagManagerClient
+from qmtl.services.gateway.event_descriptor import (
+    EventDescriptorConfig,
+    validate_event_token,
+)
+from qmtl.services.gateway.event_handlers import create_event_router
 
 
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")

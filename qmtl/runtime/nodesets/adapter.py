@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Adapters and port descriptors for Node Sets.
 
 A Node Set adapter declares the black-box input/output ports of a Node Set and
@@ -8,8 +6,9 @@ Node Sets to be used like Nodes (accepting multiple upstreams) while preserving
 encapsulation of internals.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Callable, Iterable
 
 from qmtl.runtime.sdk.node import Node
 

@@ -1,18 +1,20 @@
-import httpx
-import time
 import os
+import time
+
+import httpx
+
 os.environ["OTEL_SDK_DISABLED"] = "true"
 import pytest
 
-from qmtl.services.gateway.api import create_app, Database
+from qmtl.services.gateway.api import Database, create_app
+from qmtl.services.gateway.config import GatewayEventsConfig
 from qmtl.services.gateway.event_descriptor import (
     EventDescriptorConfig,
-    validate_event_token,
     get_token_header,
-    sign_event_token,
     jwks,
+    sign_event_token,
+    validate_event_token,
 )
-from qmtl.services.gateway.config import GatewayEventsConfig
 
 
 class FakeDB(Database):

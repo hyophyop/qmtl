@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Helpers to hydrate Seamless builders from configuration mappings."""
+
+from __future__ import annotations
 
 from typing import Any, Mapping, Optional, Sequence
 

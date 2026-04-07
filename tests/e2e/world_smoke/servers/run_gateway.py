@@ -9,6 +9,7 @@ Environment:
 from __future__ import annotations
 
 import os
+
 import uvicorn
 
 from qmtl.services.gateway.api import create_app

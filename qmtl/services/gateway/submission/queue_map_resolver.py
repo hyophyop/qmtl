@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Fallback queue-map resolution using TagQuery lookups."""
+
+from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass

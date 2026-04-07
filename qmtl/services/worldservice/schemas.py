@@ -10,8 +10,8 @@ from .shared_schemas import (
     ActivationEnvelope,
     DecisionEnvelope,
     EvaluateRequest,
-    ExPostFailureRecord,
     EvaluationOverride,
+    ExPostFailureRecord,
     SeamlessArtifactPayload,
     StrategySeries,
 )

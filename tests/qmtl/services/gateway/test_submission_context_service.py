@@ -1,9 +1,10 @@
-import pytest
 from typing import cast
 
+import pytest
+
 from qmtl.foundation.common.compute_context import DowngradeReason
-from qmtl.services.gateway import metrics as gw_metrics
 from qmtl.foundation.common.compute_key import compute_compute_key
+from qmtl.services.gateway import metrics as gw_metrics
 from qmtl.services.gateway.models import StrategySubmit
 from qmtl.services.gateway.submission.context_service import (
     ComputeContextService,

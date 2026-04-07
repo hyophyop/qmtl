@@ -7,8 +7,17 @@ exchange-backed execution chain.
 
 from __future__ import annotations
 
-from qmtl.runtime.sdk import Strategy, StreamInput, Node
-from qmtl.runtime.nodesets.steps import pretrade, sizing, execution, fills, portfolio, risk, timing, compose
+from qmtl.runtime.nodesets.steps import (
+    compose,
+    execution,
+    fills,
+    portfolio,
+    pretrade,
+    risk,
+    sizing,
+    timing,
+)
+from qmtl.runtime.sdk import Node, Strategy, StreamInput
 
 
 class MultiSignalBlendStrategy(Strategy):

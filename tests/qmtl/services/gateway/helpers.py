@@ -4,7 +4,7 @@ import base64
 import json
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Awaitable, Callable, Coroutine, cast
+from typing import Any, AsyncIterator, Callable, Coroutine, cast
 
 import httpx
 
@@ -12,7 +12,6 @@ from qmtl.foundation.common import compute_node_id, crc32_of_list
 from qmtl.services.gateway.api import Database, create_app
 from qmtl.services.gateway.models import StrategySubmit
 from qmtl.services.gateway.world_client import WorldServiceClient
-
 
 Handler = (
     Callable[[httpx.Request], httpx.Response]

@@ -4,7 +4,10 @@ import pytest
 
 from qmtl.foundation.common.tagquery import MatchMode
 from qmtl.services.gateway import metrics as gw_metrics
-from qmtl.services.gateway.controlbus_consumer import ControlBusConsumer, ControlBusMessage
+from qmtl.services.gateway.controlbus_consumer import (
+    ControlBusConsumer,
+    ControlBusMessage,
+)
 from qmtl.services.gateway.ws.hub import WebSocketHub
 
 

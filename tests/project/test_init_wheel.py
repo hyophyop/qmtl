@@ -3,7 +3,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 # v2 CLI: 'qmtl init' (flat structure)
 PROJECT_INIT_TOKENS = ["init"]
 

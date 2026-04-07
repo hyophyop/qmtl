@@ -1,5 +1,6 @@
-import pytest
 from typing import Any, cast
+
+import pytest
 
 from qmtl.services.gateway.database import PostgresDatabase
 from qmtl.services.gateway.ownership import OwnershipManager

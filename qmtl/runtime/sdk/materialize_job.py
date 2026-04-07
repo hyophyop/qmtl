@@ -1,25 +1,23 @@
-from __future__ import annotations
-
 """Compute-only materialization/verification jobs built on SeamlessDataProvider."""
 
-from dataclasses import dataclass, replace, asdict
-from typing import Any, Callable, Mapping, MutableMapping
-import time
-import json
-import hashlib
-from pathlib import Path
-import asyncio
+from __future__ import annotations
 
+import asyncio
+import hashlib
+import json
+import time
+from dataclasses import asdict, dataclass, replace
+from pathlib import Path
+from typing import Any, Callable, Mapping, MutableMapping
 
 from qmtl.foundation.config import SeamlessConfig
 from qmtl.runtime.sdk.configuration import get_seamless_config
-from qmtl.runtime.sdk.seamless import SeamlessBuilder, build_assembly, hydrate_builder
+from qmtl.runtime.sdk.seamless import SeamlessBuilder, build_assembly
 from qmtl.runtime.sdk.seamless_data_provider import (
     BackfillConfig,
     SeamlessDataProvider,
     SeamlessFetchMetadata,
 )
-from qmtl.runtime.sdk.conformance import ConformanceReport
 
 
 @dataclass(slots=True)
@@ -139,7 +137,6 @@ class MaterializeSeamlessJob:
 
         metadata = result.metadata
         self._validate_contract(metadata)
-        report = provider.last_conformance_report or ConformanceReport()
         materialize_report = MaterializeReport(
             dataset_fingerprint=metadata.dataset_fingerprint,
             as_of=metadata.as_of,

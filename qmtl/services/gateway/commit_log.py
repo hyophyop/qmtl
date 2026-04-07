@@ -5,8 +5,8 @@ import logging
 import time
 from typing import Any, Iterable
 
-from qmtl.services.dagmanager.kafka_admin import partition_key
 from qmtl.runtime.sdk.snapshot import runtime_fingerprint
+from qmtl.services.dagmanager.kafka_admin import partition_key
 
 try:
     from aiokafka import AIOKafkaProducer

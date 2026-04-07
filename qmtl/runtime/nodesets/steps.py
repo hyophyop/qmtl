@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Small Steps DSL for composing Node Sets.
 
 Each step factory returns a callable that takes an upstream Node and returns a
@@ -14,14 +12,16 @@ recipes to request default fallbacks or resource-aware overrides without
 writing ad-hoc wiring lambdas.
 """
 
+from __future__ import annotations
+
 import inspect
 from dataclasses import dataclass, field
-from typing import Any, Callable, Literal, Mapping, Sequence, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Sequence
 
 from qmtl.runtime.sdk import Node
 
 if TYPE_CHECKING:
-    from qmtl.runtime.nodesets.base import NodeSetContext, NodeSet
+    from qmtl.runtime.nodesets.base import NodeSet, NodeSetContext
 
 
 Step = Callable[[Node], Node]

@@ -1,6 +1,10 @@
 import pytest
 
-from qmtl.services.worldservice.risk_hub import RiskSignalHub, PortfolioSnapshot, RiskSnapshotConflictError
+from qmtl.services.worldservice.risk_hub import (
+    PortfolioSnapshot,
+    RiskSignalHub,
+    RiskSnapshotConflictError,
+)
 
 
 @pytest.mark.asyncio

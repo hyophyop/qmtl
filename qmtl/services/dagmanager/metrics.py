@@ -1,28 +1,31 @@
-from __future__ import annotations
-
 """Prometheus metrics for DAG Manager."""
+
+from __future__ import annotations
 
 import argparse
 import sys
 import threading
-import time
 from collections import deque
 from typing import Deque, Sequence
 
-from prometheus_client import Gauge, Counter, generate_latest, start_http_server, REGISTRY as global_registry
+from prometheus_client import REGISTRY as global_registry
+from prometheus_client import Counter, Gauge, generate_latest, start_http_server
+
 from qmtl.foundation.common.metrics_factory import (
+    get_mapping_store,
     get_or_create_counter,
     get_or_create_gauge,
-    get_mapping_store,
-    get_metric_value,
-    increment_mapping_store,
     set_test_value,
 )
 from qmtl.foundation.common.metrics_shared import (
-    get_nodecache_resident_bytes,
-    observe_nodecache_resident_bytes as _observe_nodecache_resident_bytes,
     clear_nodecache_resident_bytes as _clear_nodecache_resident_bytes,
+)
+from qmtl.foundation.common.metrics_shared import (
     get_cross_context_cache_hit_counter,
+    get_nodecache_resident_bytes,
+)
+from qmtl.foundation.common.metrics_shared import (
+    observe_nodecache_resident_bytes as _observe_nodecache_resident_bytes,
 )
 from qmtl.utils.i18n import _, set_language
 

@@ -13,10 +13,11 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 from dataclasses import asdict
+from pathlib import Path
 
 from qmtl.integrations.sr.pysr_adapter import load_pysr_hof_as_dags
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()

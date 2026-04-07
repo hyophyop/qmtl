@@ -20,19 +20,24 @@ import logging
 import numbers
 import os
 import uuid
-from decimal import Decimal
-from threading import Thread
 from dataclasses import dataclass, field
 from math import isfinite
+from threading import Thread
 from typing import TYPE_CHECKING, Any, Coroutine, Sequence, SupportsFloat
 
 import httpx
 
 if TYPE_CHECKING:
-    from .strategy import Strategy
+    from qmtl.foundation.common.compute_key import ComputeContext
+
     from .gateway_client import GatewayClient
     from .services import RunnerServices
-    from qmtl.foundation.common.compute_key import ComputeContext
+    from .strategy import Strategy
+
+from qmtl.services.worldservice.shared_schemas import (
+    ActivationEnvelope,
+    DecisionEnvelope,
+)
 
 from .services import get_global_services
 from .world_data import (
@@ -41,7 +46,6 @@ from .world_data import (
     build_provider_binding,
     resolve_world_data_selection,
 )
-from qmtl.services.worldservice.shared_schemas import ActivationEnvelope, DecisionEnvelope
 
 logger = logging.getLogger(__name__)
 

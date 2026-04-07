@@ -1,13 +1,16 @@
-import json
 import hashlib
 import hmac
+import json
 import time
 
 import httpx
 import pytest
 
-from qmtl.services.gateway.api import create_app, Database
-from qmtl.services.gateway.event_descriptor import EventDescriptorConfig, sign_event_token
+from qmtl.services.gateway.api import Database, create_app
+from qmtl.services.gateway.event_descriptor import (
+    EventDescriptorConfig,
+    sign_event_token,
+)
 
 
 class FakeDB(Database):

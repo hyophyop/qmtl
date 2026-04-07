@@ -1,4 +1,3 @@
-import pytest
 
 from qmtl.foundation.common.compute_context import (
     ComputeContext,

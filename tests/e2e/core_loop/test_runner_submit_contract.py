@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from qmtl.runtime.sdk import Runner
+
 from .stack import CoreLoopStackHandle, InProcessCoreLoopStack
 from .worlds.core_loop_demo_strategy import CoreLoopDemoStrategy
 

@@ -1,10 +1,16 @@
-from __future__ import annotations
-
 """Typed order payload contracts shared across execution nodes."""
 
-from typing import Literal, Mapping, MutableMapping, TypedDict, cast
-from typing import NotRequired
-from typing_extensions import Required
+from __future__ import annotations
+
+from typing import (
+    Literal,
+    Mapping,
+    MutableMapping,
+    NotRequired,
+    Required,
+    TypedDict,
+    cast,
+)
 
 from qmtl.runtime.brokerage import OrderType, TimeInForce
 

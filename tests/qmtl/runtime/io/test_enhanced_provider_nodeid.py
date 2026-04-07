@@ -135,7 +135,7 @@ async def test_enhanced_provider_settings_apply_policies(monkeypatch):
     assert recorded_calls[-1]["publish_fingerprint"] is True
     assert recorded_calls[-1]["early_fingerprint"] is False
 
-    provider_override = EnhancedQuestDBProvider(
+    EnhancedQuestDBProvider(
         "memory://",
         settings=settings,
         publish_fingerprint=False,

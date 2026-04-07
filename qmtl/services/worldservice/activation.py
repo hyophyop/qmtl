@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, Sequence
 
 from qmtl.foundation.common.hashutils import hash_bytes
 from qmtl.services.observability import add_span_attributes, build_observability_fields
 
 from .controlbus_producer import ControlBusProducer
+from .risk_hub import PortfolioSnapshot, RiskSignalHub
 from .run_state import ApplyRunState
 from .storage import Storage
-from .risk_hub import PortfolioSnapshot, RiskSignalHub
 
 logger = logging.getLogger(__name__)
 

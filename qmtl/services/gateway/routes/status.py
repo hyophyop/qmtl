@@ -10,6 +10,8 @@ from qmtl.services.gateway.dagmanager_client import DagManagerClient
 from qmtl.services.gateway.degradation import DegradationManager
 from qmtl.services.gateway.gateway_health import (
     GatewayHealthCapabilities,
+)
+from qmtl.services.gateway.gateway_health import (
     get_health as gateway_health,
 )
 from qmtl.services.gateway.world_client import WorldServiceClient

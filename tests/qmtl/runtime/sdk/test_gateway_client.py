@@ -2,9 +2,9 @@ import httpx
 import pytest
 
 from qmtl.foundation.common import AsyncCircuitBreaker
-from qmtl.services.gateway.models import StrategyAck
 from qmtl.runtime.sdk.gateway_client import GatewayClient
-from qmtl.services.dagmanager.kafka_admin import partition_key, compute_key
+from qmtl.services.dagmanager.kafka_admin import compute_key, partition_key
+from qmtl.services.gateway.models import StrategyAck
 
 
 class FailingClient:

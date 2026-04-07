@@ -1,9 +1,8 @@
 import asyncio
 from typing import Any, cast
 
-import redis.asyncio as redis
-
 import pytest
+import redis.asyncio as redis
 
 from qmtl.services.gateway import api
 from qmtl.services.gateway.commit_log_consumer import CommitLogConsumer

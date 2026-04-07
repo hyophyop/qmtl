@@ -1,7 +1,7 @@
 import polars as pl
 import pytest
 
-from qmtl.runtime.sdk import SourceNode, NodeValidationError
+from qmtl.runtime.sdk import NodeValidationError, SourceNode
 
 
 def test_schema_violation_fail_mode():

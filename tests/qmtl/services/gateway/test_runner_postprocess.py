@@ -7,7 +7,6 @@ import pytest
 from qmtl.runtime.sdk.node import Node
 from qmtl.runtime.sdk.runner import Runner
 from qmtl.runtime.sdk.strategy import Strategy
-
 from tests.qmtl.services.service_doubles import (
     NullFeaturePlane,
     SpyHistoryService,

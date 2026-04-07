@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import importlib.resources as resources
 from dataclasses import dataclass, field
 from pathlib import Path
-import importlib.resources as resources
 from typing import Any, Dict
 
 from .registry import SchemaRegistryClient

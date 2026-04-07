@@ -1,8 +1,8 @@
 """Combined extensions strategy example - QMTL v2.0."""
 
-from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.generators import GarchInput
 from qmtl.runtime.indicators import ema
+from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.transforms import rate_of_change
 
 

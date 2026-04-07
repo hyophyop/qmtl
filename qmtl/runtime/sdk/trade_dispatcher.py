@@ -5,7 +5,6 @@ from typing import Any
 
 from cachetools import TTLCache
 
-from .http import HttpPoster
 from .dispatch_pipeline import (
     ActivationGateStep,
     CustomServiceDispatchStep,
@@ -16,6 +15,7 @@ from .dispatch_pipeline import (
     KafkaSubmitStep,
     PayloadValidationStep,
 )
+from .http import HttpPoster
 
 logger = logging.getLogger(__name__)
 

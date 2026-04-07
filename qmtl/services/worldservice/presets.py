@@ -7,12 +7,19 @@ unified preset definitions in qmtl.foundation.common.presets.
 from __future__ import annotations
 
 from qmtl.foundation.common.presets import (
-    PolicyPreset,
     PresetPolicy,
+)
+from qmtl.foundation.common.presets import (
     get_preset as _get_preset,
 )
 
-from .policy_engine import CorrelationRule, HysteresisRule, Policy, ThresholdRule, TopKRule
+from .policy_engine import (
+    CorrelationRule,
+    HysteresisRule,
+    Policy,
+    ThresholdRule,
+    TopKRule,
+)
 
 
 def _preset_to_policy(preset: PresetPolicy) -> Policy:

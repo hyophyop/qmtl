@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 import logging
 from contextlib import asynccontextmanager
-import contextlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Awaitable, Callable, cast
@@ -20,9 +20,11 @@ from qmtl.foundation.config import (
 )
 from qmtl.foundation.config_validation import validate_worldservice_config
 
-from .controlbus_producer import ControlBusProducer
-from .controlbus_consumer import RiskHubControlBusConsumer
+from .blob_store import build_blob_store
 from .config import WorldServiceServerConfig
+from .controlbus_consumer import RiskHubControlBusConsumer
+from .controlbus_producer import ControlBusProducer
+from .risk_hub import RiskSignalHub
 from .routers import (
     create_activation_router,
     create_allocations_router,
@@ -31,10 +33,10 @@ from .routers import (
     create_evaluation_runs_router,
     create_live_monitoring_router,
     create_observability_router,
-    create_promotions_router,
-    create_risk_hub_router,
     create_policies_router,
+    create_promotions_router,
     create_rebalancing_router,
+    create_risk_hub_router,
     create_validations_router,
     create_worlds_router,
 )
@@ -49,9 +51,6 @@ from .schemas import (
 )
 from .services import WorldService
 from .storage import PersistentStorage, Storage
-from .risk_hub import RiskSignalHub
-from .blob_store import build_blob_store
-
 
 logger = logging.getLogger(__name__)
 

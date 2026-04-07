@@ -5,10 +5,13 @@ import pytest
 from fastapi import FastAPI, WebSocketDisconnect
 from fastapi.testclient import TestClient
 
-from qmtl.services.gateway.event_handlers import create_event_router
-from qmtl.services.gateway.event_descriptor import EventDescriptorConfig, sign_event_token
-from qmtl.services.gateway.ws import WebSocketHub
 from qmtl.services.gateway import metrics as gw_metrics
+from qmtl.services.gateway.event_descriptor import (
+    EventDescriptorConfig,
+    sign_event_token,
+)
+from qmtl.services.gateway.event_handlers import create_event_router
+from qmtl.services.gateway.ws import WebSocketHub
 
 
 def _make_token(cfg: EventDescriptorConfig, *, world: str, strat: str, topics=None) -> str:

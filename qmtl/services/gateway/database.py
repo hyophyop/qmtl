@@ -6,8 +6,8 @@ import json
 import logging
 from typing import Optional
 
-import asyncpg
 import aiosqlite
+import asyncpg
 
 logger = logging.getLogger(__name__)
 

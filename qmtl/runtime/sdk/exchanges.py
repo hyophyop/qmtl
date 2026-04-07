@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Recommended CCXT exchange identifiers and helpers.
 
 This module provides a small enum of commonly used exchanges and a helper to
@@ -8,8 +6,10 @@ validate/normalize user-provided identifiers against ``ccxt.exchanges`` when
 without it, the helper returns the normalized string without validation.
 """
 
-from enum import Enum
+from __future__ import annotations
+
 import logging
+from enum import Enum
 
 _log = logging.getLogger(__name__)
 

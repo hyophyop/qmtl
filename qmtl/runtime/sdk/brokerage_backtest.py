@@ -16,15 +16,22 @@ from dataclasses import dataclass
 from typing import Optional
 
 from qmtl.runtime.brokerage import (
-    BrokerageModel,
-    Order as BrOrder,
-    OrderType as BrOrderType,
-    TimeInForce as BrTIF,
     Account,
+    BrokerageModel,
+)
+from qmtl.runtime.brokerage import (
+    Order as BrOrder,
+)
+from qmtl.runtime.brokerage import (
+    OrderType as BrOrderType,
+)
+from qmtl.runtime.brokerage import (
+    TimeInForce as BrTIF,
 )
 from qmtl.runtime.brokerage.fees import PercentFeeModel
-from qmtl.runtime.brokerage.slippage import NullSlippageModel
 from qmtl.runtime.brokerage.fill_models import UnifiedFillModel
+from qmtl.runtime.brokerage.slippage import NullSlippageModel
+
 from .execution_modeling import (
     ExecutionFill,
     MarketData,

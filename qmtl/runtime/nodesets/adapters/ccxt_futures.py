@@ -1,12 +1,12 @@
-from __future__ import annotations
-
 """CCXT futures Node Set adapter."""
 
-from qmtl.runtime.sdk import Node
-from qmtl.runtime.nodesets.base import NodeSet
+from __future__ import annotations
+
 from qmtl.runtime.nodesets.adapter import NodeSetAdapter, NodeSetDescriptor, PortSpec
+from qmtl.runtime.nodesets.base import NodeSet
 from qmtl.runtime.nodesets.options import NodeSetOptions
 from qmtl.runtime.nodesets.recipes import make_ccxt_futures_nodeset
+from qmtl.runtime.sdk import Node
 
 
 class CcxtFuturesAdapter(NodeSetAdapter):

@@ -7,15 +7,17 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
+from qmtl.services.worldservice.policy_engine import Policy
+
 from .models import (
     AllocationRun,
     AllocationState,
     EvaluationRunRecord,
     ValidationCacheEntry,
     WorldActivation,
-    WorldAuditLog,
 )
 from .repositories import (
+    _REASON_UNSET,
     ActivationRepository,
     AuditLogRepository,
     BindingRepository,
@@ -25,10 +27,7 @@ from .repositories import (
     ValidationCacheRepository,
     WorldNodeRepository,
     WorldRepository,
-    _REASON_UNSET,
-    _normalize_execution_domain,
 )
-from qmtl.services.worldservice.policy_engine import Policy
 
 
 class Storage:

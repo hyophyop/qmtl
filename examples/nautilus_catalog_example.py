@@ -26,19 +26,20 @@ Prerequisites:
 from __future__ import annotations
 
 import asyncio
-import polars as pl
 from pathlib import Path
+
+import polars as pl
 
 # QMTL imports
 from qmtl.runtime.io.nautilus_catalog_source import (
     NautilusCatalogDataSource,
     check_nautilus_available,
 )
-from qmtl.runtime.sdk.seamless_data_provider import (
-    SeamlessDataProvider,
-    DataAvailabilityStrategy,
-)
 from qmtl.runtime.sdk import Strategy, StreamInput
+from qmtl.runtime.sdk.seamless_data_provider import (
+    DataAvailabilityStrategy,
+    SeamlessDataProvider,
+)
 
 # Nautilus imports (only if installed)
 try:
@@ -281,7 +282,7 @@ async def example_timestamp_conversion():
     
     print(f"Nautilus timestamp (ns): {nautilus_ns}")
     print(f"QMTL timestamp (sec):    {qmtl_sec}")
-    print(f"Difference factor:       1,000,000,000")
+    print("Difference factor:       1,000,000,000")
     
     # Show in polars
     df_nautilus = pl.DataFrame([
@@ -310,7 +311,6 @@ async def example_nautilus_full_preset():
         print("nautilus_trader not installed. Skipping.")
         return
     
-    from qmtl.runtime.sdk.seamless import SeamlessBuilder
     
     print("nautilus.full preset combines:")
     print("  - Historical data: Nautilus DataCatalog (Parquet)")

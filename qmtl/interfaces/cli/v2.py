@@ -12,20 +12,18 @@ Legacy commands show deprecation messages with migration hints.
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 import textwrap
 from importlib import import_module
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as pkg_version
 from pathlib import Path
-from typing import Any, Callable, List, cast
+from typing import Callable, List, cast
 
-from importlib.metadata import PackageNotFoundError, version as pkg_version
-
-from qmtl.utils.i18n import set_language
-from qmtl.utils.i18n import _ as _t  # Alias to avoid shadowing in loops
 from qmtl.interfaces.scaffold import create_public_project
+from qmtl.utils.i18n import _ as _t  # Alias to avoid shadowing in loops
+from qmtl.utils.i18n import set_language
 
-from .http_client import gateway_url
 from .status import cmd_status
 from .submit import cmd_submit
 from .world import cmd_world

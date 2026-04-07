@@ -1,13 +1,13 @@
-from __future__ import annotations
-
 """Connection wrappers with automatic reconnection."""
 
+from __future__ import annotations
+
+import asyncio
 from typing import Any, Callable, Protocol, runtime_checkable
 
-from .circuit_breaker import AsyncCircuitBreaker
-import asyncio
-
 import redis.asyncio as redis
+
+from .circuit_breaker import AsyncCircuitBreaker
 
 
 @runtime_checkable

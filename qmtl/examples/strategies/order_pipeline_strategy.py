@@ -7,16 +7,16 @@ stream to gate long signals when the short-term price trend is down.
 
 from typing import Any, Mapping
 
+from qmtl.runtime.pipeline.execution_nodes import RouterNode
+from qmtl.runtime.pipeline.micro_batch import MicroBatchNode
 from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import Node, StreamInput
 from qmtl.runtime.sdk.trade_execution_service import TradeExecutionService
 from qmtl.runtime.transforms import (
-    alpha_history_node,
-    TradeSignalGeneratorNode,
     TradeOrderPublisherNode,
+    TradeSignalGeneratorNode,
+    alpha_history_node,
 )
-from qmtl.runtime.pipeline.execution_nodes import RouterNode
-from qmtl.runtime.pipeline.micro_batch import MicroBatchNode
 
 
 class OrderPipelineStrategy(Strategy):

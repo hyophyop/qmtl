@@ -1,13 +1,12 @@
-from __future__ import annotations
-
 """Garbage collection utilities for orphan Kafka queues."""
 
-from dataclasses import dataclass
-from datetime import datetime, timedelta, UTC
-from typing import Iterable, Protocol, Optional
+from __future__ import annotations
 
-from .metrics import orphan_queue_total
-from .metrics import gc_last_run_timestamp
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from typing import Iterable, Optional, Protocol
+
+from .metrics import gc_last_run_timestamp, orphan_queue_total
 
 
 @dataclass(frozen=True)

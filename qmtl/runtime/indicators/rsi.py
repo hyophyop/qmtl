@@ -1,7 +1,7 @@
 """Relative Strength Index indicator."""
 
-from qmtl.runtime.sdk.node import Node
 from qmtl.runtime.sdk.cache_view import CacheView
+from qmtl.runtime.sdk.node import Node
 
 
 def rsi(source: Node, period: int, *, name: str | None = None) -> Node:

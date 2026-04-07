@@ -8,6 +8,7 @@ import pytest
 
 from qmtl.runtime.sdk import Runner
 from qmtl.runtime.sdk.gateway_client import GatewayClient
+
 from .stack import CoreLoopStackHandle
 
 pytestmark = pytest.mark.contract

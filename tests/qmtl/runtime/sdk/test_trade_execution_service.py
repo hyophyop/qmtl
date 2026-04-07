@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import importlib
+
 import httpx
 import pytest
-
-import importlib
 
 import qmtl.runtime.sdk.runner as runner_module
 from qmtl.runtime.sdk import TradeExecutionService

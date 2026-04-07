@@ -1,20 +1,18 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from datetime import datetime
-from typing import Any, Dict, Callable, Awaitable
-
 import inspect
 import logging
-from fastapi import Request
+from collections.abc import Mapping, Sequence
+from datetime import datetime
+from typing import Any, Awaitable, Callable, Dict
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from qmtl.services.risk_hub_contract import normalize_and_validate_snapshot
 
 from .. import metrics as ws_metrics
-from ..risk_hub import PortfolioSnapshot, RiskSignalHub, RiskSnapshotConflictError
 from ..controlbus_producer import ControlBusProducer
+from ..risk_hub import PortfolioSnapshot, RiskSignalHub, RiskSnapshotConflictError
 
 logger = logging.getLogger(__name__)
 

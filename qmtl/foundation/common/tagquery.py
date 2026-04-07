@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Common helpers for TagQuery normalization shared by SDK and Gateway."""
+
+from __future__ import annotations
 
 from enum import Enum
 from typing import Any, Iterable, Mapping

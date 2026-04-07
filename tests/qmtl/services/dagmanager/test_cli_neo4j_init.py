@@ -1,7 +1,6 @@
-import pytest
 
-from qmtl.services.dagmanager import cli
 import qmtl.services.dagmanager.neo4j_init as neo4j_init
+from qmtl.services.dagmanager import cli
 
 
 class _FakeSession:

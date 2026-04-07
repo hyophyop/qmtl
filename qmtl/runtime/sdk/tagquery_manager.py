@@ -3,11 +3,12 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from pathlib import Path
-import zlib
-import httpx
-from typing import Dict, List, Tuple, Optional, TYPE_CHECKING, Any, Mapping, Iterable
 import tempfile
+import zlib
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Mapping, Tuple
+
+import httpx
 
 from qmtl.foundation.common.tagquery import (
     MatchMode,
@@ -18,8 +19,9 @@ from qmtl.foundation.common.tagquery import (
 from qmtl.runtime.sdk._message_registry import AsyncMessageRegistry
 from qmtl.runtime.sdk._normalizers import extract_message_payload
 
+from . import configuration, runtime
+from . import metrics as sdk_metrics
 from .ws_client import WebSocketClient
-from . import runtime, configuration, metrics as sdk_metrics
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .node import TagQueryNode

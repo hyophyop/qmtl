@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Utilities for idempotent Prometheus metric registration.
 
 This module centralizes the boilerplate required to fetch-or-create metrics
@@ -8,16 +6,20 @@ It also exposes a registry-aware reset helper so individual modules no longer
 need to manipulate Prometheus internals directly.
 """
 
+from __future__ import annotations
+
 from collections.abc import Callable, Iterable, MutableMapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Dict, Generic, Hashable, Tuple, TypeVar, cast
 
 from prometheus_client import (
+    REGISTRY as global_registry,
+)
+from prometheus_client import (
     CollectorRegistry,
     Counter,
     Gauge,
     Histogram,
-    REGISTRY as global_registry,
 )
 from prometheus_client.metrics import MetricWrapperBase
 
@@ -421,4 +423,3 @@ def get_metric_value(
                 continue
             return float(sample.value)
     return 0.0
-

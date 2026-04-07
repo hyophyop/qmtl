@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Callable
 
 from qmtl.runtime.sdk.node import Node
-from .base import NodeSetBuilder, NodeSet
+
+from .base import NodeSet, NodeSetBuilder
 
 
 def attach_minimal(builder: NodeSetBuilder, signal: Node, world_id: str) -> NodeSet:

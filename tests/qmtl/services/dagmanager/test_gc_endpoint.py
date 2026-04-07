@@ -1,8 +1,9 @@
+from datetime import UTC, datetime
+
 from fastapi.testclient import TestClient
 
 from qmtl.services.dagmanager.api import create_app
 from qmtl.services.dagmanager.garbage_collector import QueueInfo
-from datetime import datetime, UTC
 
 
 class FakeGC:

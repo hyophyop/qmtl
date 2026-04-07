@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
 import logging
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, List
 
 from qmtl.foundation.common.compute_context import (

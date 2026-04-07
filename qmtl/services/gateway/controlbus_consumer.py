@@ -9,15 +9,16 @@ from dataclasses import dataclass
 from typing import Any, Optional, Protocol
 
 from pydantic import ValidationError
-from qmtl.foundation.common.tagquery import MatchMode
 
+from qmtl.foundation.common.tagquery import MatchMode
 from qmtl.services.observability import add_span_attributes, build_observability_fields
-from .ws import WebSocketHub
+
 from . import metrics as gw_metrics
+from .controlbus_ack import ActivationAckProducer
 from .controlbus_codec import decode as decode_cb
 from .event_models import RebalancingPlannedData, SentinelWeightData
-from .controlbus_ack import ActivationAckProducer
 from .world_payloads import augment_activation_payload
+from .ws import WebSocketHub
 
 logger = logging.getLogger(__name__)
 

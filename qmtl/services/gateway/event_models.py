@@ -2,7 +2,6 @@ from __future__ import annotations
 
 # Source: docs/alphadocs/ideas/gpt5pro/ws_event_bridge.md
 # Priority: gpt5pro
-
 from datetime import datetime
 from typing import Any, Dict, Generic, List, Literal, Optional, TypeVar
 

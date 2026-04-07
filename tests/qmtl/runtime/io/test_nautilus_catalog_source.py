@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-import pytest
-import polars as pl
-from unittest.mock import Mock
 from decimal import Decimal
+from unittest.mock import Mock
+
+import polars as pl
+import pytest
 
 from qmtl.runtime.io.nautilus_catalog_source import (
-    NautilusCatalogDataSource,
-    parse_qmtl_node_id,
-    check_nautilus_available,
     NAUTILUS_AVAILABLE,
+    NautilusCatalogDataSource,
+    check_nautilus_available,
+    parse_qmtl_node_id,
 )
 from qmtl.runtime.sdk.seamless_data_provider import DataSourcePriority
 
@@ -404,10 +405,9 @@ class TestNautilusSeamlessPresets:
     
     def test_nautilus_presets_registered(self):
         """Verify nautilus presets are registered."""
-        from qmtl.runtime.sdk.seamless import SeamlessPresetRegistry
-        
         # Trigger registration by importing
         import qmtl.runtime.io.seamless_presets  # noqa: F401
+        from qmtl.runtime.sdk.seamless import SeamlessPresetRegistry
         
         # Check presets are available
         assert "nautilus.catalog" in SeamlessPresetRegistry._presets
@@ -512,12 +512,11 @@ class TestNautilusCoreLoopContract:
         Core Loop requirement: provider.preset in YAML must exist in 
         SeamlessPresetRegistry for auto-wiring to work.
         """
-        from qmtl.foundation.config import SeamlessConfig
-        from qmtl.runtime.sdk.seamless_data_provider import _load_presets_document
-        from qmtl.runtime.sdk.seamless import SeamlessPresetRegistry
-        
         # Ensure presets are registered
         import qmtl.runtime.io.seamless_presets  # noqa: F401
+        from qmtl.foundation.config import SeamlessConfig
+        from qmtl.runtime.sdk.seamless import SeamlessPresetRegistry
+        from qmtl.runtime.sdk.seamless_data_provider import _load_presets_document
         
         config = SeamlessConfig()
         presets_data, _ = _load_presets_document(config)
@@ -556,11 +555,10 @@ class TestNautilusCoreLoopContract:
         Core Loop requirement: Required config must fail fast,
         not silently produce incomplete provider.
         """
-        from qmtl.runtime.sdk.seamless import SeamlessPresetRegistry
         import qmtl.runtime.io.seamless_presets  # noqa: F401
-        
+
         # Should raise clear error about missing exchange_id
-        from qmtl.runtime.sdk.seamless import SeamlessBuilder
+        from qmtl.runtime.sdk.seamless import SeamlessBuilder, SeamlessPresetRegistry
         builder = SeamlessBuilder()
         
         # This will fail at nautilus import if not installed, or at exchange_id check

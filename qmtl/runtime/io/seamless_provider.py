@@ -1,31 +1,32 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
-from typing import Any, Callable, Optional
-from pathlib import Path
-import polars as pl
-import numpy as np
 import asyncio
 import logging
 import time
+from dataclasses import dataclass, field, replace
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
-from qmtl.runtime.sdk.data_io import HistoryProvider, DataFetcher
+import numpy as np
+import polars as pl
+
+from qmtl.runtime.io.artifact import ArtifactRegistrar as IOArtifactRegistrar
+from qmtl.runtime.sdk.conformance import ConformancePipeline
+from qmtl.runtime.sdk.data_io import DataFetcher, HistoryProvider
 from qmtl.runtime.sdk.ohlcv_nodeid import validate as _validate_ohlcv_node_id
+from qmtl.runtime.sdk.seamless.builder import SeamlessAssembly, SeamlessBuilder
 from qmtl.runtime.sdk.seamless_data_provider import (
-    SeamlessDataProvider,
+    DataAvailabilityStrategy,
     DataSource,
     DataSourcePriority,
-    DataAvailabilityStrategy,
     LiveDataFeed,
+    SeamlessDataProvider,
 )
-from qmtl.runtime.sdk.seamless.builder import SeamlessAssembly, SeamlessBuilder
-from qmtl.runtime.sdk.conformance import ConformancePipeline
-from qmtl.runtime.io.artifact import ArtifactRegistrar as IOArtifactRegistrar
 from qmtl.runtime.sdk.sla import SLAPolicy
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from qmtl.runtime.sdk.artifacts import ArtifactRegistrar, FileSystemArtifactRegistrar
+    from qmtl.runtime.io.historyprovider import QuestDBLoader
+    from qmtl.runtime.sdk.artifacts import ArtifactRegistrar
 
 logger = logging.getLogger(__name__)
 

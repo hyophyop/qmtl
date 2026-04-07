@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Mapping, Optional
+from typing import Dict, List, Mapping
 
-from .base import PositionSlice, SymbolDelta
 from ..schemas import OverlayConfigModel
+from .base import PositionSlice, SymbolDelta
 
 
 class OverlayConfigError(ValueError):

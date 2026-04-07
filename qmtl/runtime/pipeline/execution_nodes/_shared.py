@@ -5,10 +5,9 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Callable, Mapping, MutableMapping, Sequence, cast
 
-from qmtl.services.dagmanager.kafka_admin import compute_key
 from qmtl.runtime.sdk.node import CacheView, Node, ProcessingNode
 from qmtl.runtime.sdk.watermark import WatermarkGate
-
+from qmtl.services.dagmanager.kafka_admin import compute_key
 
 CacheEntry = tuple[int, Mapping[str, Any]]
 

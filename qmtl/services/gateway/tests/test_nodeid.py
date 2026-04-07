@@ -5,9 +5,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from qmtl.foundation.common import compute_node_id, crc32_of_list
-from qmtl.services.gateway.api import create_app, Database
-from qmtl.services.gateway.models import StrategySubmit
 from qmtl.services.gateway import metrics as gw_metrics
+from qmtl.services.gateway.api import Database, create_app
+from qmtl.services.gateway.models import StrategySubmit
 
 
 class FakeDB(Database):

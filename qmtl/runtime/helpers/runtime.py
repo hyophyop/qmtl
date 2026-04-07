@@ -7,7 +7,10 @@ from dataclasses import dataclass
 from typing import Any, Mapping, MutableMapping, Sequence
 
 from qmtl.foundation.common.compute_key import DEFAULT_EXECUTION_DOMAIN
-from qmtl.runtime.alpha_metrics import alpha_metric_key, default_alpha_performance_metrics
+from qmtl.runtime.alpha_metrics import (
+    alpha_metric_key,
+    default_alpha_performance_metrics,
+)
 from qmtl.runtime.sdk.execution_modeling import ExecutionFill
 
 _CANONICAL_MODES = {"backtest", "dryrun", "live", "shadow"}

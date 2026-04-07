@@ -1,9 +1,7 @@
-import pytest
-
 import logging
 
-from qmtl.services.dagmanager.topic import topic_name, get_config, TopicConfig
 from qmtl.services.dagmanager.kafka_admin import KafkaAdmin, TopicExistsError
+from qmtl.services.dagmanager.topic import TopicConfig, get_config, topic_name
 
 
 class FakeAdmin:

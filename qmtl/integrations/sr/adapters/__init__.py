@@ -8,7 +8,7 @@ Available Adapters:
 - operon: Adapter for Operon/pyoperon GP engine (requires pyoperon)
 """
 
-from .generic import GenericSRAdapter, GenericCandidate  # noqa: F401
+from .generic import GenericCandidate, GenericSRAdapter  # noqa: F401
 
 # Operon adapter is optional - only import if pyoperon is available
 try:

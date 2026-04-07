@@ -1,7 +1,7 @@
 """Ichimoku Cloud indicator (simplified)."""
 
-from qmtl.runtime.sdk.node import Node
 from qmtl.runtime.sdk.cache_view import CacheView
+from qmtl.runtime.sdk.node import Node
 
 
 def ichimoku_cloud(high: Node, low: Node, close: Node, *, name: str | None = None) -> Node:

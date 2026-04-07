@@ -298,7 +298,6 @@ class ValidationCacheRepository(AuditableRepository):
             metrics=dict(metrics),
             timestamp=ts,
         )
-        world_bucket = self.cache.setdefault(world_id, {})
         node_bucket = self._ensure_bucket(world_id, node_id)
         node_bucket[domain] = entry
         self._emit_audit(

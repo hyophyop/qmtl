@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 import importlib
 from dataclasses import dataclass, fields
-from typing import Any, Dict, Mapping, Sequence, TYPE_CHECKING, get_type_hints
+from typing import TYPE_CHECKING, Any, Dict, Mapping, Sequence, get_type_hints
 
 import httpx  # test compatibility: referenced via monkeypatch in tests
 
@@ -19,10 +19,6 @@ from qmtl.foundation.adapters import (
     open_asyncpg_connection,
 )
 from qmtl.foundation.common.health import probe_http_async
-from qmtl.foundation.seamless_health import (
-    format_coordinator_probe,
-    probe_coordinator_health_async,
-)
 from qmtl.foundation.config import (
     CONFIG_SECTION_NAMES,
     DeploymentProfile,
@@ -33,12 +29,16 @@ from qmtl.foundation.config_types import (
     _type_matches,
     _value_type_name,
 )
+from qmtl.foundation.seamless_health import (
+    format_coordinator_probe,
+    probe_coordinator_health_async,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
+    from qmtl.foundation.config import SeamlessConfig
     from qmtl.services.dagmanager.config import DagManagerConfig
     from qmtl.services.gateway.config import GatewayConfig
     from qmtl.services.worldservice.config import WorldServiceServerConfig
-    from qmtl.foundation.config import SeamlessConfig
 
 
 @dataclass(slots=True)

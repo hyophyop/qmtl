@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Asynchronous engine for running backfill jobs."""
+
+from __future__ import annotations
 
 import asyncio
 import logging
@@ -9,6 +9,7 @@ from typing import Any, cast
 import polars as pl
 
 from qmtl.runtime.sdk.data_io import HistoryProvider
+
 from . import metrics as sdk_metrics
 
 logger = logging.getLogger(__name__)

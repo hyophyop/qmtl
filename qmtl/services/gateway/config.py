@@ -1,8 +1,9 @@
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Any, Optional
+
 import logging
 import secrets
+from dataclasses import dataclass, field
+from typing import Any, Optional
 
 from .event_descriptor import EventDescriptorConfig
 from .gateway_health import GatewayHealthCapabilities

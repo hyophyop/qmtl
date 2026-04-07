@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Mapping, TYPE_CHECKING
+from typing import TYPE_CHECKING, Mapping
 
 import polars as pl
 

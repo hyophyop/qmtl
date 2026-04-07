@@ -7,7 +7,6 @@ import pytest
 from qmtl.foundation.common import CanonicalNodeSpec, compute_node_id
 from qmtl.foundation.common.nodespec import serialize_nodespec
 
-
 _NONDETERMINISTIC_ENV_SAMPLE = {
     "AS": "arm64-apple-darwin20.0.0-as",
     "RUST_LOG": "warn",

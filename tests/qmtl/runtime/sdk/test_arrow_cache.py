@@ -1,14 +1,13 @@
 import time
+
 import pytest
 
-from qmtl.foundation.common.metrics_factory import get_mapping_store
-from qmtl.runtime.sdk import arrow_cache
-from qmtl.runtime.sdk.cache_view import CacheView
-
-from qmtl.runtime.sdk import ProcessingNode, StreamInput
-from qmtl.runtime.sdk import metrics as sdk_metrics
 import qmtl.runtime.sdk.arrow_cache.eviction as eviction
+from qmtl.foundation.common.metrics_factory import get_mapping_store
+from qmtl.runtime.sdk import ProcessingNode, StreamInput, arrow_cache
 from qmtl.runtime.sdk import configuration as sdk_configuration
+from qmtl.runtime.sdk import metrics as sdk_metrics
+from qmtl.runtime.sdk.cache_view import CacheView
 
 pytestmark = [
     pytest.mark.filterwarnings('ignore::RuntimeWarning'),

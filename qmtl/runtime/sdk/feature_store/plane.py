@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """High level helpers for interacting with feature artifact storage."""
+
+from __future__ import annotations
 
 import logging
 import os
@@ -10,11 +10,11 @@ from dataclasses import replace
 from typing import Any, Iterable, Sequence
 
 from qmtl.foundation.common.compute_key import DEFAULT_EXECUTION_DOMAIN
+from qmtl.foundation.config import CacheConfig as _CacheConfig
 
+from .. import configuration
 from .base import FeatureArtifactKey, FeatureStoreBackend
 from .filesystem import FileSystemFeatureStore
-from .. import configuration
-from qmtl.foundation.config import CacheConfig as _CacheConfig
 
 logger = logging.getLogger(__name__)
 

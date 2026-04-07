@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Helpers to translate world rebalancing plans into order payloads.
 
 These helpers do not submit orders. They convert per-world ``RebalancePlan``
@@ -7,10 +5,11 @@ or strategy-split deltas into order-shaped dictionaries that existing
 publishing paths can consume.
 """
 
-from dataclasses import dataclass
-from typing import List, Mapping, Sequence, Tuple
+from __future__ import annotations
 
 import math
+from dataclasses import dataclass
+from typing import List, Mapping, Sequence, Tuple
 
 from qmtl.services.gateway.instrument_constraints import (
     ConstraintViolation,
@@ -19,7 +18,6 @@ from qmtl.services.gateway.instrument_constraints import (
     InstrumentConstraints,
     ResolvedInstrument,
 )
-
 from qmtl.services.worldservice.rebalancing import (
     ExecutionDelta,
     RebalancePlan,

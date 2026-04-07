@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from qmtl.runtime.sdk.node import ProcessingNode, Node
 from qmtl.runtime.sdk.cache_view import CacheView
+from qmtl.runtime.sdk.node import Node, ProcessingNode
 
 
 class MicroBatchNode(ProcessingNode):

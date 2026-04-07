@@ -1,10 +1,11 @@
-import pytest
-import httpx
 import json
 
-from qmtl.services.gateway.api import create_app, Database
-from qmtl.services.gateway.models import StrategySubmit
+import httpx
+import pytest
+
 from qmtl.foundation.common import crc32_of_list
+from qmtl.services.gateway.api import Database, create_app
+from qmtl.services.gateway.models import StrategySubmit
 
 
 class FakeDB(Database):

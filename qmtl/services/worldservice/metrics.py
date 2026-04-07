@@ -1,11 +1,11 @@
-from __future__ import annotations
-
 """Prometheus metrics for WorldService apply and allocation flows."""
 
+from __future__ import annotations
+
+import time
 from collections.abc import MutableMapping
 from datetime import datetime, timezone
-from typing import Any, Mapping, cast
-import time
+from typing import Any, cast
 
 from prometheus_client import REGISTRY as global_registry
 from prometheus_client import generate_latest
@@ -16,6 +16,8 @@ from qmtl.foundation.common.metrics_factory import (
     get_or_create_counter,
     get_or_create_gauge,
     get_or_create_histogram,
+)
+from qmtl.foundation.common.metrics_factory import (
     reset_metrics as reset_registered_metrics,
 )
 

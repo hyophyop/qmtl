@@ -1,14 +1,15 @@
 import os
+
 os.environ["OTEL_SDK_DISABLED"] = "true"
-import pytest
 import httpx
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from qmtl.services.gateway.event_handlers import create_event_router, normalize_topics
-from qmtl.services.gateway.event_descriptor import EventDescriptorConfig
-from qmtl.services.gateway.ws import WebSocketHub
 from qmtl.services.gateway.api import create_app
+from qmtl.services.gateway.event_descriptor import EventDescriptorConfig
+from qmtl.services.gateway.event_handlers import create_event_router, normalize_topics
+from qmtl.services.gateway.ws import WebSocketHub
 
 
 class NoServerHub(WebSocketHub):

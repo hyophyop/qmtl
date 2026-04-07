@@ -1,4 +1,3 @@
-import pytest
 
 from qmtl.runtime.sdk.node import Node, ProcessingNode
 from qmtl.runtime.sdk.watermark import (

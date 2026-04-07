@@ -1,10 +1,11 @@
 import asyncio
-import pytest
-import grpc
 
-from qmtl.services.gateway.dagmanager_client import DagManagerClient
-from qmtl.services.gateway import metrics
+import grpc
+import pytest
+
 from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
+from qmtl.services.gateway import metrics
+from qmtl.services.gateway.dagmanager_client import DagManagerClient
 
 
 @pytest.fixture(autouse=True)

@@ -4,11 +4,11 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from qmtl.foundation.common import AsyncCircuitBreaker
 from qmtl.foundation.proto import dagmanager_pb2 as _dagmanager_pb2
 from qmtl.foundation.proto import dagmanager_pb2_grpc as _dagmanager_pb2_grpc
-from qmtl.foundation.common import AsyncCircuitBreaker
 from qmtl.services.dagmanager.topic import (
     build_namespace,
     ensure_namespace,
@@ -17,10 +17,11 @@ from qmtl.services.dagmanager.topic import (
 )
 from qmtl.services.gateway.compute_context import resolve_execution_domain
 from qmtl.services.observability import add_span_attributes, build_observability_fields
+
 from . import metrics as gw_metrics
 
 if TYPE_CHECKING:
-    import grpc
+    pass
 
 dagmanager_pb2: Any = _dagmanager_pb2
 dagmanager_pb2_grpc: Any = _dagmanager_pb2_grpc

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Helpers for computing execution context dictionaries.
 
 The Runner previously bundled context normalization, merging, and
@@ -8,15 +6,17 @@ module extracts the pure functions so they can be imported and tested in
 isolation without initializing Runner singletons.
 """
 
+from __future__ import annotations
+
 from typing import Mapping, MutableMapping
 
+from qmtl.foundation.common.compute_context import evaluate_safe_mode
 from qmtl.runtime.helpers import (
     ExecutionContextResolution,
     apply_temporal_requirements,
     determine_execution_mode,
     normalize_clock_value,
 )
-from qmtl.foundation.common.compute_context import evaluate_safe_mode
 
 
 def normalize_default_context(

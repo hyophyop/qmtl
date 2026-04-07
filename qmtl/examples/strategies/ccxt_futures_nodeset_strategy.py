@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import os
 
-from qmtl.runtime.sdk import Strategy, StreamInput, Node
-from qmtl.runtime.transforms import alpha_history_node, TradeSignalGeneratorNode
 from qmtl.runtime.nodesets.recipes import make_ccxt_futures_nodeset
+from qmtl.runtime.sdk import Node, Strategy, StreamInput
+from qmtl.runtime.transforms import TradeSignalGeneratorNode, alpha_history_node
 
 
 class CcxtFuturesNodeSetStrategy(Strategy):

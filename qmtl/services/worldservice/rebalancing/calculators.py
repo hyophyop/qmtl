@@ -3,9 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Mapping, MutableMapping, Tuple
+from typing import Dict, Iterable, List, Mapping, MutableMapping, Protocol, Tuple
 
 from .base import PositionSlice, RebalancePlan, SymbolDelta
+
+
+class MultiWorldRebalanceContextLike(Protocol):
+    strategy_alloc_before_total: Mapping[str, Mapping[str, float]] | None
+    strategy_alloc_after_total: Mapping[str, Mapping[str, float]] | None
+    world_alloc_before: Mapping[str, float]
+    world_alloc_after: Mapping[str, float]
+    total_equity: float
+    min_trade_notional: float
 
 
 @dataclass(frozen=True)
@@ -19,7 +28,7 @@ class StrategyAllocationTargets:
 class StrategyAllocationCalculator:
     """Derive strategy allocation targets for a world within a rebalance."""
 
-    def __init__(self, ctx: "MultiWorldRebalanceContext") -> None:
+    def __init__(self, ctx: MultiWorldRebalanceContextLike) -> None:
         self._ctx = ctx
 
     def derive(self, world_id: str, positions: Iterable[PositionSlice]) -> StrategyAllocationTargets:
@@ -65,7 +74,7 @@ class StrategyAllocationCalculator:
 class GlobalDeltaAggregator:
     """Aggregate per-world deltas into a global cross-world view."""
 
-    def __init__(self, ctx: "MultiWorldRebalanceContext") -> None:
+    def __init__(self, ctx: MultiWorldRebalanceContextLike) -> None:
         self._ctx = ctx
         self._agg_notional: Dict[Tuple[str | None, str], float] = {}
         self._marks: Dict[Tuple[str | None, str], List[float]] = {}

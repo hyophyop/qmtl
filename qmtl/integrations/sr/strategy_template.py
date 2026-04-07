@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, replace
-from typing import Any, Callable, Mapping, Sequence, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence, cast
 
 from .expression_key import compute_expression_key
 
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 else:
     try:  # pragma: no cover - optional at runtime
         from qmtl.runtime.sdk import Strategy
-        from qmtl.runtime.sdk.node import StreamInput, ProcessingNode
+        from qmtl.runtime.sdk.node import ProcessingNode, StreamInput
 
         _RUNTIME_AVAILABLE = True
     except Exception:  # pragma: no cover - fallback for tests/docs

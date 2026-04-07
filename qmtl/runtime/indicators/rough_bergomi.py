@@ -1,8 +1,9 @@
 """Placeholder Rough Bergomi-based indicator."""
 
 import math
-from qmtl.runtime.sdk.node import Node
+
 from qmtl.runtime.sdk.cache_view import CacheView
+from qmtl.runtime.sdk.node import Node
 
 
 def rough_bergomi(source: Node, period: int, *, name: str | None = None) -> Node:

@@ -7,10 +7,14 @@ from typing import Tuple
 
 from .helpers import (
     apply_latency,
-    calculate_commission as commission_helper,
     calculate_market_impact,
-    calculate_slippage as slippage_helper,
     determine_fill_quantity,
+)
+from .helpers import (
+    calculate_commission as commission_helper,
+)
+from .helpers import (
+    calculate_slippage as slippage_helper,
 )
 from .models import (
     ExecutionFill,

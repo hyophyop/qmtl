@@ -2,7 +2,6 @@ from pathlib import Path
 
 from scripts.schema.audit_log import AuditEntry, update_audit_log
 
-
 SAMPLE_DOC = """---
 title: example
 ---

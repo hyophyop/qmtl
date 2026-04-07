@@ -1,8 +1,9 @@
-from __future__ import annotations
-
 """QuestDB-backed :class:`~qmtl.runtime.sdk.data_io.EventRecorder` implementation."""
 
+from __future__ import annotations
+
 from typing import Any
+
 import asyncpg
 
 from qmtl.runtime.sdk.data_io import EventRecorder
@@ -39,7 +40,7 @@ class QuestDBRecorder(EventRecorder):
             sql = (
                 f"INSERT INTO {self.table}(node_id, interval, ts"
                 + (f", {columns}" if columns else "")
-                + f") VALUES($1, $2, $3"
+                + ") VALUES($1, $2, $3"
                 + (f", {placeholders}" if placeholders else "")
                 + ")"
             )

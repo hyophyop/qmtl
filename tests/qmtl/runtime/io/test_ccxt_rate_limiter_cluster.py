@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import time
 import uuid
+
 import pytest
 
 from qmtl.foundation.common.metrics_factory import get_mapping_store
 from qmtl.foundation.config import ConnectorsConfig, UnifiedConfig
-
 from qmtl.runtime.io.ccxt_fetcher import (
     CcxtBackfillConfig,
     CcxtOHLCVFetcher,
@@ -17,7 +16,6 @@ from qmtl.runtime.io.ccxt_fetcher import (
 from qmtl.runtime.io.ccxt_rate_limiter import _RedisTokenBucketLimiter
 from qmtl.runtime.sdk import metrics as sdk_metrics
 from qmtl.runtime.sdk.configuration import runtime_config_override
-
 
 DEFAULT_REDIS_DSN = "redis://localhost:6379/0"
 

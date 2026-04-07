@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 __all__ = [
     "normalize_version",
     "normalize_execution_domain",

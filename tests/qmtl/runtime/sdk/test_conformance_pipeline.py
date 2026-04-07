@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 import math
+from datetime import datetime, timedelta, timezone
+
 import numpy as np
 import polars as pl
 from polars.testing import assert_frame_equal

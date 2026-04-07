@@ -1,16 +1,16 @@
 import polars as pl
-from polars.testing import assert_frame_equal
 import pytest
+from polars.testing import assert_frame_equal
 
 from qmtl.runtime.sdk import (
-    QuestDBHistoryProvider,
-    QuestDBRecorder,
-    HistoryProvider,
+    AugmentedHistoryProvider,
     EventRecorder,
     EventRecorderService,
     FetcherBackfillStrategy,
+    HistoryProvider,
+    QuestDBHistoryProvider,
+    QuestDBRecorder,
     StreamInput,
-    AugmentedHistoryProvider,
 )
 from tests.dummy_fetcher import DummyDataFetcher
 

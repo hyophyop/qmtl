@@ -4,38 +4,34 @@ import asyncio
 import json
 import logging
 import time
-from typing import Any, Mapping, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Mapping, cast
 
 from opentelemetry import trace
 
 from qmtl.foundation.common import AsyncCircuitBreaker
-from qmtl.foundation.common.compute_key import ComputeContext, DEFAULT_EXECUTION_DOMAIN
 from qmtl.foundation.common.tracing import setup_tracing
 
 from . import metrics as sdk_metrics
 from . import runtime
+from .evaluation_runs import EvaluationRunStatus, wait_for_evaluation_run
 from .execution_context import (
     normalize_default_context,
     resolve_execution_context,
 )
-from .evaluation_runs import EvaluationRunStatus, wait_for_evaluation_run
-from .optional_services import KafkaConsumerFactory, RayExecutor
+from .optional_services import KafkaConsumerFactory
 from .protocols import (
-    HistoryProviderProtocol,
     MetricWithValueProtocol,
     TagQueryManagerProtocol,
 )
 from .services import RunnerServices, get_global_services, set_global_services
 from .strategy import Strategy
-from .tag_manager_service import TagManagerService
 from .submit import AutoReturnsConfig, SubmitResult, submit, submit_async
 
 if TYPE_CHECKING:
     from .activation_manager import ActivationManager
-    from .gateway_client import GatewayClient
-    from .feature_store import FeatureArtifactPlane
     from .data_io import HistoryBackend, HistoryProvider
-    from .seamless_data_provider import SeamlessDataProvider
+    from .feature_store import FeatureArtifactPlane
+    from .gateway_client import GatewayClient
 else:  # pragma: no cover - runtime placeholders for type-only imports
     HistoryBackend = HistoryProvider = object
 
@@ -324,8 +320,9 @@ class Runner:
 
         return cls.services().feature_plane
 
-    @staticmethod
+    @classmethod
     def feed_queue_data(
+        cls,
         node,
         queue_id: str,
         interval: int,
@@ -348,7 +345,7 @@ class Runner:
         )
 
         result = None
-        services = Runner.services()
+        services = cls.services()
         plane = services.feature_plane
         if ready and node.execute and node.compute_fn:
             start = time.perf_counter()
@@ -362,7 +359,7 @@ class Runner:
                     )
                     if execution_result is not None:
                         result = execution_result
-                        Runner._postprocess_result(node, result)
+                        cls._postprocess_result(node, result)
             except Exception:
                 sdk_metrics.observe_node_process_failure(node.node_id)
                 raise
@@ -610,8 +607,8 @@ class Runner:
 
         cls.services().trade_dispatcher.dispatch(order)
 
-    @staticmethod
-    def _postprocess_result(node, result) -> None:
+    @classmethod
+    def _postprocess_result(cls, node, result) -> None:
         """Postprocess computation results from nodes."""
         if result is None:
             return
@@ -621,7 +618,7 @@ class Runner:
 
         # Check if this is an alpha performance node
         if "AlphaPerformance" in node_class_name:
-            Runner._handle_alpha_performance(result)
+            cls._handle_alpha_performance(result)
 
         # Check if this is a trade order publisher node
         if "TradeOrderPublisher" in node_class_name:
@@ -632,8 +629,8 @@ class Runner:
                 logger.info("Skipping trade dispatch in shadow execution_domain")
                 return
 
-            if Runner._enable_trade_submission:
-                Runner._handle_trade_order(result)
+            if cls._enable_trade_submission:
+                cls._handle_trade_order(result)
 
     # ----------------------------
     # Utilities for tests/ops

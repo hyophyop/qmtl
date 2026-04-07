@@ -1,4 +1,5 @@
 import logging
+
 import pytest
 
 from qmtl.services.gateway.redis_queue import RedisTaskQueue

@@ -1,8 +1,8 @@
 import pytest
 import redis.asyncio as redis
 
-from qmtl.services.gateway.fsm import StrategyFSM, FSMError, TransitionError
 from qmtl.services.gateway.database import Database
+from qmtl.services.gateway.fsm import FSMError, StrategyFSM, TransitionError
 
 
 class FakeDB(Database):

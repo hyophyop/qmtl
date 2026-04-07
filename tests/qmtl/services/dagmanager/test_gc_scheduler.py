@@ -1,4 +1,5 @@
 import asyncio
+
 import pytest
 
 from qmtl.services.dagmanager.gc_scheduler import GCScheduler

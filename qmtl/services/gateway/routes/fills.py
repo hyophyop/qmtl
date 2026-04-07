@@ -10,13 +10,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import ValidationError
 
+from qmtl.runtime.sdk.snapshot import runtime_fingerprint
 from qmtl.services.gateway import metrics as gw_metrics
 from qmtl.services.gateway.event_descriptor import validate_event_token
 from qmtl.services.gateway.models import ExecutionFillEvent
-from qmtl.runtime.sdk.snapshot import runtime_fingerprint
 
 from .dependencies import GatewayDependencyProvider
-
 
 logger = logging.getLogger(__name__)
 

@@ -1,21 +1,21 @@
 from __future__ import annotations
 
+import logging
 import uuid
+import zlib
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Optional, cast
 
-import logging
-import zlib
 import redis.asyncio as redis
 
-from .database import PostgresDatabase
-from .dagmanager_client import DagManagerClient
-from .ws import WebSocketHub
-from .fsm import StrategyFSM
-from .redis_queue import RedisTaskQueue
 from ..dagmanager.alerts import AlertManager
-from .ownership import KafkaOwnership, OwnershipManager
 from ..dagmanager.kafka_admin import partition_key
+from .dagmanager_client import DagManagerClient
+from .database import PostgresDatabase
+from .fsm import StrategyFSM
+from .ownership import KafkaOwnership, OwnershipManager
+from .redis_queue import RedisTaskQueue
+from .ws import WebSocketHub
 
 
 @dataclass

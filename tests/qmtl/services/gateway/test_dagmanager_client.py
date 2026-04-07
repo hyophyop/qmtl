@@ -1,15 +1,15 @@
 import json
-from typing import Any, cast
+from typing import Any
 
-import pytest
 import grpc
+import pytest
 
-from qmtl.services.gateway.dagmanager_client import DagManagerClient
 from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
 from qmtl.services.dagmanager.topic import (
     set_topic_namespace_enabled,
     topic_namespace_enabled,
 )
+from qmtl.services.gateway.dagmanager_client import DagManagerClient
 
 
 class FakeDiffStub:

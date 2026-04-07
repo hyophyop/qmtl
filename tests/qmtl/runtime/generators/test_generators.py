@@ -4,8 +4,8 @@ import pytest
 from qmtl.runtime.generators import GarchInput, HestonInput, RoughBergomiInput
 from qmtl.runtime.pipeline.pipeline import Pipeline
 from qmtl.runtime.sdk.node import Node
-from qmtl.runtime.transforms import identity_transform_node
 from qmtl.runtime.sdk.util import parse_interval
+from qmtl.runtime.transforms import identity_transform_node
 
 
 @pytest.mark.parametrize(

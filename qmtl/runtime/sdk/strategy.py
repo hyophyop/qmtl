@@ -1,6 +1,6 @@
-from .util import parse_interval, parse_period
 from . import arrow_cache
 from .node import NodeCache
+from .util import parse_interval, parse_period
 
 
 class Strategy:

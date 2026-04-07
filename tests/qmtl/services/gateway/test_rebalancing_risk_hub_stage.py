@@ -1,9 +1,11 @@
-import asyncio
 
 import pytest
 
 from qmtl.services.gateway.routes.rebalancing import _publish_risk_snapshots
-from qmtl.services.worldservice.schemas import MultiWorldRebalanceRequest, PositionSliceModel
+from qmtl.services.worldservice.schemas import (
+    MultiWorldRebalanceRequest,
+    PositionSliceModel,
+)
 
 
 class _StubRiskHubClient:

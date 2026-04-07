@@ -1,5 +1,7 @@
 import pytest
+
 from qmtl.foundation.common.nodespec import CanonicalNodeSpec
+
 
 def test_schema_compat_id_only():
     spec = CanonicalNodeSpec()

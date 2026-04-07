@@ -6,7 +6,7 @@ import contextlib
 import logging
 import sys
 from dataclasses import dataclass, field
-from typing import Mapping, Sequence
+from typing import TYPE_CHECKING, Mapping, Sequence
 
 import uvicorn
 
@@ -23,6 +23,24 @@ from qmtl.utils.i18n import _, set_language
 from .config import DagManagerConfig
 from .grpc_server import serve
 from .topic import set_topic_namespace_enabled
+
+if TYPE_CHECKING:
+    from confluent_kafka.admin import AdminClient
+
+
+from .api import create_app
+from .controlbus_producer import ControlBusProducer
+from .diff_service import StreamSender
+from .garbage_collector import (
+    GarbageCollector,
+    MetricsProvider,
+    QueueStore,
+    S3ArchiveClient,
+)
+from .gc_scheduler import GCScheduler
+from .metrics_provider import KafkaMetricsProvider
+from .monitor import AckStatus
+from .queue_store import KafkaQueueStore
 
 
 def _log_config_source(
@@ -42,16 +60,6 @@ def _log_config_source(
         logging.info(
             _("DAG Manager configuration file not provided; using built-in defaults")
         )
-
-
-from .api import create_app
-from .garbage_collector import GarbageCollector, MetricsProvider, QueueStore, S3ArchiveClient
-from .diff_service import StreamSender
-from .monitor import AckStatus
-from .controlbus_producer import ControlBusProducer
-from .queue_store import KafkaQueueStore
-from .metrics_provider import KafkaMetricsProvider
-from .gc_scheduler import GCScheduler
 
 
 class _NullStream(StreamSender):
@@ -226,7 +234,7 @@ class _KafkaAdminClient:
 
     def __post_init__(self) -> None:
         try:  # pragma: no cover - optional dependency
-            from confluent_kafka import KafkaException, KafkaError
+            from confluent_kafka import KafkaError, KafkaException
             from confluent_kafka.admin import AdminClient, ConfigResource, NewTopic
         except Exception as exc:  # pragma: no cover - env dependent
             logging.warning(
@@ -391,8 +399,8 @@ async def _run(
         repo = MemoryNodeRepository(cfg.memory_repo_path)
 
     if cfg.kafka_dsn:
-        from .kafka_admin import KafkaAdmin
         from .diff_service import KafkaQueueManager
+        from .kafka_admin import KafkaAdmin
 
         admin_client = _KafkaAdminClient(cfg.kafka_dsn)
         # Manual reset of the breaker is expected after successful operations
@@ -400,8 +408,8 @@ async def _run(
         kafka_admin = KafkaAdmin(admin_client, breaker=breaker)
         queue = KafkaQueueManager(kafka_admin)
     else:
-        from .kafka_admin import InMemoryAdminClient, KafkaAdmin
         from .diff_service import KafkaQueueManager
+        from .kafka_admin import InMemoryAdminClient, KafkaAdmin
 
         admin_client = InMemoryAdminClient()
         # Manual reset of the breaker is expected after successful operations

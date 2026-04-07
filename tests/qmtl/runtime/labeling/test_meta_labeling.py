@@ -10,7 +10,12 @@ from qmtl.runtime.labeling.meta import (
     meta_label_from_outcome,
     meta_label_from_triple_barrier,
 )
-from qmtl.runtime.labeling.schema import BarrierMode, BarrierSpec, HorizonSpec, LabelOutcome
+from qmtl.runtime.labeling.schema import (
+    BarrierMode,
+    BarrierSpec,
+    HorizonSpec,
+    LabelOutcome,
+)
 from qmtl.runtime.labeling.triple_barrier import TripleBarrierLabel
 
 

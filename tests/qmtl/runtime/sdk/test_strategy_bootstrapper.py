@@ -3,10 +3,10 @@ from __future__ import annotations
 import pytest
 
 from qmtl.foundation.common.compute_key import ComputeContext
-from qmtl.services.gateway.models import StrategyAck
-from qmtl.runtime.sdk import StreamInput, Strategy
+from qmtl.runtime.sdk import Strategy, StreamInput
 from qmtl.runtime.sdk import strategy_bootstrapper as bootstrapper_module
 from qmtl.runtime.sdk.strategy_bootstrapper import StrategyBootstrapper
+from qmtl.services.gateway.models import StrategyAck
 
 
 class SimpleStrategy(Strategy):

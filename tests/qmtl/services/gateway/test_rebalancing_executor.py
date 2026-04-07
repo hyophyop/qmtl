@@ -4,8 +4,8 @@ import pytest
 
 from qmtl.services.gateway.instrument_constraints import (
     ConstraintRule,
-    InstrumentConstraints,
     ConstraintViolationError,
+    InstrumentConstraints,
 )
 from qmtl.services.gateway.rebalancing_executor import (
     OrderOptions,

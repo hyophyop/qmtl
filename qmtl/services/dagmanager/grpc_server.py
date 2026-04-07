@@ -1,34 +1,34 @@
 from __future__ import annotations
 
-from typing import AsyncIterable, Dict
 import asyncio
+import logging
 import threading
 import time
 from collections import deque
-import logging
+from typing import AsyncIterable, Dict
 
 import grpc
-
 from opentelemetry.instrumentation.grpc import aio_server_interceptor
 
-from .diff_service import (
-    DiffService,
-    DiffRequest,
-    StreamSender,
-    DiffChunk,
-    NodeRepository,
-    QueueManager,
-)
-from .monitor import AckStatus
-from .kafka_admin import KafkaAdmin
 from qmtl.foundation.common import AsyncCircuitBreaker
-from .garbage_collector import GarbageCollector
-from .controlbus_producer import ControlBusProducer
-from .queue_updates import publish_queue_updates
 from qmtl.foundation.proto import dagmanager_pb2, dagmanager_pb2_grpc
 from qmtl.runtime.sdk.util import parse_interval
-from .dagmanager_health import get_health
 from qmtl.services.observability import add_span_attributes, build_observability_fields
+
+from .controlbus_producer import ControlBusProducer
+from .dagmanager_health import get_health
+from .diff_service import (
+    DiffChunk,
+    DiffRequest,
+    DiffService,
+    NodeRepository,
+    QueueManager,
+    StreamSender,
+)
+from .garbage_collector import GarbageCollector
+from .kafka_admin import KafkaAdmin
+from .monitor import AckStatus
+from .queue_updates import publish_queue_updates
 
 logger = logging.getLogger(__name__)
 

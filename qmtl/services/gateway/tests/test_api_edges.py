@@ -2,9 +2,9 @@ import secrets
 from typing import Any, cast
 
 import pytest
+import redis.asyncio as redis
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
-import redis.asyncio as redis
 
 from qmtl.services.gateway import api
 from qmtl.services.gateway.degradation import DegradationLevel

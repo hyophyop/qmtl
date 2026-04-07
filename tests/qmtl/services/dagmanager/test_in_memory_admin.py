@@ -1,7 +1,11 @@
 import pytest
 
-from qmtl.services.dagmanager.kafka_admin import KafkaAdmin, InMemoryAdminClient, TopicExistsError
 from qmtl.services.dagmanager.diff_service import KafkaQueueManager
+from qmtl.services.dagmanager.kafka_admin import (
+    InMemoryAdminClient,
+    KafkaAdmin,
+    TopicExistsError,
+)
 from qmtl.services.dagmanager.topic import TopicConfig
 
 

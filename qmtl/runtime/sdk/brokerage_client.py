@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Standard brokerage client interfaces and reference implementations.
 
 This module defines a minimal, reusable surface for submitting and
@@ -10,6 +8,8 @@ HttpBrokerageClient simply wraps it for a stable interface. A lightweight
 FakeBrokerageClient is provided for demos/tests, and a CCXT-based client
 is included as a reference connector when ``ccxt`` is available.
 """
+
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any, Protocol, TypedDict

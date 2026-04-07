@@ -4,8 +4,11 @@ from collections import deque
 
 import pytest
 
-from qmtl.services.gateway.commit_log_consumer import CommitLogConsumer, CommitLogDeduplicator
 from qmtl.services.gateway import metrics
+from qmtl.services.gateway.commit_log_consumer import (
+    CommitLogConsumer,
+    CommitLogDeduplicator,
+)
 
 
 def test_commit_log_deduplicator_filters_duplicates_and_ttl():

@@ -1,9 +1,7 @@
-import importlib
-import sys
 import builtins
+import importlib
 import logging
-
-import pytest
+import sys
 
 
 def _remove_modules(prefix: str):

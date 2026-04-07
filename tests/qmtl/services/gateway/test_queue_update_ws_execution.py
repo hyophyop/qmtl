@@ -1,10 +1,9 @@
-import asyncio
 import pytest
 
-from qmtl.services.gateway.ws import WebSocketHub
-from qmtl.runtime.sdk import TagQueryNode, Runner, MatchMode
-from qmtl.runtime.sdk.ws_client import WebSocketClient
+from qmtl.runtime.sdk import MatchMode, Runner, TagQueryNode
 from qmtl.runtime.sdk.tagquery_manager import TagQueryManager
+from qmtl.runtime.sdk.ws_client import WebSocketClient
+from qmtl.services.gateway.ws import WebSocketHub
 
 
 class DummyDag:

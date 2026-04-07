@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Facade implementations for working with :class:`HistoryBackend`."""
+
+from __future__ import annotations
 
 import asyncio
 from collections import defaultdict

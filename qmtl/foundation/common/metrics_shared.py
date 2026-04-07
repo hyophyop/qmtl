@@ -1,10 +1,10 @@
-from __future__ import annotations
-
 """Shared helpers for Prometheus metrics used across SDK and DAG Manager.
 
 This module centralizes creation and observation of common metrics to avoid
 duplicate registration when both subsystems are imported in the same process.
 """
+
+from __future__ import annotations
 
 from qmtl.foundation.common.metrics_factory import (
     get_mapping_store,

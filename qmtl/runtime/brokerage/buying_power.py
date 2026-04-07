@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from .interfaces import BuyingPowerModel
-from .order import Account, Order, AccountType
+from .order import Account, AccountType, Order
 from .settlement import SettlementModel
 from .symbols import SymbolPropertiesProvider
 

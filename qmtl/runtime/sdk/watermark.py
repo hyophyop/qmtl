@@ -1,10 +1,10 @@
-from __future__ import annotations
-
 """Lightweight watermark manager for bucket readiness gating.
 
 Stores per-topic, per-world last committed timestamps to allow nodes to gate
 execution until upstream state is caught up (e.g., portfolio snapshots).
 """
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Dict, Tuple

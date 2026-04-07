@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import logging
+from dataclasses import dataclass
 from http import HTTPStatus
-from typing import Any, Awaitable, cast
+from typing import Any, cast
 
 from fastapi import HTTPException
 from httpx import HTTPStatusError
 
 from qmtl.foundation.common.compute_context import DowngradeReason
+
 from . import metrics as gw_metrics
 from .models import StrategySubmit
-from .submission import SubmissionPipeline, StrategyComputeContext
+from .submission import StrategyComputeContext, SubmissionPipeline
 from .world_client import WorldServiceClient
-
 
 logger = logging.getLogger(__name__)
 

@@ -9,7 +9,9 @@ ASCII DAG::
 """
 
 import argparse
+
 import polars as pl
+
 from qmtl.runtime.sdk import Runner, Strategy
 from qmtl.runtime.sdk.node import Node, StreamInput
 

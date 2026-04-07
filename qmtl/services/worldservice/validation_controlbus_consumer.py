@@ -10,11 +10,16 @@ import logging
 from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Iterable, Sequence
 
 from qmtl.foundation.common.cloudevents import format_event
-from qmtl.services.kafka import KafkaConsumerLike, KafkaProducerLike, create_kafka_consumer, create_kafka_producer
+from qmtl.services.kafka import (
+    KafkaConsumerLike,
+    KafkaProducerLike,
+    create_kafka_consumer,
+    create_kafka_producer,
+)
 
 from . import metrics as ws_metrics
 from .controlbus_defaults import (
@@ -27,7 +32,6 @@ from .controlbus_defaults import (
     DEFAULT_VALIDATION_RETRY_BACKOFF_SEC,
     default_dlq_topic,
 )
-
 
 logger = logging.getLogger(__name__)
 

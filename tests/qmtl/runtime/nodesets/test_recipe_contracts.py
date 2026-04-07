@@ -4,11 +4,12 @@ from qmtl.runtime.nodesets.recipes import CCXT_SPOT_DESCRIPTOR
 from qmtl.runtime.nodesets.registry import make
 from qmtl.runtime.nodesets.resources import clear_shared_portfolios
 from qmtl.runtime.pipeline.execution_nodes import (
-    SizingNode as RealSizingNode,
     PortfolioNode as RealPortfolioNode,
 )
+from qmtl.runtime.pipeline.execution_nodes import (
+    SizingNode as RealSizingNode,
+)
 from qmtl.runtime.sdk import StreamInput
-
 
 RECIPE_MATRIX = {
     "ccxt_spot": {

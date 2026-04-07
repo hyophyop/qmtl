@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional, TYPE_CHECKING, Dict, Any, Awaitable, cast
-
 import logging
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Awaitable, Dict, Optional, cast
+
 import redis.asyncio as redis
 
 
@@ -146,7 +146,7 @@ class StrategyFSM:
                 Awaitable[Any],
                 self.redis.hget(f"strategy:{strategy_id}", "state"),
             )
-        except redis.RedisError as exc:
+        except redis.RedisError:
             logger.exception(
                 "Redis error retrieving strategy %s; falling back to DB", strategy_id
             )
@@ -166,7 +166,7 @@ class StrategyFSM:
                     Awaitable[Any],
                     self.redis.hset(f"strategy:{strategy_id}", "state", state),
                 )
-            except redis.RedisError as exc:
+            except redis.RedisError:
                 logger.exception("Redis error caching strategy %s", strategy_id)
             return state
         return data.decode() if isinstance(data, bytes) else data

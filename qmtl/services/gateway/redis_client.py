@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
 import asyncio
 import time
+from typing import Any, Dict, List
 
 
 class InMemoryRedis:

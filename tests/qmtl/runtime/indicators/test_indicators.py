@@ -1,8 +1,26 @@
 import pytest
 
-from qmtl.runtime.indicators import sma
-from qmtl.runtime.sdk.node import SourceNode
+from qmtl.runtime.indicators import (
+    anchored_vwap,
+    atr,
+    bollinger_bands,
+    chandelier_exit,
+    ema,
+    ichimoku_cloud,
+    kalman_trend,
+    kdj,
+    keltner_channel,
+    obv,
+    rough_bergomi,
+    rsi,
+    sma,
+    stoch_rsi,
+    supertrend,
+    twap,
+    vwap,
+)
 from qmtl.runtime.sdk.cache_view import CacheView
+from qmtl.runtime.sdk.node import SourceNode
 
 
 def test_sma_compute():
@@ -11,26 +29,6 @@ def test_sma_compute():
     data = {src.node_id: {1: [(0, 1), (1, 3)]}}
     view = CacheView(data)
     assert node.compute_fn(view) == 2
-
-from qmtl.runtime.indicators import (
-    ema,
-    rsi,
-    bollinger_bands,
-    atr,
-    chandelier_exit,
-    vwap,
-    anchored_vwap,
-    keltner_channel,
-    obv,
-    supertrend,
-    ichimoku_cloud,
-    kalman_trend,
-    rough_bergomi,
-    stoch_rsi,
-    kdj,
-    twap,
-)
-
 
 def test_ema_compute():
     src = SourceNode(interval="1s", period=3)

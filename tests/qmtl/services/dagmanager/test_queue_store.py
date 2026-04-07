@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 
 from qmtl.services.dagmanager.kafka_admin import InMemoryAdminClient, KafkaAdmin
-from qmtl.services.dagmanager.queue_store import KafkaQueueStore
 from qmtl.services.dagmanager.metrics_provider import KafkaMetricsProvider
-from qmtl.services.dagmanager.repository import NodeRepository
 from qmtl.services.dagmanager.models import NodeRecord
+from qmtl.services.dagmanager.queue_store import KafkaQueueStore
+from qmtl.services.dagmanager.repository import NodeRepository
 
 
 class RepoStub(NodeRepository):

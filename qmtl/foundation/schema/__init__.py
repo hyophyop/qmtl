@@ -1,3 +1,10 @@
+from .order_events import (
+    ExecutionFillEvent,
+    OrderAck,
+    OrderPayload,
+    PortfolioSnapshot,
+    register_order_schemas,
+)
 from .registry import (
     Schema,
     SchemaRegistryClient,
@@ -7,13 +14,6 @@ from .registry import (
     SchemaValidationReport,
 )
 from .validator import SCHEMAS, validate_schema
-from .order_events import (
-    OrderAck,
-    OrderPayload,
-    ExecutionFillEvent,
-    PortfolioSnapshot,
-    register_order_schemas,
-)
 
 __all__ = [
     "SchemaRegistryClient",
