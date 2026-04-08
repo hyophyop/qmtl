@@ -65,6 +65,15 @@ def test_long_running_case():
 - Mark long/external tests as `slow` and, if needed, exclude them from preflight with `-k 'not slow'`.
 - Avoid unbounded network waits; always set client timeouts in tests.
 
+## Quality-gate alignment
+
+[Quality Gates](quality_gates.md) is the canonical operations reference for scope policy, report-only signals, and mutation-pilot criteria.
+
+- PR hard gates share the same axis between `.github/workflows/ci.yml` and `scripts/run_ci_local.sh`.
+- Branch-coverage baselines combine the three pytest stages (`tests`, `world_smoke`, `core_loop`) and write artifacts under `.artifacts/quality-gates/coverage/`.
+- Bandit and Vulture are report-only signals: they generate artifacts but do not block the PR.
+- mutmut runs outside the default CI gate via the separate [mutation pilot workflow]({{ code_url('.github/workflows/mutation-pilot.yml') }}).
+
 ## Policy Diff Regression (CI/Cron)
 
 - Goal: automatically monitor the impact ratio of policy changes against the “bad strategies” regression set.

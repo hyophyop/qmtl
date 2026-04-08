@@ -103,6 +103,7 @@ nav:
       - E2E Testing: operations/e2e_testing.md
       - Neo4j Migrations: operations/neo4j_migrations.md
       - Monitoring: operations/monitoring.md
+      - Quality Gates: operations/quality_gates.md
       - Core Loop Observability: operations/observability_core_loop.md
       - World Validation Observability: operations/world_validation_observability.md
       - Independent Validation: operations/independent_validation.md
@@ -255,6 +256,7 @@ plugins:
             "Seamless Data Provider Setup": "심리스 데이터 프로바이더 구성"
             "Testing & Pytest": "테스트 & Pytest"
             "Python Environment": "Python 환경"
+            "Quality Gates": "품질 게이트"
             "CCXT Seamless Data Provider": "CCXT 심리스 데이터 프로바이더"
             "History Data Quickstart": "히스토리 데이터 퀵스타트"
             "Microstructure Signals": "마이크로스트럭처 신호"

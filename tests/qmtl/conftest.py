@@ -11,4 +11,8 @@ def _provide_event_loop() -> None:
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    yield
+    try:
+        yield
+    finally:
+        if not loop.is_closed():
+            loop.close()

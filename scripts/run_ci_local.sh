@@ -48,7 +48,9 @@ require_cmd uv
 require_cmd git
 
 export UV_CACHE_DIR="${UV_CACHE_DIR:-$PWD/.artifacts/uv-cache}"
+export QUALITY_GATE_DIR="${QUALITY_GATE_DIR:-$PWD/.artifacts/quality-gates}"
 mkdir -p "$UV_CACHE_DIR"
+mkdir -p "$QUALITY_GATE_DIR"/{coverage,security,deadcode}
 
 if [[ "$INSTALL" -eq 1 ]]; then
   run_step "Install dependencies (dev)" uv pip install -e ".[dev]"
@@ -109,21 +111,80 @@ run_step "Preflight – hang detection" bash -lc '
     --timeout=60 --timeout-method=thread --maxfail=1 -k "not slow"
 '
 
-run_step "Run tests (warnings are errors)" bash -lc '
+run_step "Run tests with branch coverage (warnings are errors)" bash -lc '
   set -euo pipefail
-  PYTHONPATH=qmtl/proto uv run pytest -p no:unraisableexception -W error -q tests
+  COVERAGE_FILE="'"$QUALITY_GATE_DIR"'/coverage/.coverage" \
+  PYTHONPATH=qmtl/proto uv run --with pytest-cov -m pytest \
+    -p no:unraisableexception -W error -q tests \
+    --cov=qmtl --cov-branch --cov-report=
 '
 
 run_step "WorldService in-process smoke" bash -lc '
   set -euo pipefail
   USE_INPROC_WS_STACK=1 WS_MODE=service \
-    uv run -m pytest -q tests/e2e/world_smoke -q
+  COVERAGE_FILE="'"$QUALITY_GATE_DIR"'/coverage/.coverage" \
+    uv run --with pytest-cov -m pytest -q tests/e2e/world_smoke -q \
+      --cov=qmtl --cov-branch --cov-append --cov-report=
 '
 
 run_step "Core Loop contract suite" bash -lc '
   set -euo pipefail
   CORE_LOOP_STACK_MODE=inproc \
-    uv run -m pytest -q tests/e2e/core_loop -q
+  COVERAGE_FILE="'"$QUALITY_GATE_DIR"'/coverage/.coverage" \
+    uv run --with pytest-cov -m pytest -q tests/e2e/core_loop -q \
+      --cov=qmtl --cov-branch --cov-append --cov-report=
+'
+
+run_step "Branch coverage baseline summary" bash -lc '
+  set -euo pipefail
+  COVERAGE_FILE="'"$QUALITY_GATE_DIR"'/coverage/.coverage" \
+    uv run --with coverage python -m coverage json \
+      -o "'"$QUALITY_GATE_DIR"'/coverage/coverage.json"
+  COVERAGE_FILE="'"$QUALITY_GATE_DIR"'/coverage/.coverage" \
+    uv run --with coverage python -m coverage xml \
+      -o "'"$QUALITY_GATE_DIR"'/coverage/coverage.xml"
+  COVERAGE_FILE="'"$QUALITY_GATE_DIR"'/coverage/.coverage" \
+    uv run --with coverage python -m coverage report \
+      > "'"$QUALITY_GATE_DIR"'/coverage/coverage.txt"
+  uv run python scripts/summarize_coverage_baseline.py \
+    --input "'"$QUALITY_GATE_DIR"'/coverage/coverage.json" \
+    --json-output "'"$QUALITY_GATE_DIR"'/coverage/summary.json" \
+    --markdown-output "'"$QUALITY_GATE_DIR"'/coverage/summary.md"
+  cat "'"$QUALITY_GATE_DIR"'/coverage/summary.md"
+'
+
+run_step "Bandit report (report only)" bash -lc '
+  set -euo pipefail
+  uv run --no-project --with bandit bandit --ini .bandit \
+    -r qmtl scripts main.py conftest.py \
+    --severity-level medium --confidence-level medium \
+    --format json -o "'"$QUALITY_GATE_DIR"'/security/bandit.json" \
+    --exit-zero
+  python - <<'"'"'PY'"'"'
+import json
+from collections import Counter
+from pathlib import Path
+
+report = Path("'"$QUALITY_GATE_DIR"'/security/bandit.json")
+payload = json.loads(report.read_text(encoding="utf-8"))
+results = payload.get("results", [])
+counts = Counter(item["issue_severity"] for item in results)
+print(f"Bandit findings: {len(results)}")
+print("By severity:", dict(sorted(counts.items())))
+PY
+'
+
+run_step "Vulture report (report only)" bash -lc '
+  set -euo pipefail
+  status=0
+  uv run --no-project --with vulture vulture --config pyproject.toml \
+    > "'"$QUALITY_GATE_DIR"'/deadcode/vulture.txt" || status=$?
+  echo "$status" > "'"$QUALITY_GATE_DIR"'/deadcode/vulture.exitcode"
+  uv run python scripts/summarize_vulture_report.py \
+    --input "'"$QUALITY_GATE_DIR"'/deadcode/vulture.txt" \
+    --json-output "'"$QUALITY_GATE_DIR"'/deadcode/summary.json" \
+    --markdown-output "'"$QUALITY_GATE_DIR"'/deadcode/summary.md"
+  cat "'"$QUALITY_GATE_DIR"'/deadcode/summary.md"
 '
 
 echo
