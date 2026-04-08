@@ -1,0 +1,3 @@
+[bandit]
+exclude_dirs = tests,notebooks,qmtl/examples,qmtl/foundation/proto,build,dist
+targets = qmtl,scripts,main.py,conftest.py

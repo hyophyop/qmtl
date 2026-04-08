@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import httpx
@@ -25,27 +26,29 @@ class DummyClient:
         return resp
 
 
-@pytest.mark.asyncio
-async def test_offline_cache_parity(tmp_path, monkeypatch):
-    node_live = TagQueryNode(["t"], interval="60s", period=1)
+def test_offline_cache_parity(tmp_path, monkeypatch):
+    async def run_case() -> None:
+        node_live = TagQueryNode(["t"], interval="60s", period=1)
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"queues": [{"queue": "q1", "global": False}]})
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"queues": [{"queue": "q1", "global": False}]})
 
-    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: DummyClient(handler=handler))
+        monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: DummyClient(handler=handler))
 
-    cache = tmp_path / "tagcache.json"
-    mgr_live = TagQueryManager("http://gw", cache_path=cache)
-    mgr_live.register(node_live)
-    await mgr_live.resolve_tags()
-    assert node_live.upstreams == ["q1"]
+        cache = tmp_path / "tagcache.json"
+        mgr_live = TagQueryManager("http://gw", cache_path=cache)
+        mgr_live.register(node_live)
+        await mgr_live.resolve_tags()
+        assert node_live.upstreams == ["q1"]
 
-    data = json.loads(cache.read_text())
-    assert data["crc32"] == TagQueryManager._compute_crc(data["mappings"])
+        data = json.loads(cache.read_text())
+        assert data["crc32"] == TagQueryManager._compute_crc(data["mappings"])
 
-    node_off = TagQueryNode(["t"], interval="60s", period=1)
-    mgr_off = TagQueryManager(cache_path=cache)
-    mgr_off.register(node_off)
-    await mgr_off.resolve_tags(offline=True)
-    assert node_off.upstreams == ["q1"]
-    assert node_off.upstreams == node_live.upstreams
+        node_off = TagQueryNode(["t"], interval="60s", period=1)
+        mgr_off = TagQueryManager(cache_path=cache)
+        mgr_off.register(node_off)
+        await mgr_off.resolve_tags(offline=True)
+        assert node_off.upstreams == ["q1"]
+        assert node_off.upstreams == node_live.upstreams
+
+    asyncio.run(run_case())

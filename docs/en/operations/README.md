@@ -35,6 +35,7 @@ Guidelines for running and maintaining QMTL in production.
 ## Validation and Observability
 
 - [E2E Testing](e2e_testing.md): End-to-end testing practice.
+- [Quality Gates](quality_gates.md): hard gates, report-only signals, and mutation-pilot scope policy.
 - [Monitoring](monitoring.md): Observability and metrics.
 - [Core Loop Observability Minimum Set](observability_core_loop.md): minimum dashboard and SLO boundaries.
 - [World Validation Observability](world_validation_observability.md): validation and promotion observability points.

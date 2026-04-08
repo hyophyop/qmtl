@@ -35,6 +35,7 @@ last_modified: 2026-04-03
 ## 검증과 관측
 
 - [E2E 테스트](e2e_testing.md): 종단 간 테스트 실무.
+- [품질 게이트](quality_gates.md): 하드 게이트, report-only 신호, mutation pilot 범위 정책.
 - [모니터링](monitoring.md): 관측성 및 메트릭 관리.
 - [코어 루프 관측성 최소셋](observability_core_loop.md): 최소 대시보드/SLO 경계.
 - [World Validation 운영 가시성](world_validation_observability.md): validation/promotion 관측 포인트.

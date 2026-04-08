@@ -20,7 +20,12 @@ def test_no_pytest_plugins_in_nested_conftest() -> None:
         raise RuntimeError("Could not locate repository root from test path")
     assert (repo_root / "pytest.ini").exists(), "repo root discovery failed"
 
-    confs = [p for p in repo_root.rglob("conftest.py")]
+    scratch_roots = {"mutants", ".artifacts"}
+    confs = [
+        p
+        for p in repo_root.rglob("conftest.py")
+        if not any(part in scratch_roots for part in p.relative_to(repo_root).parts)
+    ]
     assert confs, "no conftest.py files found"
 
     # Only the repository root conftest may declare pytest_plugins.

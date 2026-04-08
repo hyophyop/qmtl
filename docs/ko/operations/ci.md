@@ -63,6 +63,15 @@ def test_long_running_case():
 - 오래 걸리거나 외부 리소스를 사용하는 테스트는 `slow` 로 표시하고 필요하면 프리플라이트에서 `-k 'not slow'` 로 제외합니다.
 - 무제한 네트워크 대기를 피하고, 테스트 클라이언트에 항상 타임아웃을 지정하세요.
 
+## 품질 게이트 정렬
+
+품질 게이트의 범위 정책, report-only 신호, mutation pilot 기준은 [품질 게이트](quality_gates.md) 문서가 canonical 운영 기준입니다.
+
+- PR 하드 게이트는 `.github/workflows/ci.yml` 과 `scripts/run_ci_local.sh` 가 같은 축을 공유합니다.
+- branch coverage baseline 은 세 개의 pytest 단계(`tests`, `world_smoke`, `core_loop`)를 합산해 `.artifacts/quality-gates/coverage/` 에 기록합니다.
+- Bandit 과 Vulture 는 report-only 이며, artifact 를 남기되 PR 을 차단하지 않습니다.
+- mutmut 은 기본 CI 게이트가 아니라 별도 [mutation pilot workflow]({{ code_url('.github/workflows/mutation-pilot.yml') }}) 로 운영합니다.
+
 ## Policy Diff 회귀 잡(CI/크론)
 - 목적: 정책 변경이 “나쁜 전략” 회귀 세트에 미치는 영향 비율을 자동 감시.
 - 명령 예시:

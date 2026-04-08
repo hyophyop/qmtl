@@ -100,6 +100,7 @@ last_modified: 2025-08-26
 - `docs/operations/monitoring.md`
 - `docs/operations/neo4j_migration.md`
 - `docs/operations/neo4j_migrations.md`
+- `docs/operations/quality_gates.md`
 - `docs/operations/release.md`
 - `docs/operations/risk_management.md`
 - `docs/operations/schema_registry_governance.md`

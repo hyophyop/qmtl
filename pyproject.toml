@@ -163,6 +163,75 @@ DEP001 = [
   "pyoperon",
 ]
 
+[tool.coverage.run]
+branch = true
+parallel = true
+relative_files = true
+source = ["qmtl"]
+omit = [
+  "qmtl/examples/*",
+  "qmtl/foundation/proto/*_pb2.py",
+  "qmtl/foundation/proto/*_pb2_grpc.py",
+]
+
+[tool.coverage.report]
+skip_covered = true
+show_missing = true
+precision = 2
+omit = [
+  "qmtl/examples/*",
+  "qmtl/foundation/proto/*_pb2.py",
+  "qmtl/foundation/proto/*_pb2_grpc.py",
+]
+exclude_lines = [
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
+]
+
+[tool.coverage.json]
+pretty_print = true
+
+[tool.vulture]
+paths = ["qmtl"]
+exclude = [
+  "build/",
+  "dist/",
+  "notebooks/",
+  "qmtl/examples/",
+  "qmtl/foundation/proto/",
+  "tests/",
+]
+ignore_decorators = ["@app.*", "@router.*", "@pytest.*"]
+ignore_names = ["test_*", "pytest_*", "main"]
+min_confidence = 90
+sort_by_size = true
+
+[tool.mutmut]
+paths_to_mutate = [
+  "qmtl/runtime/sdk/",
+  "qmtl/runtime/pipeline/",
+  "qmtl/services/gateway/",
+]
+pytest_add_cli_args_test_selection = [
+  "tests/qmtl/runtime/sdk",
+  "tests/qmtl/runtime/pipeline",
+  "tests/qmtl/services/gateway",
+]
+pytest_add_cli_args = [
+  "-p",
+  "no:unraisableexception",
+  "-q",
+  "-k",
+  "not test_live_auto_subscribes",
+]
+also_copy = ["pytest.ini", "conftest.py", "qmtl", "tests"]
+do_not_mutate = [
+  "qmtl/foundation/proto/*_pb2.py",
+  "qmtl/foundation/proto/*_pb2_grpc.py",
+]
+max_stack_depth = 8
+mutate_only_covered_lines = true
+
 [tool.mypy]
 python_version = "3.11"
 strict = false

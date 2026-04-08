@@ -1,0 +1,55 @@
+name: Mutation Pilot
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/mutation-pilot.yml"
+      - "pyproject.toml"
+      - "pytest.ini"
+      - "scripts/run_mutation_pilot.sh"
+      - "qmtl/runtime/sdk/**"
+      - "qmtl/runtime/pipeline/**"
+      - "qmtl/services/gateway/**"
+      - "tests/qmtl/runtime/sdk/**"
+      - "tests/qmtl/runtime/pipeline/**"
+      - "tests/qmtl/services/gateway/**"
+  schedule:
+    - cron: "0 18 * * 0"
+
+jobs:
+  mutmut:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Prepare Python and venv
+        run: |
+          uv python install 3.11
+          uv venv
+
+      - name: Install dependencies (dev)
+        run: uv pip install -e .[dev]
+
+      - name: Run mutmut pilot (report only)
+        run: bash scripts/run_mutation_pilot.sh
+
+      - name: Upload mutation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-pilot-${{ github.run_id }}
+          path: .artifacts/quality-gates/mutation
