@@ -94,6 +94,17 @@ last_modified: 2026-04-08
   - false positive 분류 규칙이 문서화되어 있고
   - 반복적으로 같은 잡음이 suppress/allowlist 없이 정리되며
   - 신규 이슈만 구분 가능한 baseline 운영이 가능할 때
+- triage 기준:
+  - `Bandit / needs fix`: 운영 경로에서의 credential 처리, shell injection, unsafe deserialization, 과도한 파일 권한은 우선 수정 대상으로 분류합니다. 예를 들어 사용자 입력이 들어가는 shell 호출은 suppress 없이 코드 수정이 필요합니다.
+  - `Bandit / accepted risk`: 제한된 subprocess 호출이나 임시 파일 사용처럼 의도가 명확하고 경계가 좁은 경우만 중앙 설정과 triage 메모에 근거를 남기고 유지합니다. 예를 들어 고정된 내부 명령 실행은 근거를 남긴 뒤 중앙 설정으로만 예외 처리합니다.
+  - `Bandit / tooling noise`: 테스트·예제·generated 경로가 잘못 스캔된 경우는 inline ignore 대신 스캔 범위를 먼저 조정합니다.
+  - `Vulture / candidate cleanup`: 참조가 없는 helper, import, local variable은 우선 삭제 후보로 처리합니다. 실제 실행 경로에서 도달 증거가 없으면 cleanup PR에 포함합니다.
+  - `Vulture / keep but document`: 외부 CLI 진입점, 호환성 shim, reflection/dynamic import hook은 문서화한 뒤 유지합니다. 예를 들어 plugin registry에서 문자열 기반으로 로딩되는 hook은 근거 문서를 남기고 유지합니다.
+  - `Vulture / false positive`: framework entrypoint, plugin registry, 런타임 동적 로딩으로만 도달하는 심볼은 suppress 전에 두 번 이상 반복되는지 확인합니다.
+- 분류 후 액션:
+  - `Bandit / needs fix`, `Vulture / candidate cleanup`: 다음 코드 변경 묶음에서 바로 수정하거나 제거합니다.
+  - `Bandit / accepted risk`, `Vulture / keep but document`: 중앙 설정과 문서 근거를 함께 남기고 다음 baseline 갱신 때 재확인합니다.
+  - `Bandit / tooling noise`, `Vulture / false positive`: suppress 전에 같은 finding이 반복되는지 확인하고, 반복되면 스캔 범위 또는 baseline 규칙을 조정합니다.
 
 ### mutmut
 
@@ -103,6 +114,11 @@ last_modified: 2026-04-08
   - equivalent mutant
   - integration gap
   - flaky / tooling noise
+- survivor 예시:
+  - `missing assertion`: 반환값이나 branch 조건이 바뀌어도 테스트가 통과한다면 assertion 강도가 부족한 것으로 분류합니다. 조치는 해당 관찰 결과를 직접 검증하는 assertion을 추가하는 것입니다.
+  - `equivalent mutant`: 도메인 제약상 동치인 비교 연산 변경처럼 관찰 가능한 의미 변화가 없는 경우입니다. 조치는 `equivalent`로 기록하고 gate 분모에서 분리할지 검토하는 것입니다.
+  - `integration gap`: 단위 테스트는 통과하지만 cross-service contract나 adapter 경계가 검증되지 않아 mutant가 살아남는 경우입니다. 조치는 contract 또는 integration test를 추가하는 것입니다.
+  - `flaky / tooling noise`: 현재 pilot에서 관찰된 `tagquery_manager.stop()/poll_loop` cancellation 경로처럼 runner 특성으로 결과가 흔들리는 경우입니다. 조치는 재현성 확인 뒤 tooling noise로 유지하거나 runner/workflow 안정화 작업으로 넘기는 것입니다.
 - gate 제안 조건:
   - 실행 시간과 flake rate가 안정적일 것
   - equivalent mutant 비율이 관리 가능할 것

@@ -94,6 +94,17 @@ Both paths now perform the following in common:
   - false-positive handling is documented,
   - repeated noise is removed without ad-hoc CLI suppressions,
   - baseline management can distinguish new findings from known noise.
+- Triage rules:
+  - `Bandit / needs fix`: findings in production paths around credential handling, shell injection, unsafe deserialization, or overly broad filesystem permissions are treated as fix-first issues. For example, any shell execution fed by user input should be patched rather than suppressed.
+  - `Bandit / accepted risk`: only narrowly scoped subprocess or tempfile usage with clear intent may remain, and the rationale must live in centralized config plus triage notes. For example, a fixed internal command may be retained only with centralized justification.
+  - `Bandit / tooling noise`: if test, example, or generated paths were scanned by mistake, fix the scan scope before adding any inline ignore.
+  - `Vulture / candidate cleanup`: unreferenced helpers, imports, and locals are first-class cleanup candidates. If there is no runtime reachability evidence, remove them in the next cleanup patch.
+  - `Vulture / keep but document`: externally invoked CLI entrypoints, compatibility shims, and reflection or dynamic-import hooks may stay if they are documented. A plugin hook loaded by string name is the typical example.
+  - `Vulture / false positive`: framework entrypoints, plugin registries, and runtime-only dynamic symbols should repeat across runs before any suppression is added.
+- Follow-up action by classification:
+  - `Bandit / needs fix`, `Vulture / candidate cleanup`: patch or remove in the next code change set.
+  - `Bandit / accepted risk`, `Vulture / keep but document`: keep only with centralized config and written rationale, then re-check on the next baseline refresh.
+  - `Bandit / tooling noise`, `Vulture / false positive`: confirm recurrence before suppression, then adjust scan scope or baseline rules instead of hiding the signal inline.
 
 ### mutmut
 
@@ -103,6 +114,11 @@ Both paths now perform the following in common:
   - equivalent mutant
   - integration gap
   - flaky / tooling noise
+- Survivor examples:
+  - `missing assertion`: a return value or branch condition changes and the test still passes because the observable outcome was not asserted tightly enough. The follow-up action is to add a tighter assertion around that observable behavior.
+  - `equivalent mutant`: the mutation changes syntax but not behavior under current domain constraints. The follow-up action is to tag it as `equivalent` and decide whether it should stay outside future gating denominators.
+  - `integration gap`: unit coverage passes, but the cross-service contract or adapter boundary is not exercised, so the mutant survives. The follow-up action is to add contract or integration coverage at that boundary.
+  - `flaky / tooling noise`: the current pilot example is the `tagquery_manager.stop()/poll_loop` cancellation path, where runner behavior can dominate the result. The follow-up action is to confirm reproducibility and either keep it tagged as tooling noise or move it into runner-stabilization work.
 - Gate proposal criteria:
   - execution time and flake rate are stable,
   - equivalent-mutant volume is manageable,
