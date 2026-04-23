@@ -15,14 +15,23 @@
     "interval": { "type": "integer", "minimum": 1 },
     "queues": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "queue": { "type": "string" },
+          "global": { "type": "boolean" }
+        },
+        "required": ["queue"]
+      },
       "minItems": 0
     },
+    "match_mode": { "enum": ["any", "all"] },
     "world_id": { "type": "string" },
     "execution_domain": { "type": "string" },
     "etag": { "type": "string" },
+    "idempotency_key": { "type": "string" },
     "ts": { "type": "string", "format": "date-time" }
   },
   "required": ["type", "version", "tags", "interval", "queues", "etag", "ts"]
 }
-

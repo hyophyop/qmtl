@@ -600,6 +600,9 @@ class ControlBusConsumer:
             await ws_hub.send_policy_updated(msg.data)
             return
         if msg.topic == "queue":
+            if msg.data.get("type") == "QueueLifecycle":
+                await self._handle_queue_lifecycle(msg, ws_hub)
+                return
             await self._handle_queue_update(msg, ws_hub)
             return
 
@@ -707,6 +710,11 @@ class ControlBusConsumer:
         if fields:
             logger.info("queue_update_received", extra=fields)
         await self._maybe_emit_tagquery_upsert(ws_hub, tags, interval, queues, execution_domain)
+
+    async def _handle_queue_lifecycle(self, msg: ControlBusMessage, ws_hub: WebSocketHub) -> None:
+        payload = dict(msg.data)
+        payload.setdefault("etag", msg.etag)
+        await ws_hub.send_queue_lifecycle(payload)
 
     async def _maybe_emit_tagquery_upsert(
         self, ws_hub: WebSocketHub, tags: list[str], interval: int, queues: list[Any], execution_domain: str | None

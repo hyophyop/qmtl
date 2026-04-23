@@ -36,6 +36,11 @@ class FakeArchive:
         self.archived.append(queue)
 
 
+class FailingArchive:
+    def archive(self, queue: str) -> None:
+        raise RuntimeError("archive failed")
+
+
 def test_gc_policy_drop_and_archive():
     now = datetime.now(UTC)
     queues = [
@@ -52,6 +57,27 @@ def test_gc_policy_drop_and_archive():
     assert [q.name for q in processed] == ["raw_q", "sentinel_q"]
     assert store.dropped == ["raw_q", "sentinel_q"]
     assert archive.archived == ["sentinel_q"]
+
+
+def test_gc_report_includes_skips_and_action_counts():
+    now = datetime.now(UTC)
+    queues = [
+        QueueInfo("raw_q", "raw", now - timedelta(days=10), interval=60),
+        QueueInfo("young_q", "raw", now - timedelta(days=7), interval=60),
+        QueueInfo("unknown_q", "custom", now - timedelta(days=100), interval=60),
+    ]
+    store = FakeStore(queues)
+    metrics = FakeMetrics(10)
+    gc = GarbageCollector(store, metrics, batch_size=10)
+
+    report = gc.collect_report(now)
+
+    assert report.observed == 3
+    assert report.candidates == 1
+    assert report.actions == {"drop": 1, "archive": 0, "skip": 2}
+    assert report.by_tag == {"raw": 2, "custom": 1}
+    assert [item.reason for item in report.skipped] == ["within_grace", "unknown_policy"]
+    assert report.to_dict()["processed"] == ["raw_q"]
 
 
 def test_gc_batch_halved_on_high_load():
@@ -108,6 +134,34 @@ def test_gc_archive_action_is_safe_without_archive_client():
 
     assert [q.name for q in processed] == ["s"]
     assert store.dropped == ["s"]
+
+
+def test_gc_report_records_missing_archive_client():
+    now = datetime.now(UTC)
+    queues = [QueueInfo("s", "sentinel", now - timedelta(days=400), interval=60)]
+    store = FakeStore(queues)
+    metrics = FakeMetrics(0)
+    gc = GarbageCollector(store, metrics, archive=None, batch_size=1)
+
+    report = gc.collect_report(now)
+
+    assert store.dropped == ["s"]
+    assert report.items[0].action == "archive"
+    assert report.items[0].archive_status == "missing_client"
+
+
+def test_gc_report_skips_drop_when_archive_fails():
+    now = datetime.now(UTC)
+    queues = [QueueInfo("s", "sentinel", now - timedelta(days=400), interval=60)]
+    store = FakeStore(queues)
+    metrics = FakeMetrics(0)
+    gc = GarbageCollector(store, metrics, archive=FailingArchive(), batch_size=1)
+
+    report = gc.collect_report(now)
+
+    assert store.dropped == []
+    assert report.actions == {"drop": 0, "archive": 0, "skip": 1}
+    assert report.skipped[0].reason == "archive_failed"
 
 
 def test_gc_archive_action_uses_policy_for_non_sentinel_tags():

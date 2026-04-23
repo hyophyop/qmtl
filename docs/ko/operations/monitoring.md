@@ -28,6 +28,7 @@ Prometheus는 `alert_rules.yml`을 로드해 DAG Manager와 Gateway용 경보를
 - **QueueCreateErrors** – `queue_create_error_total` 증가 시 경고
 - **SentinelGap** – `sentinel_gap_count`로 센티널 누락 감지
 - **OrphanQueuesGrowing** – 3시간 윈도에서 `orphan_queue_total` 증가 감지
+- **GCCleanupReportReview** – `POST /admin/gc-trigger`의 `report.actions.skip` 또는 `skipped[].reason=archive_failed`가 나타나면 운영자가 상세 리포트를 확인
 - **QueueLagHigh** – `queue_lag_seconds`가 `queue_lag_threshold_seconds`를 초과할 때 경고
 - **GatewayLatencyHigh** – `gateway_e2e_latency_p95`가 150ms 초과 시 경고
 - **LostRequests** – `lost_requests_total` 기반 유실된 diff 제출 보고

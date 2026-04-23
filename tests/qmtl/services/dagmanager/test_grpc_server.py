@@ -390,6 +390,7 @@ class BusStub:
         self.queue_updates: list[
             tuple[list[str], int, list[dict[str, object]], str]
         ] = []
+        self.queue_lifecycle: list[dict[str, object]] = []
 
     async def publish_queue_update(
         self,
@@ -404,6 +405,9 @@ class BusStub:
 
     async def publish_sentinel_weight(self, *args, **kwargs):  # pragma: no cover - unused
         pass
+
+    async def publish_queue_lifecycle(self, **kwargs) -> None:
+        self.queue_lifecycle.append(dict(kwargs))
 
 
 @pytest.mark.asyncio
@@ -471,6 +475,16 @@ async def test_grpc_cleanup_emits_queue_update():
     await server.stop(None)
 
     assert bus.queue_updates == [(["raw"], 60, [], "any")]
+    assert bus.queue_lifecycle == [
+        {
+            "queue": "q",
+            "action": "drop",
+            "reason": "eligible",
+            "tag": "raw",
+            "interval": 60,
+            "archive_status": None,
+        }
+    ]
 
 
 @pytest.mark.asyncio

@@ -102,6 +102,45 @@ class ControlBusProducer:
         )
         await self._publish(self.topic, key, event)
 
+    async def publish_queue_lifecycle(
+        self,
+        *,
+        queue: str,
+        action: str,
+        reason: str,
+        tag: str | None = None,
+        interval: int | None = None,
+        archive_status: str | None = None,
+        version: int = 1,
+    ) -> None:
+        ts = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        action_value = str(action)
+        reason_value = str(reason)
+        queue_value = str(queue)
+        payload = {
+            "type": "QueueLifecycle",
+            "queue": queue_value,
+            "action": action_value,
+            "reason": reason_value,
+            "version": version,
+            "etag": f"ql:{queue_value}:{action_value}:{reason_value}:{version}",
+            "ts": ts,
+            "idempotency_key": f"queue_lifecycle:{queue_value}:{action_value}:{reason_value}:{version}",
+        }
+        if tag:
+            payload["tag"] = str(tag)
+        if interval is not None:
+            payload["interval"] = int(interval)
+        if archive_status:
+            payload["archive_status"] = str(archive_status)
+        event = format_event(
+            "qmtl.services.dagmanager",
+            "queue_lifecycle",
+            payload,
+            correlation_id=f"queue_lifecycle:{queue_value}",
+        )
+        await self._publish(self.topic, queue_value.encode(), event)
+
     async def publish_sentinel_weight(
         self,
         sentinel_id: str,

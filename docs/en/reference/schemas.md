@@ -13,6 +13,7 @@ last_modified: 2026-03-06
 - ActivationEnvelope: reference/schemas/activation_envelope.schema.json
 - ActivationUpdated (event): reference/schemas/event_activation_updated.schema.json
 - QueueUpdated (event): reference/schemas/event_queue_updated.schema.json
+- QueueLifecycle (event): reference/schemas/event_queue_lifecycle.schema.json
 - PolicyUpdated (event): reference/schemas/event_policy_updated.schema.json
 - Node (GSG): reference/schemas/node.schema.json
 - World: reference/schemas/world.schema.json

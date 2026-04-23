@@ -69,6 +69,8 @@ Additional references
 | `VersionSentinel` | `version`, `commit_hash`, `created_at` | `release_tag`, `traffic_weight` | Version boundary and rollback marker |
 | `Artifact`        | `path`, `checksum`, `size` | `framework`, `dtype` | Binary artifact such as a model |
 
+DAG Manager owns only `Artifact` graph metadata and reference relationships. Physical artifact files, the Feature Artifact Plane, and Seamless outputs remain owned by their runtime stores; DAG Manager GC does not delete or archive them until a separate policy assigns that responsibility.
+
 **Relationships**
 
 ```
@@ -266,7 +268,7 @@ Sentinel weight changes publish `sentinel_weight` events on the ControlBus. Refe
 DAG Manager publishes control-plane updates about queue availability and tag resolution so Gateways can update SDKs in real time without polling.
 
 - Publisher: DAG Manager -> ControlBus (internal)
-- Event: `QueueUpdated` with schema
+- Event: CloudEvent `type="queue_updated"`, payload `data.type="QueueUpdated"`
 
 ```json
 {
@@ -290,6 +292,31 @@ Semantics
 - Partition key: Kafka key is `",".join(tags)` and the broker hash determines the partition (ordering is guaranteed per key only).
 - At-least-once delivery; consumers deduplicate by `etag` or `idempotency_key`.
 - Gateways subscribe and rebroadcast via WebSocket. The SDK `TagQueryManager` heals divergences via periodic HTTP reconciliation.
+- `QueueUpdated` describes the post-change queue set for `(tags, interval)`. Delete/archive reasons are emitted separately as `QueueLifecycle` payloads.
+
+### 3-C. GC Lifecycle Events (`QueueLifecycle`)
+
+When GC drops or archives a queue, DAG Manager first emits a lifecycle payload on the same ControlBus queue topic, then emits `QueueUpdated` with the post-GC queue set.
+
+```json
+{
+  "type": "QueueLifecycle",
+  "queue": "sentinel_q",
+  "action": "archive",
+  "reason": "eligible",
+  "tag": "sentinel",
+  "interval": 60,
+  "archive_status": "archived",
+  "version": 1,
+  "etag": "ql:sentinel_q:archive:eligible:1",
+  "idempotency_key": "queue_lifecycle:sentinel_q:archive:eligible:1",
+  "ts": "2025-08-28T09:00:00Z"
+}
+```
+
+- The CloudEvent `type` is `queue_lifecycle`; the payload `data.type` is `QueueLifecycle`.
+- `action` is `drop` or `archive`. `archive_status` is one of `archived`, `missing_client`, or `failed`.
+- Gateway relays lifecycle payloads as WebSocket `queue_lifecycle` events. DAG Manager remains the queue lifecycle SSOT; Gateway does not decide deletion.
 
 ```mermaid
 sequenceDiagram
