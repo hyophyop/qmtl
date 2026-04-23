@@ -24,6 +24,7 @@ from .blob_store import build_blob_store
 from .config import WorldServiceServerConfig
 from .controlbus_consumer import RiskHubControlBusConsumer
 from .controlbus_producer import ControlBusProducer
+from .core_loop_hub import CoreLoopHub
 from .risk_hub import RiskSignalHub
 from .routers import (
     create_activation_router,
@@ -384,13 +385,22 @@ def create_app(
         bus_instance._required = True
 
     _bind_risk_hub_backend(risk_hub, store, cache_ttl=cache_ttl_override)
+    core_loop_hub = CoreLoopHub(bus=bus_instance)
     service = WorldService(
         store=store,
         bus=bus_instance,
         rebalance_executor=rebalance_executor,
         extended_validation_scheduler=extended_validation_scheduler,
         risk_hub=risk_hub,
+        core_loop_hub=core_loop_hub,
         event_driven_validation=resolved_profile is DeploymentProfile.PROD,
+    )
+    core_loop_hub.bind_schedule_extended_validation(
+        lambda world_id: service._apply_extended_validation(  # type: ignore[attr-defined]
+            world_id=world_id,
+            stage=None,
+            policy_payload=None,
+        )
     )
     storage_handle: StorageHandle | None = None
     compat_flag = compat_rebalance_v2
@@ -512,17 +522,13 @@ def create_app(
     app.include_router(
         create_risk_hub_router(
             risk_hub,
+            core_loop_hub=core_loop_hub,
             bus=bus_instance,
             expected_token=risk_hub_token,
             ttl_sec_default=risk_hub_ttl_default,
             ttl_sec_max=risk_hub_ttl_max,
             allowed_actors=risk_hub_allowed_actors,
             allowed_stages=risk_hub_allowed_stages,
-            schedule_extended_validation=lambda world_id: service._apply_extended_validation(  # type: ignore[attr-defined]
-                world_id=world_id,
-                stage=None,
-                policy_payload=None,
-            ),
         )
     )
     app.include_router(

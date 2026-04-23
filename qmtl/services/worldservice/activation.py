@@ -11,6 +11,7 @@ from qmtl.foundation.common.hashutils import hash_bytes
 from qmtl.services.observability import add_span_attributes, build_observability_fields
 
 from .controlbus_producer import ControlBusProducer
+from .core_loop_hub import CoreLoopHub
 from .risk_hub import PortfolioSnapshot, RiskSignalHub
 from .run_state import ApplyRunState
 from .storage import Storage
@@ -27,10 +28,12 @@ class ActivationEventPublisher:
         bus: ControlBusProducer | None,
         *,
         risk_hub: RiskSignalHub | None = None,
+        core_loop_hub: CoreLoopHub | None = None,
     ) -> None:
         self.store = store
         self.bus = bus
         self.risk_hub = risk_hub
+        self.core_loop_hub = core_loop_hub
 
     async def upsert_activation(
         self, world_id: str, payload: Dict[str, Any]
@@ -241,8 +244,12 @@ class ActivationEventPublisher:
                 "stage": "live",
             },
         )
-        await self.risk_hub.upsert_snapshot(snap)
-        if self.bus:
+        deduped = await self.risk_hub.upsert_snapshot(snap)
+        if deduped:
+            return
+        if self.core_loop_hub is not None:
+            await self.core_loop_hub.handle_risk_snapshot_update(world_id, snap.to_dict())
+        elif self.bus:
             try:
                 await self.bus.publish_risk_snapshot_updated(world_id, snap.to_dict())
             except Exception:

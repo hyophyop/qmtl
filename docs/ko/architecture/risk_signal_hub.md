@@ -34,7 +34,7 @@ flowchart LR
 
 - **생산자**: Gateway 리밸런스/체결 경로가 스냅샷을 Hub에 POST, 필요 시 큰 공분산은 ref로 offload.
 - **소비자**: WS ExtendedValidation/스트레스/라이브 워커가 Hub 조회/이벤트를 통해 Var/ES·stress 계산. Exit 엔진은 Hub 이벤트만 구독해 별도 exit 신호를 낼 수 있다.
-- **이벤트**: ControlBus에 `risk_snapshot_updated` 이벤트를 발행해 워커/모니터링이 구독하도록 한다.
+- **이벤트 라우팅**: `risk_snapshot_updated` 발행과 extended-validation 트리거는 Core Loop 인접 계층(`qmtl/services/worldservice/core_loop_hub.py`)이 소유한다. Risk Signal Hub 자체는 스냅샷 저장/조회 SSOT로 남는다.
 
 ---
 
@@ -67,7 +67,7 @@ flowchart LR
 
 ### 3.2 `realized_returns` 계약 (v1, 저장 전용)
 
-`realized_returns`는 “실현 수익률 시계열”을 스냅샷에 **저장**하기 위한 필드다. Hub는 `realized_returns`를 **계산/집계하지 않고**, 프로듀서(Gateway 등)가 계산한 결과를 저장한다.
+`realized_returns`는 “실현 수익률 시계열”을 스냅샷에 **저장**하기 위한 필드다. Hub는 `realized_returns`를 **계산/집계하지 않고**, 프로듀서(Gateway 등)가 계산한 결과를 저장한다. Core Loop의 v1 성과 지표 파생은 별도 계층(`core_loop_hub.py`)이 담당한다.
 
 - 권장 shape(전략별):
   - `realized_returns: { "<strategy_id>": [r1, r2, ...], ... }`

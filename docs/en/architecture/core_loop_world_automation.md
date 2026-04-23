@@ -45,6 +45,7 @@ flowchart LR
 - **Runner/SDK**: user-facing submission surface (`Runner.submit(strategy, world=...)`).
 - **WorldService**: world-policy SSOT; owns evaluation runs, campaign state, promotion candidates, and governance decisions.
 - **Risk Signal Hub**: portfolio/risk/realized-return snapshot SSOT. It is “storage-only”; producers own computation.
+- **Core Loop Hub layer**: `qmtl/services/worldservice/core_loop_hub.py` reads Risk Hub snapshots to derive evaluation metrics and owns `risk_snapshot_updated` routing / extended-validation triggering.
 - **Scheduler/Loop**: lightweight orchestration (Phase 4). External schedulers or `qmtl world campaign-loop` consume `tick` and execute recommended actions.
 
 ---
@@ -75,7 +76,7 @@ WorldService tracks “submit/evaluate/validate/promotion-candidate” via **Eva
   - Priority (summary):
     - reuse latest evaluation-run metrics (prefer same stage) →
     - enrich from `risk_signal_hub` snapshots (covariance/stress/realized returns ref/inline) →
-    - (paper/live/shadow/dryrun) if `realized_returns` exists, derive v1 core performance metrics from the return series
+    - Core Loop Hub derives v1 core performance metrics from `realized_returns` for paper/live/shadow/dryrun
 
 !!! note "Time-based metric refresh via `realized_returns`"
     Without external engines, periodic `/evaluate` calls are enough to refresh paper/live metrics (sharpe/max_drawdown/effective_history_years, etc.).  
