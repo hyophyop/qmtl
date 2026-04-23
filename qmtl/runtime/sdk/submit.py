@@ -23,7 +23,7 @@ import uuid
 from dataclasses import dataclass, field
 from math import isfinite
 from threading import Thread
-from typing import TYPE_CHECKING, Any, Coroutine, Sequence, SupportsFloat
+from typing import TYPE_CHECKING, Any, Coroutine, Sequence, SupportsFloat, cast
 
 import httpx
 
@@ -1419,35 +1419,20 @@ def _build_submit_result_from_validation(
     ws_eval: WsEvalResult | None,
     gateway_available: bool,
 ) -> SubmitResult:
-    from .validation_pipeline import ValidationStatus
+    from .submit_result_mapper import build_submit_result_from_validation
 
-    if validation_result.status == ValidationStatus.PASSED:
-        return _build_passed_result(
-            strategy=strategy,
-            strategy_id=strategy_id,
-            resolved_world=resolved_world,
-            world_notice=world_notice,
-            validation_result=validation_result,
-            ws_eval=ws_eval,
-        )
-    if validation_result.status == ValidationStatus.FAILED:
-        return _build_failed_result(
-            strategy=strategy,
-            strategy_class_name=strategy_class_name,
-            strategy_id=strategy_id,
-            resolved_world=resolved_world,
-            world_notice=world_notice,
-            validation_result=validation_result,
-            ws_eval=ws_eval,
-            gateway_available=gateway_available,
-        )
-    return _build_error_result(
+    return cast(
+        SubmitResult,
+        build_submit_result_from_validation(
         strategy=strategy,
+        strategy_class_name=strategy_class_name,
         strategy_id=strategy_id,
         resolved_world=resolved_world,
         world_notice=world_notice,
         validation_result=validation_result,
         ws_eval=ws_eval,
+        gateway_available=gateway_available,
+        ),
     )
 
 
