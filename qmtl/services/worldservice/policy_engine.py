@@ -1064,6 +1064,226 @@ def evaluate_live_monitoring(
     )
 
 
+@dataclass
+class _PolicySelectionPreparation:
+    selected_ids: List[str]
+    threshold_failures: Dict[str, List[Dict[str, Any]]]
+    topk_selected: set[str]
+    topk_ranks: Dict[str, int]
+    correlation_violations: Dict[str, List[Tuple[str, float]]]
+    hysteresis_blocked: Dict[str, str]
+
+
+@dataclass
+class _RuleAssemblyProfileConfig:
+    sample_severity: str = "soft"
+    sample_owner: str = "quant"
+    performance_severity: str = "blocking"
+    performance_owner: str = "quant"
+    risk_severity: str = "blocking"
+    risk_owner: str = "risk"
+    robustness_severity: str = "soft"
+    robustness_owner: str = "quant"
+    robustness_dsr_min: float | None = None
+    robustness_cv_sharpe_gap_max: float | None = None
+
+
+@dataclass
+class _CrossStrategyLayerEvaluation:
+    cohort_results: Dict[str, RuleResult]
+    portfolio_results: Dict[str, RuleResult]
+    benchmark_results: Dict[str, RuleResult]
+    stress_results: Dict[str, RuleResult]
+    paper_shadow_results: Dict[str, RuleResult]
+    live_result: RuleResult | None
+
+
+def _prepare_policy_selection(
+    normalized: Dict[str, Dict[str, float]],
+    resolved_policy: Policy,
+    validation_cfg: ValidationConfig,
+    prev_active: Iterable[str] | None,
+    correlations: Dict[Tuple[str, str], float] | None,
+) -> _PolicySelectionPreparation:
+    threshold_passed, threshold_failures = _evaluate_thresholds_with_details(
+        normalized,
+        resolved_policy.thresholds,
+        missing_mode=validation_cfg.on_missing_metric,
+    )
+
+    candidates = threshold_passed
+    topk_ranks: Dict[str, int] = {sid: idx for idx, sid in enumerate(candidates)}
+    if resolved_policy.top_k:
+        candidates, topk_ranks = _apply_topk_with_details(normalized, candidates, resolved_policy.top_k)
+    topk_selected = set(candidates)
+
+    correlation_violations: Dict[str, List[Tuple[str, float]]] = {}
+    if resolved_policy.correlation:
+        candidates, correlation_violations = _apply_correlation_with_details(
+            correlations, candidates, resolved_policy.correlation
+        )
+
+    hysteresis_blocked: Dict[str, str] = {}
+    if resolved_policy.hysteresis:
+        candidates, hysteresis_blocked = _apply_hysteresis_with_details(
+            normalized, candidates, prev_active, resolved_policy.hysteresis
+        )
+
+    return _PolicySelectionPreparation(
+        selected_ids=list(candidates),
+        threshold_failures=threshold_failures,
+        topk_selected=topk_selected,
+        topk_ranks=topk_ranks,
+        correlation_violations=correlation_violations,
+        hysteresis_blocked=hysteresis_blocked,
+    )
+
+
+def _resolve_rule_assembly_profile_config(
+    selected_profile_cfg: ValidationProfile | None,
+) -> _RuleAssemblyProfileConfig:
+    sample_cfg = selected_profile_cfg.sample if selected_profile_cfg else None
+    performance_cfg = selected_profile_cfg.performance if selected_profile_cfg else None
+    risk_cfg = selected_profile_cfg.risk if selected_profile_cfg else None
+    robustness_cfg = selected_profile_cfg.robustness if selected_profile_cfg else None
+
+    return _RuleAssemblyProfileConfig(
+        sample_severity=(sample_cfg.severity if sample_cfg else None) or "soft",
+        sample_owner=(sample_cfg.owner if sample_cfg else None) or "quant",
+        performance_severity=(performance_cfg.severity if performance_cfg else None) or "blocking",
+        performance_owner=(performance_cfg.owner if performance_cfg else None) or "quant",
+        risk_severity=(risk_cfg.severity if risk_cfg else None) or "blocking",
+        risk_owner=(risk_cfg.owner if risk_cfg else None) or "risk",
+        robustness_severity=(robustness_cfg.severity if robustness_cfg else None) or "soft",
+        robustness_owner=(robustness_cfg.owner if robustness_cfg else None) or "quant",
+        robustness_dsr_min=robustness_cfg.dsr_min if robustness_cfg else None,
+        robustness_cv_sharpe_gap_max=robustness_cfg.cv_sharpe_gap_max if robustness_cfg else None,
+    )
+
+
+def _assemble_policy_rules(
+    resolved_policy: Policy,
+    validation_cfg: ValidationConfig,
+    selection: _PolicySelectionPreparation,
+    selected_profile_cfg: ValidationProfile | None,
+) -> List[ValidationRule]:
+    grouped_thresholds = _group_thresholds(resolved_policy.thresholds)
+    profile_cfg = _resolve_rule_assembly_profile_config(selected_profile_cfg)
+    return [
+        DataCurrencyRule(
+            required_metrics=[t.metric for t in grouped_thresholds["data_currency"]],
+            on_missing_metric=validation_cfg.on_missing_metric,
+        ),
+        SampleRule(
+            thresholds=grouped_thresholds["sample"],
+            severity=profile_cfg.sample_severity,
+            owner=profile_cfg.sample_owner,
+        ),
+        PerformanceRule(
+            thresholds=grouped_thresholds["performance"] or list(resolved_policy.thresholds.values()),
+            threshold_failures=selection.threshold_failures,
+            top_k=resolved_policy.top_k,
+            topk_selected=selection.topk_selected,
+            topk_ranks=selection.topk_ranks,
+            on_missing_metric=validation_cfg.on_missing_metric,
+            severity=profile_cfg.performance_severity,
+            owner=profile_cfg.performance_owner,
+        ),
+        RiskConstraintRule(
+            correlation_rule=resolved_policy.correlation,
+            hysteresis_rule=resolved_policy.hysteresis,
+            correlation_violations=selection.correlation_violations,
+            hysteresis_blocked=selection.hysteresis_blocked,
+            severity=profile_cfg.risk_severity,
+            owner=profile_cfg.risk_owner,
+        ),
+        RobustnessRule(
+            dsr_min=profile_cfg.robustness_dsr_min,
+            cv_sharpe_gap_max=profile_cfg.robustness_cv_sharpe_gap_max,
+            severity=profile_cfg.robustness_severity,
+            owner=profile_cfg.robustness_owner,
+        ),
+    ]
+
+
+def _evaluate_rule_results(
+    normalized: Dict[str, Dict[str, float]],
+    rules: Sequence[ValidationRule],
+    validation_cfg: ValidationConfig,
+    prev_active: Iterable[str] | None,
+    correlations: Dict[Tuple[str, str], float] | None,
+) -> Dict[str, Dict[str, RuleResult]]:
+    rule_results: Dict[str, Dict[str, RuleResult]] = {}
+    previous = set(prev_active or [])
+    for strategy_id, strategy_metrics in normalized.items():
+        context = RuleContext(
+            strategy_id=strategy_id,
+            previous_active=previous,
+            correlations=correlations,
+        )
+        per_rule: Dict[str, RuleResult] = {}
+        for rule in rules:
+            try:
+                per_rule[rule.name] = rule.evaluate(strategy_metrics, context)
+            except Exception as exc:  # pragma: no cover - defensive fail-closed
+                status = "fail" if validation_cfg.on_error == "fail" else "warn"
+                tags = getattr(rule, "tags", (rule.name,))
+                per_rule[rule.name] = RuleResult(
+                    status=status,
+                    severity=getattr(rule, "severity", "blocking"),
+                    owner=getattr(rule, "owner", "quant"),
+                    reason_code="rule_error",
+                    reason=str(exc),
+                    tags=list(tags),
+                    details={"error": repr(exc)},
+                )
+        rule_results[strategy_id] = per_rule
+    return rule_results
+
+
+def _evaluate_cross_strategy_layers(
+    metrics: Mapping[str, Mapping[str, float]],
+    policy: Policy,
+    *,
+    stage: str | None = None,
+) -> _CrossStrategyLayerEvaluation:
+    return _CrossStrategyLayerEvaluation(
+        cohort_results=evaluate_cohort_rules(metrics, policy, stage=stage),
+        portfolio_results=evaluate_portfolio_rules(metrics, policy, stage=stage),
+        benchmark_results=evaluate_benchmark_rules(metrics, policy, stage=stage),
+        stress_results=evaluate_stress_rules(metrics, policy, stage=stage),
+        paper_shadow_results=evaluate_paper_shadow_consistency(metrics, policy, stage=stage),
+        live_result=evaluate_live_monitoring(metrics, policy, stage=stage),
+    )
+
+
+def _merge_cross_strategy_layers(
+    base_results: Dict[str, Dict[str, RuleResult]],
+    strategy_ids: Iterable[str],
+    cross_layers: _CrossStrategyLayerEvaluation,
+    *,
+    include_empty: bool = False,
+) -> Dict[str, Dict[str, RuleResult]]:
+    merged = base_results
+    for sid in strategy_ids:
+        per_rule = merged.setdefault(sid, {})
+        if sid in cross_layers.cohort_results:
+            per_rule["cohort"] = cross_layers.cohort_results[sid]
+        if sid in cross_layers.portfolio_results:
+            per_rule["portfolio"] = cross_layers.portfolio_results[sid]
+        if sid in cross_layers.benchmark_results:
+            per_rule["benchmark"] = cross_layers.benchmark_results[sid]
+        if sid in cross_layers.stress_results:
+            per_rule["stress"] = cross_layers.stress_results[sid]
+        if sid in cross_layers.paper_shadow_results:
+            per_rule["paper_shadow_consistency"] = cross_layers.paper_shadow_results[sid]
+        if cross_layers.live_result:
+            per_rule["live_monitoring"] = cross_layers.live_result
+        if not per_rule and not include_empty:
+            merged.pop(sid, None)
+    return merged
+
+
 def evaluate_policy(
     metrics: Mapping[str, Mapping[str, Any]],
     policy: Policy,
@@ -1090,142 +1310,36 @@ def evaluate_policy(
     )
     validation_cfg = resolved_policy.validation or ValidationConfig()
     normalized = _normalize_metrics(metrics)
-    threshold_passed, threshold_failures = _evaluate_thresholds_with_details(
-        normalized,
-        resolved_policy.thresholds,
-        missing_mode=validation_cfg.on_missing_metric,
+    selection = _prepare_policy_selection(
+        normalized=normalized,
+        resolved_policy=resolved_policy,
+        validation_cfg=validation_cfg,
+        prev_active=prev_active,
+        correlations=correlations,
     )
-
-    candidates = threshold_passed
-    topk_ranks: Dict[str, int] = {sid: idx for idx, sid in enumerate(candidates)}
-    if resolved_policy.top_k:
-        candidates, topk_ranks = _apply_topk_with_details(normalized, candidates, resolved_policy.top_k)
-    topk_selected = set(candidates)
-
-    correlation_violations: Dict[str, List[Tuple[str, float]]] = {}
-    if resolved_policy.correlation:
-        candidates, correlation_violations = _apply_correlation_with_details(
-            correlations, candidates, resolved_policy.correlation
-        )
-
-    hysteresis_blocked: Dict[str, str] = {}
-    if resolved_policy.hysteresis:
-        candidates, hysteresis_blocked = _apply_hysteresis_with_details(
-            normalized, candidates, prev_active, resolved_policy.hysteresis
-        )
-
-    selected_ids = list(candidates)
-
-    grouped_thresholds = _group_thresholds(resolved_policy.thresholds)
-    sample_severity = (selected_profile_cfg.sample.severity if selected_profile_cfg and selected_profile_cfg.sample else None) or "soft"
-    sample_owner = (selected_profile_cfg.sample.owner if selected_profile_cfg and selected_profile_cfg.sample else None) or "quant"
-    performance_severity = (
-        selected_profile_cfg.performance.severity if selected_profile_cfg and selected_profile_cfg.performance else None
-    ) or "blocking"
-    performance_owner = (
-        selected_profile_cfg.performance.owner if selected_profile_cfg and selected_profile_cfg.performance else None
-    ) or "quant"
-    risk_severity = (selected_profile_cfg.risk.severity if selected_profile_cfg and selected_profile_cfg.risk else None) or "blocking"
-    risk_owner = (selected_profile_cfg.risk.owner if selected_profile_cfg and selected_profile_cfg.risk else None) or "risk"
-    robustness_severity = (
-        selected_profile_cfg.robustness.severity if selected_profile_cfg and selected_profile_cfg.robustness else None
-    ) or "soft"
-    robustness_owner = (
-        selected_profile_cfg.robustness.owner if selected_profile_cfg and selected_profile_cfg.robustness else None
-    ) or "quant"
-    robustness_dsr_min = (
-        selected_profile_cfg.robustness.dsr_min if selected_profile_cfg and selected_profile_cfg.robustness else None
+    rules = _assemble_policy_rules(
+        resolved_policy=resolved_policy,
+        validation_cfg=validation_cfg,
+        selection=selection,
+        selected_profile_cfg=selected_profile_cfg,
     )
-    robustness_cv_sharpe_gap_max = (
-        selected_profile_cfg.robustness.cv_sharpe_gap_max if selected_profile_cfg and selected_profile_cfg.robustness else None
+    rule_results = _evaluate_rule_results(
+        normalized=normalized,
+        rules=rules,
+        validation_cfg=validation_cfg,
+        prev_active=prev_active,
+        correlations=correlations,
     )
-
-    rules: List[ValidationRule] = [
-        DataCurrencyRule(
-            required_metrics=[t.metric for t in grouped_thresholds["data_currency"]],
-            on_missing_metric=validation_cfg.on_missing_metric,
-        ),
-        SampleRule(
-            thresholds=grouped_thresholds["sample"],
-            severity=sample_severity,
-            owner=sample_owner,
-        ),
-        PerformanceRule(
-            thresholds=grouped_thresholds["performance"] or list(resolved_policy.thresholds.values()),
-            threshold_failures=threshold_failures,
-            top_k=resolved_policy.top_k,
-            topk_selected=topk_selected,
-            topk_ranks=topk_ranks,
-            on_missing_metric=validation_cfg.on_missing_metric,
-            severity=performance_severity,
-            owner=performance_owner,
-        ),
-        RiskConstraintRule(
-            correlation_rule=resolved_policy.correlation,
-            hysteresis_rule=resolved_policy.hysteresis,
-            correlation_violations=correlation_violations,
-            hysteresis_blocked=hysteresis_blocked,
-            severity=risk_severity,
-            owner=risk_owner,
-        ),
-        RobustnessRule(
-            dsr_min=robustness_dsr_min,
-            cv_sharpe_gap_max=robustness_cv_sharpe_gap_max,
-            severity=robustness_severity,
-            owner=robustness_owner,
-        ),
-    ]
-
-    rule_results: Dict[str, Dict[str, RuleResult]] = {}
-    previous = set(prev_active or [])
-    for strategy_id, strategy_metrics in normalized.items():
-        context = RuleContext(
-            strategy_id=strategy_id,
-            previous_active=previous,
-            correlations=correlations,
-        )
-        per_rule: Dict[str, RuleResult] = {}
-        for rule in rules:
-            try:
-                per_rule[rule.name] = rule.evaluate(strategy_metrics, context)
-            except Exception as exc:  # pragma: no cover - defensive fail-closed
-                status = "fail" if validation_cfg.on_error == "fail" else "warn"
-                tags = getattr(rule, "tags", (rule.name,))
-                per_rule[rule.name] = RuleResult(
-                    status=status,
-                    severity=getattr(rule, "severity", "blocking"),
-                    owner=getattr(rule, "owner", "quant"),
-                    reason_code="rule_error",
-                    reason=str(exc),
-                    tags=list(tags),
-                    details={"error": repr(exc)},
-                )
-        rule_results[strategy_id] = per_rule
-
-    cohort_results = evaluate_cohort_rules(normalized, policy, stage=stage)
-    portfolio_results = evaluate_portfolio_rules(normalized, policy, stage=stage)
-    benchmark_results = evaluate_benchmark_rules(normalized, policy, stage=stage)
-    stress_results = evaluate_stress_rules(normalized, policy, stage=stage)
-    paper_shadow_results = evaluate_paper_shadow_consistency(normalized, policy, stage=stage)
-    live_result = evaluate_live_monitoring(normalized, policy, stage=stage)
-
-    for sid in normalized.keys():
-        per_rule = rule_results.setdefault(sid, {})
-        if sid in cohort_results:
-            per_rule["cohort"] = cohort_results[sid]
-        if sid in portfolio_results:
-            per_rule["portfolio"] = portfolio_results[sid]
-        if sid in benchmark_results:
-            per_rule["benchmark"] = benchmark_results[sid]
-        if sid in stress_results:
-            per_rule["stress"] = stress_results[sid]
-        if sid in paper_shadow_results:
-            per_rule["paper_shadow_consistency"] = paper_shadow_results[sid]
-        if live_result:
-            per_rule["live_monitoring"] = live_result
+    cross_layers = _evaluate_cross_strategy_layers(normalized, policy, stage=stage)
+    rule_results = _merge_cross_strategy_layers(
+        base_results=rule_results,
+        strategy_ids=normalized.keys(),
+        cross_layers=cross_layers,
+        include_empty=True,
+    )
 
     return PolicyEvaluationResult(
-        selected_ids=selected_ids,
+        selected_ids=selection.selected_ids,
         rule_results=rule_results,
         profile=selected_profile,
         ruleset_hash=_ruleset_hash(resolved_policy, profile=selected_profile),
@@ -1254,31 +1368,12 @@ def evaluate_extended_layers(
         if isinstance(raw_metrics, Mapping):
             metrics_map[str(sid)] = _flatten_evaluation_metrics(raw_metrics)
 
-    cohort_results = evaluate_cohort_rules(metrics_map, policy, stage=stage)
-    portfolio_results = evaluate_portfolio_rules(metrics_map, policy, stage=stage)
-    benchmark_results = evaluate_benchmark_rules(metrics_map, policy, stage=stage)
-    stress_results = evaluate_stress_rules(metrics_map, policy, stage=stage)
-    paper_shadow_results = evaluate_paper_shadow_consistency(metrics_map, policy, stage=stage)
-    live_result = evaluate_live_monitoring(metrics_map, policy, stage=stage)
-
-    merged: Dict[str, Dict[str, RuleResult]] = {}
-    for sid in metrics_map.keys():
-        per_rule: Dict[str, RuleResult] = {}
-        if sid in cohort_results:
-            per_rule["cohort"] = cohort_results[sid]
-        if sid in portfolio_results:
-            per_rule["portfolio"] = portfolio_results[sid]
-        if sid in benchmark_results:
-            per_rule["benchmark"] = benchmark_results[sid]
-        if sid in stress_results:
-            per_rule["stress"] = stress_results[sid]
-        if sid in paper_shadow_results:
-            per_rule["paper_shadow_consistency"] = paper_shadow_results[sid]
-        if live_result:
-            per_rule["live_monitoring"] = live_result
-        if per_rule:
-            merged[sid] = per_rule
-    return merged
+    cross_layers = _evaluate_cross_strategy_layers(metrics_map, policy, stage=stage)
+    return _merge_cross_strategy_layers(
+        base_results={},
+        strategy_ids=metrics_map.keys(),
+        cross_layers=cross_layers,
+    )
 
 
 def _group_thresholds(thresholds: Mapping[str, ThresholdRule]) -> Dict[str, List[ThresholdRule]]:
