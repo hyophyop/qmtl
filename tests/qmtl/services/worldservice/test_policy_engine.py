@@ -135,6 +135,59 @@ def test_hysteresis_preserves_active_entries_on_exit_threshold():
     assert result.rule_results["s1"]["risk_constraint"].reason_code == "risk_constraints_ok"
 
 
+def test_prepare_policy_selection_keeps_topk_snapshot_before_risk_filters():
+    policy = Policy(
+        thresholds={"sharpe": ThresholdRule(metric="sharpe", min=0.0)},
+        top_k=TopKRule(metric="sharpe", k=2),
+        correlation=CorrelationRule(max=0.5),
+        hysteresis=HysteresisRule(metric="score", enter=0.6, exit=0.4),
+    )
+    normalized = {
+        "s1": {"sharpe": 1.0, "score": 0.8},
+        "s2": {"sharpe": 0.9, "score": 0.8},
+        "s3": {"sharpe": 0.7, "score": 0.8},
+    }
+    correlations = {("s1", "s2"): 0.9}
+
+    selection = pe._prepare_policy_selection(
+        normalized=normalized,
+        resolved_policy=policy,
+        validation_cfg=ValidationConfig(),
+        prev_active=None,
+        correlations=correlations,
+    )
+
+    assert selection.topk_selected == {"s1", "s2"}
+    assert selection.selected_ids == ["s1"]
+    assert selection.correlation_violations["s2"] == [("s1", 0.9)]
+
+
+def test_merge_cross_strategy_layers_include_empty_flag():
+    cross_layers = pe._CrossStrategyLayerEvaluation(
+        cohort_results={},
+        portfolio_results={},
+        benchmark_results={},
+        stress_results={},
+        paper_shadow_results={},
+        live_result=None,
+    )
+
+    merged_default = pe._merge_cross_strategy_layers(
+        base_results={},
+        strategy_ids=["s1"],
+        cross_layers=cross_layers,
+    )
+    merged_include_empty = pe._merge_cross_strategy_layers(
+        base_results={},
+        strategy_ids=["s1"],
+        cross_layers=cross_layers,
+        include_empty=True,
+    )
+
+    assert merged_default == {}
+    assert merged_include_empty == {"s1": {}}
+
+
 def test_parse_policy_from_yaml_payload():
     raw = """
     thresholds:
