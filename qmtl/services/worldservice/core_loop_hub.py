@@ -149,11 +149,15 @@ def baseline_from_covariance(
             return None
     if w_sum <= 0:
         return None
-    norm_weights = {
-        str(k): float(v) / w_sum
-        for k, v in weights.items()
-        if isinstance(v, (int, float)) and not isinstance(v, bool)
-    }
+    norm_weights: dict[str, float] = {}
+    for key, value in weights.items():
+        try:
+            coerced = float(value)
+        except Exception:
+            return None
+        if not math.isfinite(coerced):
+            return None
+        norm_weights[str(key)] = coerced / w_sum
     variance = 0.0
     sids = list(norm_weights.keys())
     for a in sids:
@@ -196,11 +200,15 @@ def incremental_var_es_from_covariance(
     scaled_existing: dict[str, float] = {}
     if alpha < 1.0:
         for sid, weight in weights.items():
-            if not isinstance(weight, (int, float)) or isinstance(weight, bool):
+            try:
+                coerced = float(weight)
+            except Exception:
+                return None
+            if not math.isfinite(coerced):
+                return None
+            if coerced == 0:
                 continue
-            if weight == 0:
-                continue
-            scaled = float(weight) * (1.0 - alpha)
+            scaled = coerced * (1.0 - alpha)
             if scaled != 0:
                 scaled_existing[str(sid)] = scaled
 

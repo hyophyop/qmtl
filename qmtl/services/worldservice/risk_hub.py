@@ -131,7 +131,7 @@ class RiskSignalHub:
         ttl_sec_max: int = 86400,
     ) -> None:
         self._snapshots: Dict[str, List[PortfolioSnapshot]] = {}
-        self._pending_dispatches: Dict[str, set[str]] = {}
+        self._pending_dispatches: Dict[str, Dict[str, datetime]] = {}
         self._repository = repository
         self._max_cached = max_cached
         self._cache = cache
@@ -162,13 +162,14 @@ class RiskSignalHub:
         self._blob_store = store
 
     def snapshot_dispatch_pending(self, world_id: str, version: str) -> bool:
-        return version in self._pending_dispatches.get(world_id, set())
+        self._prune_pending_dispatches(world_id)
+        return version in self._pending_dispatches.get(world_id, {})
 
     def mark_snapshot_dispatch_completed(self, world_id: str, version: str) -> None:
         pending = self._pending_dispatches.get(world_id)
         if pending is None:
             return
-        pending.discard(version)
+        pending.pop(version, None)
         if not pending:
             self._pending_dispatches.pop(world_id, None)
 
@@ -223,7 +224,7 @@ class RiskSignalHub:
 
         deduped = self._cache_snapshot(snapshot) or deduped
         if not deduped:
-            self._pending_dispatches.setdefault(snapshot.world_id, set()).add(snapshot.version)
+            self._mark_snapshot_dispatch_pending(snapshot)
         await self._cache_latest(snapshot)
         return deduped
 
@@ -316,6 +317,7 @@ class RiskSignalHub:
         if self._max_cached is not None and len(entries) > self._max_cached:
             entries = entries[-self._max_cached :]
         self._snapshots[snapshot.world_id] = entries
+        self._prune_pending_dispatches(snapshot.world_id)
         return False
 
     def _cached_version_deduped(self, snapshot: PortfolioSnapshot) -> bool:
@@ -328,6 +330,47 @@ class RiskSignalHub:
         raise RiskSnapshotConflictError(
             f"snapshot version collision for world_id={snapshot.world_id} version={snapshot.version}"
         )
+
+    def _mark_snapshot_dispatch_pending(self, snapshot: PortfolioSnapshot) -> None:
+        self._prune_pending_dispatches(snapshot.world_id)
+        ttl_seconds = max(
+            1,
+            int(snapshot.ttl_sec or self._cache_ttl or self._ttl_sec_default),
+        )
+        created_at = self._parse_iso(snapshot.created_at) or datetime.now(timezone.utc)
+        deadline = created_at + timedelta(seconds=ttl_seconds)
+        pending = self._pending_dispatches.setdefault(snapshot.world_id, {})
+        pending[snapshot.version] = deadline
+        if self._max_cached is not None and len(pending) > self._max_cached:
+            items = list(pending.items())[-self._max_cached :]
+            self._pending_dispatches[snapshot.world_id] = dict(items)
+
+    def _prune_pending_dispatches(self, world_id: str | None = None) -> None:
+        worlds = [world_id] if world_id is not None else list(self._pending_dispatches.keys())
+        now = datetime.now(timezone.utc)
+        for current_world in worlds:
+            pending = self._pending_dispatches.get(current_world)
+            if not pending:
+                self._pending_dispatches.pop(current_world, None)
+                continue
+            cached_versions = {
+                snap.version
+                for snap in self._snapshots.get(current_world, [])
+                if not self._expired(snap)
+            }
+            keep: dict[str, datetime] = {}
+            for version, deadline in pending.items():
+                if deadline <= now:
+                    continue
+                if cached_versions and version not in cached_versions:
+                    continue
+                keep[version] = deadline
+            if self._max_cached is not None and len(keep) > self._max_cached:
+                keep = dict(list(keep.items())[-self._max_cached :])
+            if keep:
+                self._pending_dispatches[current_world] = keep
+            else:
+                self._pending_dispatches.pop(current_world, None)
 
     def _validate_snapshot(self, snapshot: PortfolioSnapshot) -> None:
         if not snapshot.world_id:

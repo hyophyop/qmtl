@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from qmtl.services.worldservice.risk_hub import (
@@ -186,3 +188,39 @@ async def test_in_memory_conflict_blocks_repository_write_before_persist() -> No
         await hub.upsert_snapshot(conflicting)
 
     assert repo.upsert_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_pending_dispatch_versions_are_pruned_when_snapshot_cache_evicts_them() -> None:
+    hub = RiskSignalHub(max_cached=1)
+
+    first = PortfolioSnapshot(
+        world_id="w",
+        as_of="2025-01-01T00:00:00Z",
+        version="v1",
+        weights={"a": 1.0},
+    )
+    second = PortfolioSnapshot(
+        world_id="w",
+        as_of="2025-01-01T00:01:00Z",
+        version="v2",
+        weights={"a": 1.0},
+    )
+
+    await hub.upsert_snapshot(first)
+    assert hub.snapshot_dispatch_pending("w", "v1") is True
+
+    await hub.upsert_snapshot(second)
+
+    assert hub.snapshot_dispatch_pending("w", "v1") is False
+    assert hub.snapshot_dispatch_pending("w", "v2") is True
+
+
+def test_pending_dispatch_versions_are_pruned_when_deadline_expires() -> None:
+    hub = RiskSignalHub()
+    hub._pending_dispatches = {  # type: ignore[assignment]
+        "w": {"v1": datetime.now(timezone.utc) - timedelta(seconds=1)}
+    }
+
+    assert hub.snapshot_dispatch_pending("w", "v1") is False
+    assert "w" not in hub._pending_dispatches

@@ -6,6 +6,7 @@ import httpx
 
 from qmtl.services.worldservice.core_loop_hub import (
     CoreLoopHub,
+    baseline_from_covariance,
     deep_merge_mappings,
     derive_metrics_from_risk_snapshot,
 )
@@ -66,6 +67,17 @@ def test_deep_merge_mappings_merges_nested_metrics() -> None:
         "returns": {"sharpe": 1.0, "max_drawdown": 0.2},
         "diagnostics": {"source": "runs", "live_returns_source": "risk_hub"},
     }
+
+
+def test_baseline_from_covariance_preserves_float_coercion_for_bool_weights() -> None:
+    baseline = baseline_from_covariance(
+        weights={"s1": True},
+        covariance={"s1,s1": 0.04},
+    )
+
+    assert baseline is not None
+    assert baseline["var_99"] == pytest.approx((0.04 ** 0.5) * 2.33)
+    assert baseline["es_99"] == pytest.approx(((0.04 ** 0.5) * 2.33) * 1.2)
 
 
 @pytest.mark.asyncio
