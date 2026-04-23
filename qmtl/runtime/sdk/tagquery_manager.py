@@ -70,6 +70,7 @@ class TagQueryManager:
             cache_path,
             storage_kind="tagquery_cache",
             default_path=".qmtl_tagmap.json",
+            world_id=self.world_id,
         )
 
     # ------------------------------------------------------------------
