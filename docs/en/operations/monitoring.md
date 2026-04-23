@@ -28,6 +28,7 @@ The following alerts are available for inspiration when extending `alert_rules.y
 - **QueueCreateErrors** – fires when `queue_create_error_total` increases.
 - **SentinelGap** – indicates a missing diff sentinel via `sentinel_gap_count`.
 - **OrphanQueuesGrowing** – detects rises in `orphan_queue_total` over a three-hour window.
+- **GCCleanupReportReview** – inspect the `POST /admin/gc-trigger` report when `report.actions.skip` is nonzero or `skipped[].reason=archive_failed` appears.
 - **QueueLagHigh** – triggers when `queue_lag_seconds` exceeds `queue_lag_threshold_seconds` for a topic.
 - **GatewayLatencyHigh** – alerts when `gateway_e2e_latency_p95` exceeds 150 ms.
 - **LostRequests** – reports lost diff submissions based on `lost_requests_total`.

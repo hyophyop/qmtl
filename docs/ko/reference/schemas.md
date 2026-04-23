@@ -13,6 +13,7 @@ last_modified: 2026-03-06
 - ActivationEnvelope: reference/schemas/activation_envelope.schema.json
 - ActivationUpdated 이벤트: reference/schemas/event_activation_updated.schema.json
 - QueueUpdated 이벤트: reference/schemas/event_queue_updated.schema.json
+- QueueLifecycle 이벤트: reference/schemas/event_queue_lifecycle.schema.json
 - PolicyUpdated 이벤트: reference/schemas/event_policy_updated.schema.json
 - 노드(GSG): reference/schemas/node.schema.json
 - 월드: reference/schemas/world.schema.json

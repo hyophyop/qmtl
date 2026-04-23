@@ -270,9 +270,14 @@ class AdminServiceServicer(dagmanager_pb2_grpc.AdminServiceServicer):
         context: grpc.aio.ServicerContext,
     ) -> dagmanager_pb2.CleanupResponse:
         if self._gc is not None:
-            processed = self._gc.collect()
-            if self._bus and processed:
-                await publish_queue_updates(self._bus, processed, repo=self._repo)
+            report = self._gc.collect_report()
+            if self._bus and report.processed:
+                await publish_queue_updates(
+                    self._bus,
+                    report.processed,
+                    repo=self._repo,
+                    lifecycle_items=report.items,
+                )
         return dagmanager_pb2.CleanupResponse()
 
     async def GetQueueStats(

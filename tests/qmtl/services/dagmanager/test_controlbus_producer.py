@@ -35,11 +35,38 @@ async def test_controlbus_producer_emits_queue_update_as_cloudevent():
     topic, data, key = dummy.sent[0]
     evt = json.loads(data.decode())
     assert evt["type"] == "queue_updated"
+    assert evt["data"]["type"] == "QueueUpdated"
+    assert evt["data"]["queues"] == [{"queue": "q1", "global": True}]
     assert evt["correlation_id"].startswith("queue:")
     assert evt["data"]["etag"].startswith("q:")
     assert "idempotency_key" in evt["data"]
     assert topic == "queue"
     assert key == b"a,b"
+
+
+@pytest.mark.asyncio
+async def test_controlbus_producer_emits_queue_lifecycle_as_cloudevent():
+    dummy = DummyProducer()
+    producer = ControlBusProducer(producer=dummy, topic="queue", sentinel_topic="sentinel_weight")
+
+    await producer.publish_queue_lifecycle(
+        queue="q1",
+        action="archive",
+        reason="eligible",
+        tag="sentinel",
+        interval=60,
+        archive_status="archived",
+    )
+
+    topic, data, key = dummy.sent[0]
+    evt = json.loads(data.decode())
+    assert evt["type"] == "queue_lifecycle"
+    assert evt["data"]["type"] == "QueueLifecycle"
+    assert evt["data"]["queue"] == "q1"
+    assert evt["data"]["action"] == "archive"
+    assert evt["data"]["archive_status"] == "archived"
+    assert topic == "queue"
+    assert key == b"q1"
 
 
 @pytest.mark.asyncio
@@ -62,4 +89,3 @@ async def test_controlbus_producer_emits_sentinel_weight_as_cloudevent():
     assert "idempotency_key" in evt["data"]
     assert topic == "sentinel_weight"
     assert key == b"s1"
-

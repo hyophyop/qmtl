@@ -173,6 +173,10 @@ class WebSocketHub:
         }
         await self._send_event("queue_update", payload, topic="queue")
 
+    async def send_queue_lifecycle(self, payload: dict[str, Any]) -> None:
+        payload.setdefault("version", 1)
+        await self._send_event("queue_lifecycle", payload, topic="queue")
+
     async def send_tagquery_upsert(
         self, tags: list[str], interval: int, queues: list[dict[str, object]]
     ) -> None:

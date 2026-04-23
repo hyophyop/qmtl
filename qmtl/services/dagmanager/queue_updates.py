@@ -7,7 +7,7 @@ from collections import defaultdict
 from typing import Iterable, Mapping
 
 from .controlbus_producer import ControlBusProducer
-from .garbage_collector import QueueInfo
+from .garbage_collector import CleanupReportItem, QueueInfo
 from .repository import NodeRepository
 
 LOGGER = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ async def publish_queue_updates(
     *,
     repo: NodeRepository | None = None,
     match_mode: str = "any",
+    lifecycle_items: Iterable[CleanupReportItem] | None = None,
 ) -> None:
     """Publish ControlBus updates for processed queues.
 
@@ -27,11 +28,39 @@ async def publish_queue_updates(
     subscribers observe the post-GC view.
     """
 
-    grouped = _group_by_tag_interval(queues)
+    queue_list = list(queues)
+    grouped = _group_by_tag_interval(queue_list)
+
+    for item in lifecycle_items or _default_lifecycle_items(queue_list):
+        if item.action == "skip":
+            continue
+        publisher = getattr(bus, "publish_queue_lifecycle", None)
+        if callable(publisher):
+            await publisher(
+                queue=item.queue,
+                action=item.action,
+                reason=item.reason,
+                tag=item.tag,
+                interval=item.interval,
+                archive_status=item.archive_status,
+            )
 
     for (tag, interval), _dropped in grouped.items():
         current = _resolve_remaining(repo, tag, interval, match_mode)
         await bus.publish_queue_update([tag], interval, current, match_mode)
+
+
+def _default_lifecycle_items(queues: Iterable[QueueInfo]) -> list[CleanupReportItem]:
+    return [
+        CleanupReportItem(
+            queue=info.name,
+            tag=info.tag,
+            interval=info.interval,
+            action="drop",
+            reason="gc",
+        )
+        for info in queues
+    ]
 
 
 def _group_by_tag_interval(queues: Iterable[QueueInfo]) -> dict[tuple[str, int], set[str]]:

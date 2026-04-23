@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qmtl.dev/schemas/event_queue_lifecycle.schema.json",
+  "title": "QueueLifecycle",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "type": { "const": "QueueLifecycle" },
+    "version": { "type": "integer", "minimum": 1 },
+    "queue": { "type": "string" },
+    "action": { "enum": ["drop", "archive"] },
+    "reason": { "type": "string" },
+    "tag": { "type": "string" },
+    "interval": { "type": "integer", "minimum": 1 },
+    "archive_status": { "enum": ["archived", "missing_client", "failed"] },
+    "etag": { "type": "string" },
+    "idempotency_key": { "type": "string" },
+    "ts": { "type": "string", "format": "date-time" }
+  },
+  "required": ["type", "version", "queue", "action", "reason", "etag", "idempotency_key", "ts"]
+}

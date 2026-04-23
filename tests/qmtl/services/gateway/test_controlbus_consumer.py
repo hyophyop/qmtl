@@ -90,6 +90,10 @@ class FakeHub:
         )
         self._note_event()
 
+    async def send_queue_lifecycle(self, payload: dict[str, Any]) -> None:
+        self.events.append(("queue_lifecycle", payload))
+        self._note_event()
+
     async def send_rebalancing_planned(
         self,
         *,
@@ -616,6 +620,44 @@ async def test_queue_update_emits_tagquery_once():
         metrics.event_relay_events_total.labels(topic="queue")._value.get() == 2
     )
     assert metrics.event_relay_dropped_total.labels(topic="queue")._value.get() == 0
+
+
+@pytest.mark.asyncio
+async def test_queue_lifecycle_relay_deduplicates_without_tagquery_upsert():
+    metrics.reset_metrics()
+    hub = FakeHub()
+    consumer = ControlBusConsumer(
+        brokers=[], topics=["queue"], group="g", ws_hub=hub
+    )
+    await consumer.start()
+    payload = {
+        "type": "QueueLifecycle",
+        "queue": "q1",
+        "action": "archive",
+        "reason": "eligible",
+        "tag": "sentinel",
+        "interval": 60,
+        "archive_status": "archived",
+        "version": 1,
+        "etag": "ql:q1:archive:eligible:1",
+        "ts": "2024-01-01T00:00:00Z",
+    }
+    msg = ControlBusMessage(
+        topic="queue",
+        key="q1",
+        etag="ql:q1:archive:eligible:1",
+        run_id="",
+        data=payload,
+        timestamp_ms=time.time() * 1000,
+    )
+
+    await consumer.publish(msg)
+    await consumer.publish(msg)
+    await consumer._queue.join()
+    await consumer.stop()
+
+    assert hub.events == [("queue_lifecycle", payload)]
+    assert metrics.event_relay_dropped_total.labels(topic="queue")._value.get() == 1
 
 
 class StartStopConsumer(ControlBusConsumer):

@@ -26,6 +26,7 @@ class GcRequest(BaseModel):
 
 class GcResponse(BaseModel):
     processed: list[str]
+    report: dict[str, object] | None = None
 
 
 def create_app(
@@ -65,11 +66,16 @@ def create_app(
     @app.post("/admin/gc-trigger", status_code=status.HTTP_202_ACCEPTED)
     async def trigger_gc(payload: GcRequest) -> GcResponse:
         with tracer.start_as_current_span("dagmanager.gc_trigger"):
-            infos = gc.collect()
-            processed = [q.name for q in infos]
-            if bus and infos:
-                await publish_queue_updates(bus, infos, repo=repo)
-            return GcResponse(processed=processed)
+            report = gc.collect_report()
+            processed = [q.name for q in report.processed]
+            if bus and report.processed:
+                await publish_queue_updates(
+                    bus,
+                    report.processed,
+                    repo=repo,
+                    lifecycle_items=report.items,
+                )
+            return GcResponse(processed=processed, report=report.to_dict())
 
     return app
 
