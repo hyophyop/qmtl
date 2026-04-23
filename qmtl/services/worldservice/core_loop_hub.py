@@ -4,6 +4,7 @@ import inspect
 import logging
 import math
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 from qmtl.runtime.sdk.world_validation_metrics import build_v1_evaluation_metrics
@@ -11,6 +12,16 @@ from qmtl.runtime.sdk.world_validation_metrics import build_v1_evaluation_metric
 from .controlbus_producer import ControlBusProducer
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RiskSnapshotDispatchOutcome:
+    bus_published: bool | None = None
+    validation_scheduled: bool | None = None
+
+    @property
+    def completed(self) -> bool:
+        return self.bus_published is not False and self.validation_scheduled is not False
 
 
 def deep_merge_mappings(base: Mapping[str, Any], overlay: Mapping[str, Any]) -> dict[str, Any]:
@@ -304,23 +315,38 @@ class CoreLoopHub:
     ) -> None:
         self._schedule_extended_validation = schedule_extended_validation
 
-    async def handle_risk_snapshot_update(self, world_id: str, snapshot: Mapping[str, Any]) -> None:
+    async def handle_risk_snapshot_update(
+        self,
+        world_id: str,
+        snapshot: Mapping[str, Any],
+    ) -> RiskSnapshotDispatchOutcome:
+        bus_published: bool | None = None
         if self._bus is not None:
             try:
                 await self._bus.publish_risk_snapshot_updated(world_id, dict(snapshot))
+                bus_published = True
             except Exception:  # pragma: no cover - best-effort logging
+                bus_published = False
                 logger.exception("Failed to publish risk snapshot to ControlBus")
+        validation_scheduled: bool | None = None
         if self._schedule_extended_validation is not None:
             try:
                 maybe = self._schedule_extended_validation(world_id)
                 if inspect.isawaitable(maybe):
                     await maybe
+                validation_scheduled = True
             except Exception:  # pragma: no cover - best-effort logging
+                validation_scheduled = False
                 logger.exception("Failed to schedule extended validation from risk hub update")
+        return RiskSnapshotDispatchOutcome(
+            bus_published=bus_published,
+            validation_scheduled=validation_scheduled,
+        )
 
 
 __all__ = [
     "CoreLoopHub",
+    "RiskSnapshotDispatchOutcome",
     "deep_merge_mappings",
     "derive_metrics_from_risk_snapshot",
 ]

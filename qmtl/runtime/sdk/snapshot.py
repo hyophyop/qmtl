@@ -24,8 +24,6 @@ from . import metrics as sdk_metrics
 
 if TYPE_CHECKING:
     import fsspec as _fsspec
-    import pyarrow as _pyarrow
-    import pyarrow.parquet as _pyarrow_parquet
 
 logger = logging.getLogger(__name__)
 
@@ -76,8 +74,8 @@ class FileSystemLike(Protocol):
 
 
 class ArrowContext(NamedTuple):
-    pa: "_pyarrow"
-    parquet: "_pyarrow_parquet"
+    pa: Any
+    parquet: Any
 
 
 def _get_arrow_context() -> ArrowContext | None:
@@ -85,8 +83,8 @@ def _get_arrow_context() -> ArrowContext | None:
 
 # Optional pyarrow context (exported for tests expecting module-level access)
 _arrow_ctx = _get_arrow_context()
-pa: "_pyarrow | None" = _arrow_ctx.pa if _arrow_ctx else None
-pq: "_pyarrow_parquet | None" = _arrow_ctx.parquet if _arrow_ctx else None
+pa: Any | None = _arrow_ctx.pa if _arrow_ctx else None
+pq: Any | None = _arrow_ctx.parquet if _arrow_ctx else None
 
 
 def _import_fsspec() -> "_fsspec | None":

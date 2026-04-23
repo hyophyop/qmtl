@@ -55,6 +55,41 @@ async def _expand_snapshot_payload(
     return payload
 
 
+async def _dispatch_snapshot_update(
+    *,
+    world_id: str,
+    snapshot: Dict[str, Any],
+    core_loop_hub: CoreLoopHub | None,
+    bus: ControlBusProducer | None,
+    schedule_extended_validation: Callable[[str], Awaitable[Any]] | Callable[[str], Any] | None,
+) -> bool:
+    if core_loop_hub is not None:
+        outcome = await core_loop_hub.handle_risk_snapshot_update(world_id, snapshot)
+        return outcome.completed
+
+    bus_published: bool | None = None
+    if bus is not None:
+        try:
+            await bus.publish_risk_snapshot_updated(world_id, snapshot)
+            bus_published = True
+        except Exception:  # pragma: no cover - best-effort
+            bus_published = False
+            logger.exception("Failed to publish risk snapshot to ControlBus")
+
+    validation_scheduled: bool | None = None
+    if schedule_extended_validation is not None:
+        try:
+            maybe = schedule_extended_validation(world_id)
+            if inspect.isawaitable(maybe):
+                await maybe
+            validation_scheduled = True
+        except Exception:  # pragma: no cover - best-effort
+            validation_scheduled = False
+            logger.exception("Failed to schedule extended validation from risk hub update")
+
+    return bus_published is not False and validation_scheduled is not False
+
+
 def create_risk_hub_router(
     hub: RiskSignalHub,
     *,
@@ -116,22 +151,17 @@ def create_risk_hub_router(
             ws_metrics.record_risk_snapshot_dedupe(world_id, stage=stage_label)
         else:
             ws_metrics.record_risk_snapshot_processed(world_id, stage=stage_label)
-        if not deduped:
-            if core_loop_hub is not None:
-                await core_loop_hub.handle_risk_snapshot_update(world_id, snapshot.to_dict())
-            else:
-                if bus is not None:
-                    try:
-                        await bus.publish_risk_snapshot_updated(world_id, snapshot.to_dict())
-                    except Exception:  # pragma: no cover - best-effort
-                        logger.exception("Failed to publish risk snapshot to ControlBus")
-                if schedule_extended_validation is not None:
-                    try:
-                        maybe = schedule_extended_validation(world_id)
-                        if inspect.isawaitable(maybe):
-                            await maybe
-                    except Exception:  # pragma: no cover - best-effort
-                        logger.exception("Failed to schedule extended validation from risk hub update")
+        dispatch_required = (not deduped) or hub.snapshot_dispatch_pending(world_id, snapshot.version)
+        if dispatch_required:
+            dispatch_completed = await _dispatch_snapshot_update(
+                world_id=world_id,
+                snapshot=snapshot.to_dict(),
+                core_loop_hub=core_loop_hub,
+                bus=bus,
+                schedule_extended_validation=schedule_extended_validation,
+            )
+            if dispatch_completed:
+                hub.mark_snapshot_dispatch_completed(world_id, snapshot.version)
         return snapshot.to_dict()
 
     @router.get("/worlds/{world_id}/snapshots/lookup")

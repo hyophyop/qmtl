@@ -245,15 +245,21 @@ class ActivationEventPublisher:
             },
         )
         deduped = await self.risk_hub.upsert_snapshot(snap)
-        if deduped:
+        dispatch_required = (not deduped) or self.risk_hub.snapshot_dispatch_pending(world_id, snap.version)
+        if not dispatch_required:
             return
         if self.core_loop_hub is not None:
-            await self.core_loop_hub.handle_risk_snapshot_update(world_id, snap.to_dict())
+            outcome = await self.core_loop_hub.handle_risk_snapshot_update(world_id, snap.to_dict())
+            if outcome.completed:
+                self.risk_hub.mark_snapshot_dispatch_completed(world_id, snap.version)
         elif self.bus:
             try:
                 await self.bus.publish_risk_snapshot_updated(world_id, snap.to_dict())
+                self.risk_hub.mark_snapshot_dispatch_completed(world_id, snap.version)
             except Exception:
                 pass
+        else:
+            self.risk_hub.mark_snapshot_dispatch_completed(world_id, snap.version)
 
 
 __all__ = ["ActivationEventPublisher"]
