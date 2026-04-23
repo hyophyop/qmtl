@@ -87,3 +87,65 @@ def test_snapshot_round_trip_preserves_inline_realized_returns():
     snapshot = PortfolioSnapshot.from_payload(payload)
     encoded = snapshot.to_dict()
     assert encoded.get("realized_returns") == payload["realized_returns"]
+
+
+class _RacingConflictRepo:
+    def __init__(self) -> None:
+        self.insert_attempted = False
+
+    async def get(self, world_id: str, version: str):
+        if not self.insert_attempted:
+            return None
+        return {
+            "world_id": world_id,
+            "as_of": "2025-01-01T00:00:00Z",
+            "version": version,
+            "hash": "other-hash",
+            "weights": {"a": 1.0},
+        }
+
+    async def upsert(self, world_id: str, payload: dict):
+        self.insert_attempted = True
+        raise RuntimeError("unique constraint failed")
+
+
+class _BrokenRepo:
+    async def get(self, world_id: str, version: str):
+        return None
+
+    async def upsert(self, world_id: str, payload: dict):
+        raise RuntimeError("db unavailable")
+
+
+@pytest.mark.asyncio
+async def test_repository_race_conflict_is_raised_instead_of_silently_acked():
+    hub = RiskSignalHub()
+    hub.bind_repository(_RacingConflictRepo())
+    snap = PortfolioSnapshot(
+        world_id="w",
+        as_of="2025-01-01T00:00:00Z",
+        version="v1",
+        weights={"a": 1.0},
+    )
+
+    with pytest.raises(RiskSnapshotConflictError):
+        await hub.upsert_snapshot(snap)
+
+    assert hub._snapshots == {}
+
+
+@pytest.mark.asyncio
+async def test_repository_failure_is_not_cached_locally_when_persist_fails():
+    hub = RiskSignalHub()
+    hub.bind_repository(_BrokenRepo())
+    snap = PortfolioSnapshot(
+        world_id="w",
+        as_of="2025-01-01T00:00:00Z",
+        version="v1",
+        weights={"a": 1.0},
+    )
+
+    with pytest.raises(RuntimeError, match="db unavailable"):
+        await hub.upsert_snapshot(snap)
+
+    assert hub._snapshots == {}
