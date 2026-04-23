@@ -59,6 +59,26 @@ class _PersistentStoreStub:
         return None
 
 
+class _RacingRiskSnapshotRepo:
+    def __init__(self) -> None:
+        self.insert_attempted = False
+
+    async def get(self, world_id: str, version: str) -> dict[str, Any] | None:
+        if not self.insert_attempted:
+            return None
+        return {
+            "world_id": world_id,
+            "as_of": "2025-01-01T00:00:00Z",
+            "version": version,
+            "hash": "other-hash",
+            "weights": {"s1": 1.0},
+        }
+
+    async def upsert(self, world_id: str, payload: dict[str, Any]) -> None:
+        self.insert_attempted = True
+        raise RuntimeError("unique constraint failed")
+
+
 class DummyBus(ControlBusProducer):
     def __init__(self) -> None:
         self.events: list[tuple[str, str, dict]] = []
@@ -1947,6 +1967,29 @@ async def test_risk_hub_persists_snapshots_with_persistent_storage(tmp_path, fak
         assert latest["realized_returns"] == {"s1": [0.01, -0.005]}
     finally:
         await storage_inspect.close()
+
+
+@pytest.mark.asyncio
+async def test_risk_hub_conflict_does_not_ack_or_publish_event():
+    bus = DummyBus()
+    risk_hub = RiskSignalHub()
+    risk_hub.bind_repository(_RacingRiskSnapshotRepo())
+    app = create_app(storage=Storage(), bus=bus, risk_hub=risk_hub)
+    async with app.router.lifespan_context(app):
+        async with httpx.ASGITransport(app=app) as asgi:
+            async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+                resp = await client.post(
+                    "/risk-hub/worlds/race-hub/snapshots",
+                    json={
+                        "as_of": "2025-01-01T00:00:00Z",
+                        "version": "v1",
+                        "weights": {"s1": 1.0},
+                    },
+                    headers={"X-Actor": "risk", "X-Stage": "paper"},
+                )
+                assert resp.status_code == 409
+
+    assert not any(evt[0] == "risk_snapshot_updated" for evt in bus.events)
 
 
 @pytest.mark.asyncio

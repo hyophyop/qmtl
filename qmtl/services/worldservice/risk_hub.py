@@ -197,14 +197,18 @@ class RiskSignalHub:
             raise ValueError("snapshot is expired")
 
         deduped = await self._enforce_version_idempotency(snapshot)
+        if self._repository is not None and not deduped:
+            try:
+                await self._repository.upsert(snapshot.world_id, snapshot.to_dict())  # type: ignore[union-attr]
+            except Exception:
+                retry_deduped = await self._enforce_version_idempotency(snapshot)
+                if not retry_deduped:
+                    self._logger.exception("Failed to persist risk snapshot for %s", snapshot.world_id)
+                    raise
+                deduped = True
+
         deduped = self._cache_snapshot(snapshot) or deduped
         await self._cache_latest(snapshot)
-        if self._repository is None:
-            return deduped
-        try:
-            await self._repository.upsert(snapshot.world_id, snapshot.to_dict())  # type: ignore[union-attr]
-        except Exception:
-            self._logger.exception("Failed to persist risk snapshot for %s", snapshot.world_id)
         return deduped
 
     async def latest_snapshot(self, world_id: str) -> Optional[PortfolioSnapshot]:

@@ -114,7 +114,7 @@ jobs:
               baseline_runs_dir="$runs_dir"
             fi
 
-            PYTHONPATH="$PWD/baseline" uv run python scripts/policy_snapshot.py \
+            PYTHONPATH="$PWD/baseline" uv run python baseline/scripts/policy_snapshot.py \
               --policy "baseline/$policy_path" \
               --runs-dir "$baseline_runs_dir" \
               --runs-pattern '*.json' \
