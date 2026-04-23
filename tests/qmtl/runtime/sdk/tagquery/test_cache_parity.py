@@ -1,10 +1,14 @@
 import asyncio
 import json
+import tempfile
+from pathlib import Path
 
 import httpx
 import pytest
 
+from qmtl.foundation.config import CacheConfig, ConnectorsConfig, UnifiedConfig
 from qmtl.runtime.sdk import TagQueryNode
+from qmtl.runtime.sdk.configuration import runtime_config_override
 from qmtl.runtime.sdk.tagquery_manager import TagQueryManager
 
 
@@ -52,3 +56,24 @@ def test_offline_cache_parity(tmp_path, monkeypatch):
         assert node_off.upstreams == node_live.upstreams
 
     asyncio.run(run_case())
+
+
+def test_backtest_default_cache_path_uses_ephemeral_namespace(monkeypatch):
+    monkeypatch.setenv("WORLD_ID", "Paper World")
+    cfg = UnifiedConfig(
+        cache=CacheConfig(tagquery_cache_path=".qmtl_tagmap.json"),
+        connectors=ConnectorsConfig(execution_domain="dryrun"),
+        present_sections=frozenset({"cache", "connectors"}),
+    )
+
+    with runtime_config_override(cfg):
+        manager = TagQueryManager()
+
+    assert manager.cache_path == (
+        Path(tempfile.gettempdir())
+        / "qmtl"
+        / "tagquery_cache"
+        / "world=paper-world"
+        / "execution_domain=dryrun"
+        / ".qmtl_tagmap.json"
+    )

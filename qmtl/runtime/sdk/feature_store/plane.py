@@ -13,6 +13,7 @@ from qmtl.foundation.common.compute_key import DEFAULT_EXECUTION_DOMAIN
 from qmtl.foundation.config import CacheConfig as _CacheConfig
 
 from .. import configuration
+from ..storage_scope import scoped_directory_path
 from .base import FeatureArtifactKey, FeatureStoreBackend
 from .filesystem import FileSystemFeatureStore
 
@@ -33,7 +34,11 @@ def _from_cache_config(cfg: _CacheConfig) -> "FeatureArtifactPlane | None":
     if not enabled:
         return None
 
-    base = cfg.feature_artifact_dir
+    base = scoped_directory_path(
+        cfg.feature_artifact_dir,
+        storage_kind="feature_artifacts",
+        default_path=".qmtl_feature_artifacts",
+    )
     max_versions: Any = cfg.feature_artifact_versions
     write_domains = list(cfg.feature_artifact_write_domains)
 

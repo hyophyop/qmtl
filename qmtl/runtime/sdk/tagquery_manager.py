@@ -5,7 +5,6 @@ import json
 import os
 import tempfile
 import zlib
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Mapping, Tuple
 
 import httpx
@@ -21,6 +20,7 @@ from qmtl.runtime.sdk._normalizers import extract_message_payload
 
 from . import configuration, runtime
 from . import metrics as sdk_metrics
+from .storage_scope import scoped_file_path
 from .ws_client import WebSocketClient
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -66,7 +66,11 @@ class TagQueryManager:
             cache_path = (
                 cfg.cache.tagquery_cache_path if cfg is not None else ".qmtl_tagmap.json"
             )
-        self.cache_path = Path(cache_path)
+        self.cache_path = scoped_file_path(
+            cache_path,
+            storage_kind="tagquery_cache",
+            default_path=".qmtl_tagmap.json",
+        )
 
     # ------------------------------------------------------------------
     @staticmethod

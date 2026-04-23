@@ -6,7 +6,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from qmtl.foundation.config import SeamlessConfig, UnifiedConfig
+from qmtl.foundation.config import ConnectorsConfig, SeamlessConfig, UnifiedConfig
 from qmtl.runtime.io.artifact import ArtifactRegistrar as IOArtifactRegistrar
 from qmtl.runtime.sdk.artifacts import FileSystemArtifactRegistrar
 from qmtl.runtime.sdk.configuration import runtime_config_override
@@ -29,6 +29,28 @@ def test_from_config_enabled_with_flag_and_dir(tmp_path) -> None:
 
         assert isinstance(registrar, FileSystemArtifactRegistrar)
         assert registrar.base_dir == Path(tmp_path)
+
+
+def test_from_config_namespaces_backtest_artifacts(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("WORLD_ID", "Sandbox World")
+    cfg = UnifiedConfig(
+        seamless=SeamlessConfig(
+            artifacts_enabled=True,
+            artifact_dir=str(tmp_path / "artifacts"),
+        ),
+        connectors=ConnectorsConfig(execution_domain="dryrun"),
+    )
+
+    with runtime_config_override(cfg):
+        registrar = FileSystemArtifactRegistrar.from_runtime_config()
+
+    assert isinstance(registrar, FileSystemArtifactRegistrar)
+    assert registrar.base_dir == (
+        tmp_path
+        / "artifacts"
+        / "world=sandbox-world"
+        / "execution_domain=dryrun"
+    )
 
 @pytest.mark.asyncio
 async def test_filesystem_registrar_applies_partition_template(tmp_path) -> None:
@@ -126,3 +148,33 @@ async def test_io_registrar_includes_provenance_metadata() -> None:
     assert manifest["producer"]["node_id"] == "custom-node"
     assert manifest["producer"]["interval"] == 60
     assert manifest["publication_watermark"].endswith("Z")
+
+
+@pytest.mark.asyncio
+async def test_filesystem_registrar_manifest_includes_execution_domain(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("WORLD_ID", "backtest-world")
+    monkeypatch.setenv("QMTL_EXECUTION_DOMAIN", "backtest")
+    frame = pl.DataFrame(
+        {
+            "ts": [0, 60, 120],
+            "open": [1.0, 1.1, 1.2],
+            "high": [1.0, 1.2, 1.3],
+            "low": [0.9, 1.0, 1.1],
+            "close": [1.0, 1.1, 1.2],
+            "volume": [5, 6, 7],
+        }
+    )
+
+    registrar = FileSystemArtifactRegistrar(tmp_path)
+    publication = await registrar.publish(
+        frame,
+        node_id="custom-node",
+        interval=60,
+    )
+
+    assert publication is not None
+    manifest = json.loads(Path(publication.manifest_uri).read_text())
+    assert manifest["producer"]["world_id"] == "backtest-world"
+    assert manifest["producer"]["execution_domain"] == "backtest"

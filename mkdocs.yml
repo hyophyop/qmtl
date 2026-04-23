@@ -115,6 +115,7 @@ nav:
       - WS Load & Endurance: operations/ws_load_testing.md
       - Evaluation Store: operations/evaluation_store.md
       - ControlBus/Queue Standards: operations/controlbus_queue_standards.md
+      - World Isolation Runtime Scope: operations/world_isolation_runtime_scope.md
       - World Activation Runbook: operations/activation.md
       - Determinism Runbook: operations/determinism.md
       - Rebalancing Execution: operations/rebalancing_execution.md

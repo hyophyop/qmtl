@@ -47,6 +47,7 @@ Guidelines for running and maintaining QMTL in production.
 - [Rebalancing Execution Adapter](rebalancing_execution.md): order-conversion and execution boundary after plan/apply.
 - [World Validation Governance](world_validation_governance.md): override and re-review procedure.
 - [ControlBus/Queue Standards](controlbus_queue_standards.md): topic, consumer-group, and retry/DLQ rules.
+- [World Isolation Runtime Scope](world_isolation_runtime_scope.md): RBAC/write-scope separation and backtest/dry-run path namespace checks.
 
 ## Release and Change Management
 

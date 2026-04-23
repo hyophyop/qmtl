@@ -47,6 +47,7 @@ last_modified: 2026-04-03
 - [리밸런싱 실행 어댑터](rebalancing_execution.md): plan/apply 이후 주문 변환과 실행 경계.
 - [World Validation 거버넌스](world_validation_governance.md): override와 재검토 절차.
 - [ControlBus/큐 운영 표준](controlbus_queue_standards.md): 토픽, consumer group, retry/DLQ 기준.
+- [World Isolation Runtime Scope](world_isolation_runtime_scope.md): RBAC/write-scope 분리와 backtest/dryrun 경로 네임스페이스 점검.
 
 ## 배포와 변경 관리
 

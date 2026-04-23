@@ -108,6 +108,8 @@ Sample configurations for common environments live under
 | `conformance_preset` | string | `"strict-blocking"` | — | No |
 | `presets_file` | string or null | `null` | — | No |
 
+Processes running with `execution_domain=backtest` or `dryrun` scope `seamless.artifact_dir` under the active world/domain. When the runtime uses a default or relative path, the effective write target moves under the ephemeral root (`$TMPDIR/qmtl/seamless_artifacts/...`).
+
 ### Connectors
 
 | Key | Type | Default | Environment variable | Required |
@@ -150,6 +152,8 @@ Sample configurations for common environments live under
 | `snapshot_url` | string or null | `null` | `QMTL_SNAPSHOT_URL` | No |
 | `snapshot_strict_runtime` | boolean | `False` | `QMTL_SNAPSHOT_STRICT_RUNTIME` | No |
 | `snapshot_format` | string | `"json"` | `QMTL_SNAPSHOT_FORMAT` | No |
+
+Processes running with `execution_domain=backtest` or `dryrun` scope `cache.feature_artifact_dir` and `cache.tagquery_cache_path` under `world=<id>/execution_domain=<domain>`. Default and relative paths are relocated under `$TMPDIR/qmtl/...`; explicit absolute paths keep the configured root but still append the world/domain segments.
 
 ### Runtime
 
