@@ -77,3 +77,33 @@ def test_backtest_default_cache_path_uses_ephemeral_namespace(monkeypatch):
         / "execution_domain=dryrun"
         / ".qmtl_tagmap.json"
     )
+
+
+def test_explicit_world_id_scopes_cache_path_even_without_env(monkeypatch):
+    monkeypatch.delenv("WORLD_ID", raising=False)
+    cfg = UnifiedConfig(
+        cache=CacheConfig(tagquery_cache_path=".qmtl_tagmap.json"),
+        connectors=ConnectorsConfig(execution_domain="backtest"),
+        present_sections=frozenset({"cache", "connectors"}),
+    )
+
+    with runtime_config_override(cfg):
+        manager_a = TagQueryManager(world_id="alpha world")
+        manager_b = TagQueryManager(world_id="beta world")
+
+    assert manager_a.cache_path == (
+        Path(tempfile.gettempdir())
+        / "qmtl"
+        / "tagquery_cache"
+        / "world=alpha-world"
+        / "execution_domain=backtest"
+        / ".qmtl_tagmap.json"
+    )
+    assert manager_b.cache_path == (
+        Path(tempfile.gettempdir())
+        / "qmtl"
+        / "tagquery_cache"
+        / "world=beta-world"
+        / "execution_domain=backtest"
+        / ".qmtl_tagmap.json"
+    )
