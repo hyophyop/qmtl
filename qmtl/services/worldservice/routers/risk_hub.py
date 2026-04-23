@@ -12,6 +12,7 @@ from qmtl.services.risk_hub_contract import normalize_and_validate_snapshot
 
 from .. import metrics as ws_metrics
 from ..controlbus_producer import ControlBusProducer
+from ..core_loop_hub import CoreLoopHub
 from ..risk_hub import PortfolioSnapshot, RiskSignalHub, RiskSnapshotConflictError
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,7 @@ async def _expand_snapshot_payload(
 def create_risk_hub_router(
     hub: RiskSignalHub,
     *,
+    core_loop_hub: CoreLoopHub | None = None,
     bus: ControlBusProducer | None = None,
     schedule_extended_validation: Callable[[str], Awaitable[Any]] | Callable[[str], Any] | None = None,
     expected_token: str | None = None,
@@ -114,18 +116,22 @@ def create_risk_hub_router(
             ws_metrics.record_risk_snapshot_dedupe(world_id, stage=stage_label)
         else:
             ws_metrics.record_risk_snapshot_processed(world_id, stage=stage_label)
-        if bus is not None:
-            try:
-                await bus.publish_risk_snapshot_updated(world_id, snapshot.to_dict())
-            except Exception:  # pragma: no cover - best-effort
-                logger.exception("Failed to publish risk snapshot to ControlBus")
-        if schedule_extended_validation is not None:
-            try:
-                maybe = schedule_extended_validation(world_id)
-                if inspect.isawaitable(maybe):
-                    await maybe
-            except Exception:  # pragma: no cover - best-effort
-                logger.exception("Failed to schedule extended validation from risk hub update")
+        if not deduped:
+            if core_loop_hub is not None:
+                await core_loop_hub.handle_risk_snapshot_update(world_id, snapshot.to_dict())
+            else:
+                if bus is not None:
+                    try:
+                        await bus.publish_risk_snapshot_updated(world_id, snapshot.to_dict())
+                    except Exception:  # pragma: no cover - best-effort
+                        logger.exception("Failed to publish risk snapshot to ControlBus")
+                if schedule_extended_validation is not None:
+                    try:
+                        maybe = schedule_extended_validation(world_id)
+                        if inspect.isawaitable(maybe):
+                            await maybe
+                    except Exception:  # pragma: no cover - best-effort
+                        logger.exception("Failed to schedule extended validation from risk hub update")
         return snapshot.to_dict()
 
     @router.get("/worlds/{world_id}/snapshots/lookup")

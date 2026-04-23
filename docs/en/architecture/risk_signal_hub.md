@@ -34,7 +34,7 @@ flowchart LR
 
 - **Producers**: Gateway rebalance/fill paths POST snapshots into the hub; large covariance payloads can be offloaded as refs.
 - **Consumers**: WS ExtendedValidation/stress/live workers use hub lookups/events to compute Var/ES and stress. Exit Engine can subscribe to hub events to emit additional exit signals.
-- **Events**: `risk_snapshot_updated` on ControlBus triggers workers/monitoring downstream.
+- **Event routing**: publishing `risk_snapshot_updated` and triggering extended validation are owned by the adjacent Core Loop layer (`qmtl/services/worldservice/core_loop_hub.py`). Risk Signal Hub itself remains the snapshot storage/lookup SSOT.
 
 ---
 
@@ -67,7 +67,7 @@ flowchart LR
 
 ### 3.2 `realized_returns` Contract (v1, storage-only)
 
-`realized_returns` stores a “realized return time series” on the snapshot. The hub **does not compute/aggregate** `realized_returns`; producers (e.g., Gateway) compute it and the hub stores it.
+`realized_returns` stores a “realized return time series” on the snapshot. The hub **does not compute/aggregate** `realized_returns`; producers (e.g., Gateway) compute it and the hub stores it. Core Loop v1 performance-metric derivation happens in the separate `core_loop_hub.py` layer.
 
 - Recommended shape (per strategy):
   - `realized_returns: { "<strategy_id>": [r1, r2, ...], ... }`
