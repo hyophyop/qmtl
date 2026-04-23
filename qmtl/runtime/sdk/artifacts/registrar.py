@@ -21,6 +21,7 @@ from qmtl.runtime.io.artifact import (
 from qmtl.runtime.sdk.configuration import get_seamless_config
 
 from .. import configuration
+from ..storage_scope import resolve_runtime_scope, scoped_directory_path
 
 
 def _resolve_strategy_id() -> str | None:
@@ -50,6 +51,7 @@ class ProducerContext:
     node_id: str
     interval: int
     world_id: str
+    execution_domain: str | None = None
     strategy_id: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
@@ -58,6 +60,8 @@ class ProducerContext:
             "interval": int(self.interval),
             "world_id": self.world_id,
         }
+        if self.execution_domain:
+            payload["execution_domain"] = self.execution_domain
         if self.strategy_id:
             payload["strategy_id"] = self.strategy_id
         return payload
@@ -124,7 +128,11 @@ class FileSystemArtifactRegistrar(_IOArtifactRegistrar):
         if not bool(cfg.artifacts_enabled):
             return None
 
-        base = cfg.artifact_dir or ".qmtl_seamless_artifacts"
+        base = scoped_directory_path(
+            cfg.artifact_dir or ".qmtl_seamless_artifacts",
+            storage_kind="seamless_artifacts",
+            default_path="~/.qmtl_seamless_artifacts",
+        )
         return cls(base)
 
     # ------------------------------------------------------------------
@@ -214,10 +222,13 @@ class FileSystemArtifactRegistrar(_IOArtifactRegistrar):
                 "warnings": list(manifest["conformance"].get("warnings", [])),
             }
 
+        raw_world = os.getenv("WORLD_ID", "default")
+        _, scope_domain = resolve_runtime_scope()
         producer = ProducerContext(
             node_id=str(manifest.get("node_id", "unknown")),
             interval=int(manifest.get("interval", 0)),
-            world_id=os.getenv("WORLD_ID", "default"),
+            world_id=raw_world,
+            execution_domain=scope_domain if scope_domain else None,
             strategy_id=_resolve_strategy_id(),
         )
         producer_payload = producer.as_dict()

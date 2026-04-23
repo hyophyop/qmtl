@@ -102,6 +102,8 @@ qmtl config validate --target schema --config path/to/qmtl.yml
 | `conformance_preset` | 문자열 | `"strict-blocking"` | — | 아니오 |
 | `presets_file` | 문자열 또는 null | `null` | — | 아니오 |
 
+`execution_domain` 이 `backtest` 또는 `dryrun` 인 프로세스는 `seamless.artifact_dir` 을 world/domain 하위로 분리해 쓴다. 기본값이나 상대 경로를 사용할 경우 실제 write target 은 임시 루트(`$TMPDIR/qmtl/seamless_artifacts/...`) 로 이동한다.
+
 ### Connectors
 
 | Key | 타입 | 기본값 | 환경 변수 | 필수 |
@@ -142,6 +144,8 @@ qmtl config validate --target schema --config path/to/qmtl.yml
 | `snapshot_url` | 문자열 또는 null | `null` | `QMTL_SNAPSHOT_URL` | 아니오 |
 | `snapshot_strict_runtime` | boolean | `False` | `QMTL_SNAPSHOT_STRICT_RUNTIME` | 아니오 |
 | `snapshot_format` | 문자열 | `"json"` | `QMTL_SNAPSHOT_FORMAT` | 아니오 |
+
+`execution_domain` 이 `backtest` 또는 `dryrun` 인 프로세스는 `cache.feature_artifact_dir` 과 `cache.tagquery_cache_path` 를 `world=<id>/execution_domain=<domain>` 하위로 분리한다. 기본값이나 상대 경로는 임시 루트(`$TMPDIR/qmtl/...`) 로 내려가고, 절대 경로를 명시해도 world/domain 세그먼트는 유지된다.
 
 ### Runtime
 

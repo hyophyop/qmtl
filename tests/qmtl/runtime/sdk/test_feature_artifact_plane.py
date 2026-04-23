@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from qmtl.foundation.config import CacheConfig, UnifiedConfig
+from qmtl.foundation.config import CacheConfig, ConnectorsConfig, UnifiedConfig
 from qmtl.runtime.sdk import ProcessingNode, Strategy, StreamInput, configuration
 from qmtl.runtime.sdk.feature_store import FeatureArtifactPlane, FileSystemFeatureStore
 from qmtl.runtime.sdk.runner import Runner
@@ -179,3 +179,29 @@ def test_live_domain_does_not_write_feature_artifacts(artifact_plane):
 
     assert result["value"] == 30
     assert artifact_plane.count(strategy.factor, instrument="BTC") == initial_count
+
+
+def test_from_config_scopes_backtest_feature_artifact_dir(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("WORLD_ID", "Replay Lab")
+    cfg = UnifiedConfig(
+        cache=CacheConfig(
+            feature_artifacts_enabled=True,
+            feature_artifact_dir=str(tmp_path / "plane"),
+        ),
+        connectors=ConnectorsConfig(execution_domain="backtest"),
+        present_sections=frozenset({"cache", "connectors"}),
+    )
+
+    with configuration.runtime_config_override(cfg):
+        plane = FeatureArtifactPlane.from_config()
+
+    assert plane is not None
+    assert isinstance(plane.backend, FileSystemFeatureStore)
+    assert plane.backend.base_dir == (
+        tmp_path
+        / "plane"
+        / "world=replay-lab"
+        / "execution_domain=backtest"
+    )
