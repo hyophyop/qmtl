@@ -125,3 +125,51 @@ async def test_risk_hub_router_dedupes_without_retriggering_core_loop_hub() -> N
     assert second.status_code == 200
     assert len(events) == 1
     assert scheduled == ["w1"]
+
+
+@pytest.mark.asyncio
+async def test_risk_hub_router_retries_pending_dispatch_after_transient_bus_failure() -> None:
+    events: list[tuple[str, str, dict[str, object]]] = []
+
+    class _FlakyBus:
+        def __init__(self) -> None:
+            self.attempts = 0
+
+        async def publish_risk_snapshot_updated(self, world_id: str, payload: dict[str, object]) -> None:
+            self.attempts += 1
+            if self.attempts == 1:
+                raise RuntimeError("transient bus failure")
+            events.append(("risk_snapshot_updated", world_id, payload))
+
+    bus = _FlakyBus()
+    app = FastAPI()
+    app.include_router(
+        create_risk_hub_router(
+            RiskSignalHub(),
+            core_loop_hub=CoreLoopHub(bus=bus),
+        )
+    )
+
+    payload = {
+        "as_of": "2025-01-01T00:00:00Z",
+        "version": "v1",
+        "weights": {"s1": 1.0},
+    }
+    headers = {"X-Actor": "risk", "X-Stage": "paper"}
+
+    async with httpx.ASGITransport(app=app) as asgi:
+        async with httpx.AsyncClient(transport=asgi, base_url="http://test") as client:
+            first = await client.post("/risk-hub/worlds/w1/snapshots", json=payload, headers=headers)
+            second = await client.post("/risk-hub/worlds/w1/snapshots", json=payload, headers=headers)
+            third = await client.post("/risk-hub/worlds/w1/snapshots", json=payload, headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert third.status_code == 200
+    assert bus.attempts == 2
+    assert len(events) == 1
+    _, event_world_id, event_payload = events[0]
+    assert event_world_id == "w1"
+    assert event_payload["world_id"] == "w1"
+    assert event_payload["version"] == payload["version"]
+    assert event_payload["weights"] == payload["weights"]

@@ -117,6 +117,17 @@ class _BrokenRepo:
         raise RuntimeError("db unavailable")
 
 
+class _RecordingRepo:
+    def __init__(self) -> None:
+        self.upsert_calls = 0
+
+    async def get(self, world_id: str, version: str):
+        return None
+
+    async def upsert(self, world_id: str, payload: dict):
+        self.upsert_calls += 1
+
+
 @pytest.mark.asyncio
 async def test_repository_race_conflict_is_raised_instead_of_silently_acked():
     hub = RiskSignalHub()
@@ -149,3 +160,29 @@ async def test_repository_failure_is_not_cached_locally_when_persist_fails():
         await hub.upsert_snapshot(snap)
 
     assert hub._snapshots == {}
+
+
+@pytest.mark.asyncio
+async def test_in_memory_conflict_blocks_repository_write_before_persist() -> None:
+    hub = RiskSignalHub()
+    repo = _RecordingRepo()
+    original = PortfolioSnapshot(
+        world_id="w",
+        as_of="2025-01-01T00:00:00Z",
+        version="v1",
+        weights={"a": 1.0},
+    )
+    await hub.upsert_snapshot(original)
+    hub.bind_repository(repo)
+
+    conflicting = PortfolioSnapshot(
+        world_id="w",
+        as_of="2025-01-01T00:00:00Z",
+        version="v1",
+        weights={"a": 0.9, "b": 0.1},
+    )
+
+    with pytest.raises(RiskSnapshotConflictError):
+        await hub.upsert_snapshot(conflicting)
+
+    assert repo.upsert_calls == 0

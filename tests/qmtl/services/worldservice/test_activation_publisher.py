@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import copy
 import json
+from types import SimpleNamespace
 from typing import Any, Dict
 
 import pytest
 
 from qmtl.foundation.common.hashutils import hash_bytes
 from qmtl.services.worldservice.activation import ActivationEventPublisher
+from qmtl.services.worldservice.core_loop_hub import CoreLoopHub
+from qmtl.services.worldservice.risk_hub import RiskSignalHub
 from qmtl.services.worldservice.run_state import ApplyRunState
 
 
@@ -42,10 +45,18 @@ class _StubStore:
     async def get_activation(self, world_id: str) -> Dict[str, Any]:
         return copy.deepcopy(self.full_state)
 
+    async def get_decisions(self, world_id: str) -> list[Dict[str, Any]]:
+        state = self.full_state.get("state", {})
+        return [{"strategy_id": strategy_id} for strategy_id in state.keys()]
+
+    async def snapshot_activation(self, world_id: str) -> Any:
+        return SimpleNamespace(state=copy.deepcopy(self.full_state.get("state", {})))
+
 
 class _StubBus:
     def __init__(self) -> None:
         self.activation_updates: list[Dict[str, Any]] = []
+        self.risk_snapshot_updates: list[Dict[str, Any]] = []
 
     async def publish_activation_update(
         self,
@@ -71,6 +82,14 @@ class _StubBus:
                 "version": version,
                 "requires_ack": requires_ack,
                 "sequence": sequence,
+            }
+        )
+
+    async def publish_risk_snapshot_updated(self, world_id: str, payload: Dict[str, Any]) -> None:
+        self.risk_snapshot_updates.append(
+            {
+                "world_id": world_id,
+                "payload": copy.deepcopy(payload),
             }
         )
 
@@ -174,3 +193,40 @@ async def test_freeze_and_unfreeze_sequence_ack_flow() -> None:
         "phase": "unfreeze",
     }
 
+
+@pytest.mark.asyncio
+async def test_publish_snapshot_retries_pending_dispatch_after_transient_bus_failure() -> None:
+    class _FlakyRiskBus(_StubBus):
+        def __init__(self) -> None:
+            super().__init__()
+            self.snapshot_attempts = 0
+
+        async def publish_risk_snapshot_updated(self, world_id: str, payload: Dict[str, Any]) -> None:
+            self.snapshot_attempts += 1
+            if self.snapshot_attempts == 1:
+                raise RuntimeError("transient bus failure")
+            await super().publish_risk_snapshot_updated(world_id, payload)
+
+    store = _StubStore(
+        initial_state={
+            "state": {
+                "alpha": {
+                    "long": {"weight": 1.0, "effective_mode": "live", "active": True}
+                }
+            }
+        }
+    )
+    bus = _FlakyRiskBus()
+    publisher = ActivationEventPublisher(
+        store,
+        bus,
+        risk_hub=RiskSignalHub(),
+        core_loop_hub=CoreLoopHub(bus=bus),
+    )
+
+    await publisher._publish_snapshot("world-3", version_hint="v1")
+    await publisher._publish_snapshot("world-3", version_hint="v1")
+    await publisher._publish_snapshot("world-3", version_hint="v1")
+
+    assert bus.snapshot_attempts == 2
+    assert len(bus.risk_snapshot_updates) == 1

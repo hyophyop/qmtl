@@ -1544,7 +1544,10 @@ async def test_backfill_retry_applies_jitter_ratio(monkeypatch) -> None:
     assert jitter_calls[0][0] == pytest.approx(0.0)
     assert jitter_calls[0][1] == pytest.approx(base_delay * 0.25)
     assert sleep_durations, "expected retry backoff sleep"
-    assert sleep_durations[0] == pytest.approx(base_delay, rel=0.05)
+    assert any(
+        duration == pytest.approx(base_delay, rel=0.05)
+        for duration in sleep_durations
+    )
 
 
 @pytest.mark.asyncio

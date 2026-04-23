@@ -131,6 +131,7 @@ class RiskSignalHub:
         ttl_sec_max: int = 86400,
     ) -> None:
         self._snapshots: Dict[str, List[PortfolioSnapshot]] = {}
+        self._pending_dispatches: Dict[str, set[str]] = {}
         self._repository = repository
         self._max_cached = max_cached
         self._cache = cache
@@ -159,6 +160,17 @@ class RiskSignalHub:
     def bind_blob_store(self, store: BlobStore | None) -> None:
         """Attach a blob store to offload large payloads (covariance/returns/stress)."""
         self._blob_store = store
+
+    def snapshot_dispatch_pending(self, world_id: str, version: str) -> bool:
+        return version in self._pending_dispatches.get(world_id, set())
+
+    def mark_snapshot_dispatch_completed(self, world_id: str, version: str) -> None:
+        pending = self._pending_dispatches.get(world_id)
+        if pending is None:
+            return
+        pending.discard(version)
+        if not pending:
+            self._pending_dispatches.pop(world_id, None)
 
     async def resolve_blob_ref(self, ref: str) -> Any | None:
         """Resolve a blob-store reference into an in-memory payload.
@@ -196,8 +208,10 @@ class RiskSignalHub:
         if self._expired(snapshot):
             raise ValueError("snapshot is expired")
 
-        deduped = await self._enforce_version_idempotency(snapshot)
-        if self._repository is not None and not deduped:
+        local_deduped = self._cached_version_deduped(snapshot)
+        repo_deduped = await self._enforce_version_idempotency(snapshot)
+        deduped = local_deduped or repo_deduped
+        if self._repository is not None and not repo_deduped:
             try:
                 await self._repository.upsert(snapshot.world_id, snapshot.to_dict())  # type: ignore[union-attr]
             except Exception:
@@ -208,6 +222,8 @@ class RiskSignalHub:
                 deduped = True
 
         deduped = self._cache_snapshot(snapshot) or deduped
+        if not deduped:
+            self._pending_dispatches.setdefault(snapshot.world_id, set()).add(snapshot.version)
         await self._cache_latest(snapshot)
         return deduped
 
@@ -301,6 +317,17 @@ class RiskSignalHub:
             entries = entries[-self._max_cached :]
         self._snapshots[snapshot.world_id] = entries
         return False
+
+    def _cached_version_deduped(self, snapshot: PortfolioSnapshot) -> bool:
+        entries = self._snapshots.get(snapshot.world_id, [])
+        existing = next((s for s in entries if s.version == snapshot.version), None)
+        if existing is None:
+            return False
+        if (existing.hash or "") == (snapshot.hash or ""):
+            return True
+        raise RiskSnapshotConflictError(
+            f"snapshot version collision for world_id={snapshot.world_id} version={snapshot.version}"
+        )
 
     def _validate_snapshot(self, snapshot: PortfolioSnapshot) -> None:
         if not snapshot.world_id:
