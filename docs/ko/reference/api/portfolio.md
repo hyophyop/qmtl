@@ -3,7 +3,7 @@ title: "포트폴리오 & 포지션 API"
 tags:
   - sdk
   - portfolio
-last_modified: 2025-09-08
+last_modified: 2026-04-24
 ---
 
 {{ nav_links() }}
@@ -41,5 +41,26 @@ Portfolio
 : ``symbol`` 의 목표 비중을 달성하도록 리밸런싱합니다.
 
 이 헬퍼는 부호가 있는 수량을 반환하며 기존 주문 생성 루틴과 결합해 사용할 수 있습니다.
+
+## 로컬 PnL 진단 헬퍼
+
+빠른 전략 반복 검증에서는 `qmtl.runtime.sdk.diagnostics.summarize_account_pnl` 을 선택적으로 사용할 수 있습니다. 이 헬퍼는 로컬 fill 목록과 선택적 mark 가격을 받아 계정 단위 `ending_cash`, `equity`, `realized_pnl`, `unrealized_pnl`, `fees`, `total_pnl`, open position 요약을 반환합니다.
+
+```python
+from qmtl.runtime.sdk.diagnostics import AccountFill, summarize_account_pnl
+
+summary = summarize_account_pnl(
+    [
+        AccountFill("AAPL", 10, 100.0, commission=1.0),
+        AccountFill("AAPL", -4, 110.0, commission=0.5),
+    ],
+    marks={"AAPL": 120.0},
+    starting_cash=1_000.0,
+)
+
+assert summary.total_pnl == 158.5
+```
+
+이 표면은 로컬 iteration용 opt-in 진단 도구입니다. `Runner.submit(..., world=...)`, Gateway/WorldService, portfolio/risk hub의 권위 모델을 변경하지 않습니다.
 
 {{ nav_links() }}
