@@ -3,7 +3,7 @@ title: "Portfolio & Position API"
 tags:
   - sdk
   - portfolio
-last_modified: 2025-09-08
+last_modified: 2026-04-24
 ---
 
 {{ nav_links() }}
@@ -45,3 +45,30 @@ Portfolio
 
 These helpers return signed quantities and can be combined with existing order
 generation routines.
+
+## Local PnL Diagnostics
+
+For fast local strategy iteration, callers can opt into
+`qmtl.runtime.sdk.diagnostics.summarize_account_pnl`. The helper accepts local
+fills plus optional mark prices and returns account-level `ending_cash`,
+`equity`, `realized_pnl`, `unrealized_pnl`, `fees`, `total_pnl`, and open
+position summaries.
+
+```python
+from qmtl.runtime.sdk.diagnostics import AccountFill, summarize_account_pnl
+
+summary = summarize_account_pnl(
+    [
+        AccountFill("AAPL", 10, 100.0, commission=1.0),
+        AccountFill("AAPL", -4, 110.0, commission=0.5),
+    ],
+    marks={"AAPL": 120.0},
+    starting_cash=1_000.0,
+)
+
+assert summary.total_pnl == 158.5
+```
+
+This surface is an opt-in local iteration aid. It does not change
+`Runner.submit(..., world=...)`, Gateway/WorldService, or the portfolio/risk
+hub authority model.
