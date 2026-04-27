@@ -20,6 +20,7 @@ dependencies = [
     "grpcio",
     "PyYAML",
     "psutil",
+    "opentelemetry-api",
     "opentelemetry-sdk",
     "opentelemetry-exporter-otlp-proto-http",
     "opentelemetry-instrumentation-fastapi",
@@ -151,11 +152,23 @@ extend_exclude = [
   "qmtl/foundation/proto/.*_pb2.*\\.py$",
 ]
 
+[tool.deptry.package_module_name_map]
+grpcio = "grpc"
+opentelemetry-api = "opentelemetry"
+PyYAML = "yaml"
+
 [tool.deptry.per_rule_ignores]
 # These imports are lazy optional integrations and should not force hard runtime deps.
 DEP001 = [
   "aiokafka",
   "ccxtpro",
+  "confluent_kafka",
+  "fsspec",
+  "neo4j",
+  "orjson",
+  "pyoperon",
+]
+DEP003 = [
   "confluent_kafka",
   "fsspec",
   "neo4j",

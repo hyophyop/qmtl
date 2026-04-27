@@ -106,8 +106,10 @@ async def test_diff_retries(monkeypatch):
     monkeypatch.setattr(dagmanager_pb2_grpc, "TagQueryStub", lambda c: None)
     monkeypatch.setattr(dagmanager_pb2_grpc, "HealthCheckStub", lambda c: None)
     monkeypatch.setattr(grpc.aio, "insecure_channel", lambda target: DummyChannel())
+
     async def _nowait(self, timeout: float = 5.0) -> None:
         return None
+
     monkeypatch.setattr(DagManagerClient, "_wait_for_service", _nowait)
 
     client = DagManagerClient("127.0.0.1:1")
@@ -196,6 +198,13 @@ async def test_diff_crc_mismatch(monkeypatch):
     monkeypatch.setattr(dagmanager_pb2_grpc, "TagQueryStub", lambda c: None)
     monkeypatch.setattr(dagmanager_pb2_grpc, "HealthCheckStub", lambda c: None)
     monkeypatch.setattr(grpc.aio, "insecure_channel", lambda target: DummyChannel())
+
+    async def fail_wait(self, timeout: float = 5.0) -> None:
+        raise AssertionError(
+            "CRC validation failures should not wait for service health"
+        )
+
+    monkeypatch.setattr(DagManagerClient, "_wait_for_service", fail_wait)
 
     client = DagManagerClient("127.0.0.1:1")
     result = await client.diff("sid", "{}")

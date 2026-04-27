@@ -58,7 +58,9 @@ class DiffStreamClient:
     def __init__(self, stub: dagmanager_pb2_grpc.DiffServiceStub) -> None:
         self._stub = stub
 
-    async def collect(self, request: dagmanager_pb2.DiffRequest) -> dagmanager_pb2.DiffChunk:
+    async def collect(
+        self, request: dagmanager_pb2.DiffRequest
+    ) -> dagmanager_pb2.DiffChunk:
         queue_map: dict[str, str] = {}
         sentinel_id = ""
         version = ""
@@ -172,9 +174,7 @@ class DagManagerClient:
         deadline = asyncio.get_running_loop().time() + timeout
         while True:
             try:
-                reply = await self._health_stub.Status(
-                    dagmanager_pb2.StatusRequest()
-                )
+                reply = await self._health_stub.Status(dagmanager_pb2.StatusRequest())
                 if reply.neo4j == "ok" and reply.state == "running":
                     return
             except Exception:
@@ -199,6 +199,7 @@ class DagManagerClient:
 
     async def status(self) -> bool:
         """Return ``True`` if the remote DAG Manager reports healthy status."""
+
         @self._breaker
         async def _call() -> bool:
             self._ensure_channel()
@@ -287,6 +288,8 @@ class DagManagerClient:
             try:
                 result = await collector.collect(request)
                 return namespace.apply(result)
+            except ValueError:
+                raise
             except Exception:
                 if attempt == retries - 1:
                     raise
