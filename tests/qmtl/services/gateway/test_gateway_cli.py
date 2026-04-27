@@ -1,12 +1,35 @@
 import asyncio
-import subprocess
 import sys
+from dataclasses import dataclass
+from io import StringIO
+from contextlib import redirect_stderr, redirect_stdout
 
 import pytest
 
 from qmtl.foundation.config import DeploymentProfile
+from qmtl.interfaces.cli.v2 import main as qmtl_main
 from qmtl.services.gateway.config import GatewayConfig
 from qmtl.utils.i18n import set_language
+
+
+@dataclass(frozen=True)
+class CliResult:
+    returncode: int
+    stdout: str
+    stderr: str
+
+
+def run_qmtl_cli(*args: str) -> CliResult:
+    stdout = StringIO()
+    stderr = StringIO()
+    with redirect_stdout(stdout), redirect_stderr(stderr):
+        try:
+            returncode = qmtl_main(list(args))
+        except SystemExit as exc:
+            returncode = int(exc.code or 0)
+    return CliResult(
+        returncode=returncode, stdout=stdout.getvalue(), stderr=stderr.getvalue()
+    )
 
 
 # v2 CLI: flat structure, admin commands are accessed via --help-admin
@@ -25,9 +48,11 @@ from qmtl.utils.i18n import set_language
     ],
 )
 def test_cli_subcommand_help(args, expected):
-    result = subprocess.run([sys.executable, "-m", "qmtl", *args], capture_output=True, text=True)
+    result = run_qmtl_cli(*args)
     assert result.returncode == 0, f"Failed with stderr: {result.stderr}"
-    assert expected in result.stdout, f"Expected '{expected}' not found in: {result.stdout}"
+    assert expected in result.stdout, (
+        f"Expected '{expected}' not found in: {result.stdout}"
+    )
 
 
 @pytest.mark.parametrize(
@@ -40,9 +65,7 @@ def test_cli_subcommand_help(args, expected):
     ],
 )
 def test_removed_top_level_aliases_show_top_level_usage(cmd):
-    result = subprocess.run(
-        [sys.executable, "-m", "qmtl", cmd, "--help"], capture_output=True, text=True
-    )
+    result = run_qmtl_cli(cmd, "--help")
     # v2 CLI: legacy commands return error with migration message
     assert result.returncode != 0
     assert "has been removed" in result.stderr or "Unknown command" in result.stderr
@@ -107,7 +130,9 @@ def test_gateway_cli_config_file(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "create_app", fake_create_app)
     monkeypatch.setattr(cli, "set_topic_namespace_enabled", fake_set_namespace)
 
-    fake_uvicorn = SimpleNamespace(run=lambda app, host, port: captured.update({"host": host, "port": port}))
+    fake_uvicorn = SimpleNamespace(
+        run=lambda app, host, port: captured.update({"host": host, "port": port})
+    )
     monkeypatch.setitem(sys.modules, "uvicorn", fake_uvicorn)
     monkeypatch.chdir(tmp_path)
 
@@ -306,7 +331,9 @@ def test_gateway_cli_redis_backend(monkeypatch, tmp_path):
 
     monkeypatch.setattr(cli.redis, "from_url", fake_from_url)
     monkeypatch.setattr(cli, "create_app", fake_create_app)
-    monkeypatch.setitem(sys.modules, "uvicorn", SimpleNamespace(run=lambda *a, **k: None))
+    monkeypatch.setitem(
+        sys.modules, "uvicorn", SimpleNamespace(run=lambda *a, **k: None)
+    )
     monkeypatch.chdir(tmp_path)
 
     cli.main([])
@@ -409,7 +436,9 @@ def test_gateway_cli_no_sentinel_flag(monkeypatch, tmp_path):
         return SimpleNamespace(state=SimpleNamespace(database=None))
 
     monkeypatch.setattr(cli, "create_app", fake_create_app)
-    monkeypatch.setitem(sys.modules, "uvicorn", SimpleNamespace(run=lambda *a, **k: None))
+    monkeypatch.setitem(
+        sys.modules, "uvicorn", SimpleNamespace(run=lambda *a, **k: None)
+    )
     monkeypatch.chdir(tmp_path)
 
     cli.main(["--no-sentinel"])
@@ -441,7 +470,9 @@ def test_gateway_cli_allow_live_flag(monkeypatch, tmp_path):
         return SimpleNamespace(state=SimpleNamespace(database=None))
 
     monkeypatch.setattr(cli, "create_app", fake_create_app)
-    monkeypatch.setitem(sys.modules, "uvicorn", SimpleNamespace(run=lambda *a, **k: None))
+    monkeypatch.setitem(
+        sys.modules, "uvicorn", SimpleNamespace(run=lambda *a, **k: None)
+    )
     monkeypatch.chdir(tmp_path)
 
     cli.main(["--allow-live"])
@@ -483,7 +514,9 @@ def test_gateway_cli_db_connect_failure(monkeypatch, tmp_path):
         logged["msg"] = msg
 
     monkeypatch.setattr(cli, "create_app", fake_create_app)
-    monkeypatch.setitem(sys.modules, "uvicorn", SimpleNamespace(run=lambda *a, **k: None))
+    monkeypatch.setitem(
+        sys.modules, "uvicorn", SimpleNamespace(run=lambda *a, **k: None)
+    )
     monkeypatch.setattr(cli.logging, "exception", fake_exception)
     monkeypatch.chdir(tmp_path)
 
@@ -527,7 +560,9 @@ def test_gateway_cli_db_close_failure(monkeypatch, tmp_path):
         logged["msg"] = msg
 
     monkeypatch.setattr(cli, "create_app", fake_create_app)
-    monkeypatch.setitem(sys.modules, "uvicorn", SimpleNamespace(run=lambda *a, **k: None))
+    monkeypatch.setitem(
+        sys.modules, "uvicorn", SimpleNamespace(run=lambda *a, **k: None)
+    )
     monkeypatch.setattr(cli.logging, "exception", fake_exception)
     monkeypatch.chdir(tmp_path)
 
