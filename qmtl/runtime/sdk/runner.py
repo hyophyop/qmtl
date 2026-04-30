@@ -347,16 +347,22 @@ class Runner:
         result = None
         services = cls.services()
         plane = services.feature_plane
-        if ready and node.execute and node.compute_fn:
+        from .temporal import build_node_output, node_has_generated_output
+
+        generated_output = node_has_generated_output(node)
+        if ready and node.execute and (node.compute_fn or generated_output):
             start = time.perf_counter()
             try:
                 with tracer.start_as_current_span(
                     "node.process", attributes={"node.id": node.node_id}
                 ):
                     view = node.cache.view(artifact_plane=plane)
-                    execution_result = services.ray_executor.execute(
-                        node.compute_fn, view
-                    )
+                    if generated_output:
+                        execution_result = build_node_output(node, view)
+                    else:
+                        execution_result = services.ray_executor.execute(
+                            node.compute_fn, view
+                        )
                     if execution_result is not None:
                         result = execution_result
                         cls._postprocess_result(node, result)

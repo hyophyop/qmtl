@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any
 from typing import cast
 
 from qmtl.foundation.common.tagquery import (
@@ -16,6 +18,10 @@ from ..event_service import EventRecorderService
 from ..exceptions import InvalidParameterError
 from ..util import parse_interval
 from .base import Node
+
+if TYPE_CHECKING:
+    from ..temporal import AlignmentInputSpec
+    from ..temporal import TemporalSpec
 
 logger = logging.getLogger(__name__)
 
@@ -47,10 +53,19 @@ class StreamInput(SourceNode):
         *,
         history_provider: HistoryProvider | HistoryBackend | object | None = None,
         event_service: EventRecorderService | None = None,
+        temporal: "TemporalSpec" | Mapping[str, Any] | None = None,
+        alignment: "AlignmentInputSpec" | Mapping[str, Any] | None = None,
         validator=default_validator,
         hash_utils=default_hash_utils,
         **node_kwargs,
     ) -> None:
+        self.temporal = _coerce_temporal_spec(temporal)
+        self.alignment = _coerce_alignment_spec(alignment)
+        node_kwargs = _with_stream_semantics_config(
+            node_kwargs,
+            temporal=self.temporal,
+            alignment=self.alignment,
+        )
         self._allow_event_service_set = True
         super().__init__(
             input=None,
@@ -130,6 +145,51 @@ class StreamInput(SourceNode):
 
             return AugmentedHistoryProvider(provider)
         return cast(HistoryProvider, provider)
+
+
+def _coerce_temporal_spec(
+    temporal: "TemporalSpec" | Mapping[str, Any] | None,
+) -> "TemporalSpec" | None:
+    from ..temporal import TemporalSpec
+
+    if temporal is None:
+        return None
+    if isinstance(temporal, TemporalSpec):
+        return temporal
+    return TemporalSpec(**dict(temporal))
+
+
+def _coerce_alignment_spec(
+    alignment: "AlignmentInputSpec" | Mapping[str, Any] | None,
+) -> "AlignmentInputSpec" | None:
+    from ..temporal import AlignmentInputSpec
+
+    if alignment is None:
+        return None
+    if isinstance(alignment, AlignmentInputSpec):
+        return alignment
+    return AlignmentInputSpec(**dict(alignment))
+
+
+def _with_stream_semantics_config(
+    node_kwargs: dict[str, Any],
+    *,
+    temporal: "TemporalSpec" | None,
+    alignment: "AlignmentInputSpec" | None,
+) -> dict[str, Any]:
+    if temporal is None and alignment is None:
+        return node_kwargs
+
+    from ..temporal import alignment_to_config, temporal_to_config
+
+    updated = dict(node_kwargs)
+    config = dict(updated.get("config", {}) or {})
+    if temporal is not None:
+        config["temporal"] = temporal_to_config(temporal)
+    if alignment is not None:
+        config["alignment"] = alignment_to_config(alignment)
+    updated["config"] = config
+    return updated
 
 
 class TagQueryNode(SourceNode):

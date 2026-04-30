@@ -272,6 +272,34 @@ class CacheView(Generic[PayloadT]):
 
         return _align_frames(self, specs, window=window, columns=columns)
 
+    def align_temporal(
+        self,
+        inputs: Mapping[str, Any],
+        *,
+        trigger_ts: int,
+        trigger: Any | None = None,
+        now_ts: int | None = None,
+        partition: Mapping[str, Any] | None = None,
+        partition_key: str | None = None,
+        overrides: Mapping[str, Mapping[str, Any]] | None = None,
+        watermark_policy: Any | None = None,
+    ):
+        """Return an event-time aligned view over heterogeneous inputs."""
+
+        from .temporal import align_temporal as _align_temporal
+
+        return _align_temporal(
+            self,
+            inputs,
+            trigger_ts=trigger_ts,
+            trigger=trigger,
+            now_ts=now_ts,
+            partition=partition,
+            partition_key=partition_key,
+            overrides=overrides,
+            watermark_policy=watermark_policy,
+        )
+
 
 def _looks_like_node(obj: Any) -> bool:
     return hasattr(obj, "node_id") and hasattr(obj, "node_type")

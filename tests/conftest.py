@@ -1,7 +1,7 @@
 """Test configuration and shared fixtures."""
 
 import asyncio
-from typing import List
+from typing import List, Sequence
 
 import pytest
 import pytest_asyncio
@@ -17,7 +17,9 @@ def _reset_event_loop_policy():
     """Ensure a fresh default event loop policy each test to avoid stale state."""
 
     asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
-    asyncio.set_event_loop(asyncio.new_event_loop())
+    _close_current_loop()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 
     # Swallow noisy invalid-fd teardown errors from BaseEventLoop.__del__ (Py3.11 bug).
     if not getattr(asyncio.BaseEventLoop.__del__, "_qmtl_patched", False):  # type: ignore[attr-defined]
@@ -26,7 +28,7 @@ def _reset_event_loop_policy():
         def _safe_del(self):  # type: ignore[override]
             try:
                 orig_del(self)
-            except ValueError:
+            except (AttributeError, OSError, ValueError):
                 # Selector already torn down; ignore noisy stderr spew.
                 pass
 
@@ -35,6 +37,7 @@ def _reset_event_loop_policy():
     try:
         yield
     finally:
+        _close_loops([loop, _current_loop()])
         try:
             # Keep a default loop available for plugins that probe the main thread
             # between tests (for example, under mutation-test orchestration).
@@ -43,8 +46,21 @@ def _reset_event_loop_policy():
             pass
 
 
-def _close_loops(loops: List[asyncio.AbstractEventLoop]) -> None:
+def _current_loop() -> asyncio.AbstractEventLoop | None:
+    try:
+        return asyncio.get_event_loop_policy().get_event_loop()
+    except Exception:
+        return None
+
+
+def _close_current_loop() -> None:
+    _close_loops([_current_loop()])
+
+
+def _close_loops(loops: Sequence[asyncio.AbstractEventLoop | None]) -> None:
     for loop in loops:
+        if loop is None:
+            continue
         if loop.is_closed():
             continue
         try:

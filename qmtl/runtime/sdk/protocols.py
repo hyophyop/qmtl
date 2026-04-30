@@ -16,6 +16,7 @@ class NodeLike(Protocol):
 
     node_id: str
     node_type: str
+    interval: int | str | None
 
 
 @runtime_checkable

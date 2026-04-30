@@ -11,6 +11,7 @@ from qmtl.runtime.sdk.util import parse_interval, parse_period
         ("45s", 45),
         ("30m", 1800),
         ("1h", 3600),
+        ("1d", 86400),
     ],
 )
 def test_parse_interval(value, expected):

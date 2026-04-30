@@ -4,6 +4,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from qmtl.foundation.kafka import Producer
 from qmtl.runtime.sdk import Node
+from qmtl.runtime.sdk.temporal import node_has_generated_output
 
 
 class Pipeline:
@@ -54,7 +55,12 @@ class Pipeline:
                 payload,
                 on_missing=on_missing,
             )
-            out = payload if not child.execute or child.compute_fn is None else result
+            generated_output = node_has_generated_output(child)
+            out = (
+                payload
+                if not child.execute or (child.compute_fn is None and not generated_output)
+                else result
+            )
             if out is None:
                 continue
             self._publish(child, child.interval or interval, timestamp, out)
