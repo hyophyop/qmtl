@@ -51,6 +51,7 @@ nav:
       - SDK Tutorial & World ID: guides/sdk_tutorial.md
       - History Data Quickstart: guides/history_data_quickstart.md
       - CacheView Helpers: guides/cacheview_helpers.md
+      - Temporal Alignment: guides/temporal_alignment.md
       - Ergonomic compute_fn patterns: guides/ergonomic_compute_fn_patterns.md
       - Strategy Workflow: guides/strategy_workflow.md
       - Strategy Submission & Gating: guides/strategy_submission_gating.md

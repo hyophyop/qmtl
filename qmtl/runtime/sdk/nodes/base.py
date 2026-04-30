@@ -29,6 +29,7 @@ class Node(ComputeContextMixin, NodeFeedMixin):
         schema: dict | None = None,
         expected_schema: dict | None = None,
         *,
+        output: Any | None = None,
         allowed_lateness: int = 0,
         on_late: str = "recompute",
         runtime_compat: str = "loose",
@@ -42,6 +43,8 @@ class Node(ComputeContextMixin, NodeFeedMixin):
         self.validator = validator or default_validator
         self.hash_utils = hash_utils or default_hash_utils
         self.event_service = event_service
+        self.output = self._coerce_output_spec(output)
+        config = self._with_output_config(config, self.output)
 
         config_payload = NodeConfig.build(
             input=input,
@@ -87,6 +90,7 @@ class Node(ComputeContextMixin, NodeFeedMixin):
         self._late_events: list[tuple[str, int, Any]] = []
         self._dataset_fingerprint: str | None = None
         self._last_fetch_metadata: Any | None = None
+        self._validate_output_spec()
 
     def __repr__(self) -> str:  # pragma: no cover - simple repr
         return (
@@ -97,6 +101,33 @@ class Node(ComputeContextMixin, NodeFeedMixin):
         if arrow_cache.ARROW_AVAILABLE and arrow_cache.ARROW_CACHE_ENABLED:
             return arrow_cache.NodeCacheArrow(period or 0)
         return NodeCache(period or 0)
+
+    def _coerce_output_spec(self, output: Any | None) -> Any | None:
+        if output is None:
+            return None
+        from ..temporal import _coerce_output_spec
+
+        return _coerce_output_spec(output)
+
+    def _with_output_config(
+        self,
+        config: dict | None,
+        output: Any | None,
+    ) -> dict | None:
+        if output is None:
+            return config
+        from ..temporal import output_to_config
+
+        merged = dict(config or {})
+        merged["output"] = output_to_config(output)
+        return merged
+
+    def _validate_output_spec(self) -> None:
+        if self.output is None:
+            return
+        from ..temporal import validate_node_output_spec
+
+        validate_node_output_spec(self)
 
     def add_tag(self, tag: str) -> "Node":
         validated_tag = self.validator.validate_tag(tag)

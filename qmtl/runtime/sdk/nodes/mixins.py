@@ -183,7 +183,10 @@ class NodeFeedMixin(CacheActivationMixin):
 
         self._last_watermark = self._compute_watermark()
 
-        if self.pre_warmup or self.compute_fn is None:
+        if self.pre_warmup:
+            return False
+
+        if self.compute_fn is None and getattr(self, "output", None) is None:
             return False
 
         if self._last_watermark is None:
@@ -192,7 +195,18 @@ class NodeFeedMixin(CacheActivationMixin):
         bucket_ts = timestamp - (timestamp % (interval or 1))
         watermark = int(self._last_watermark)
         policy = LateEventPolicy(self.on_late, self._late_events)
-        return policy.should_process(upstream_id, bucket_ts, watermark, payload)
+        ready = policy.should_process(upstream_id, bucket_ts, watermark, payload)
+        if getattr(self, "output", None) is None:
+            return ready
+
+        from ..temporal import node_output_should_process
+
+        return node_output_should_process(
+            self,
+            upstream_id,
+            interval,
+            ready=ready,
+        )
 
     def _maybe_validate_schema(self, mode: str, payload: Any) -> None:
         if (

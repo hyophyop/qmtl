@@ -11,7 +11,7 @@ from .exceptions import (
 
 __all__ = ["parse_interval", "parse_period", "validate_tag", "validate_name"]
 
-_TIME_RE = re.compile(r"^(\d+)([smh])$")
+_TIME_RE = re.compile(r"^(\d+)([smhd])$")
 
 
 def _parse_time_str(value: str) -> int:
@@ -24,6 +24,8 @@ def _parse_time_str(value: str) -> int:
         sec *= 60
     elif unit == "h":
         sec *= 3600
+    elif unit == "d":
+        sec *= 86400
     return sec
 
 
