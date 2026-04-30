@@ -45,7 +45,7 @@ last_modified: 2026-01-11
 ### 엔드포인트
 
 - Gateway 상태 확인: `GET /status`
-- DAG Manager 헬스 확인(루트 스택 기준): `GET /health`
+- DAG Manager 헬스 확인(루트 스택 기준): `GET /status`
 
 ## 필수 테스트/검증 커맨드 (로컬/CI parity)
 

@@ -45,7 +45,7 @@ See the [Backend Quickstart](backend_quickstart.md) for the full startup sequenc
 ### Endpoints
 
 - Gateway status: `GET /status`
-- DAG Manager health (root stack): `GET /health`
+- DAG Manager health (root stack): `GET /status`
 
 ## Required Tests/Verification Commands (Local/CI Parity)
 

@@ -84,15 +84,19 @@ async def _check_controlbus(
     *,
     offline: bool,
     required: bool = False,
+    brokers_key: str = "controlbus_brokers",
+    topics_key: str = "controlbus_topics",
 ) -> ValidationIssue:
     broker_list = ", ".join(brokers)
     if not brokers or not topics:
         severity = "error" if required else "warning"
-        hint = (
-            "ControlBus requires brokers/topics; configure controlbus_brokers and topics"
-            if required
-            else "ControlBus disabled; no brokers/topics configured"
-        )
+        if required:
+            hint = (
+                "ControlBus requires brokers/topics; "
+                f"configure {brokers_key} and {topics_key}"
+            )
+        else:
+            hint = "ControlBus disabled; no brokers/topics configured"
         return ValidationIssue(severity, hint)
     if offline:
         return ValidationIssue("warning", f"Offline mode: skipped ControlBus check for {broker_list}")
@@ -143,7 +147,7 @@ async def _validate_gateway_database(
     if profile is DeploymentProfile.PROD and backend != "postgres":
         return ValidationIssue(
             "error",
-            "Prod profile requires database_backend='postgres' with a DSN",
+            "Prod profile requires gateway.database_backend='postgres' and gateway.database_dsn",
         )
     if backend == "postgres":
         if profile is DeploymentProfile.PROD and not config.database_dsn:
@@ -448,7 +452,7 @@ def _validate_gateway_commitlog(
     if not config.commitlog_bootstrap:
         severity = "error" if profile is DeploymentProfile.PROD else "warning"
         hint = (
-            "Prod profile requires commitlog_bootstrap for ingest durability"
+            "Prod profile requires gateway.commitlog_bootstrap for ingest durability"
             if profile is DeploymentProfile.PROD
             else "Commit-log writer disabled; expected for local dev"
         )
@@ -546,6 +550,8 @@ async def _validate_gateway_controlbus(
         config.controlbus_group,
         offline=offline,
         required=required,
+        brokers_key="gateway.controlbus_brokers",
+        topics_key="gateway.controlbus_topics",
     )
 
 
@@ -758,6 +764,8 @@ async def _validate_dagmanager_controlbus(
         f"{config.controlbus_queue_topic}-validator",
         offline=offline,
         required=profile is DeploymentProfile.PROD,
+        brokers_key="dagmanager.controlbus_dsn",
+        topics_key="dagmanager.controlbus_queue_topic",
     )
 
 
